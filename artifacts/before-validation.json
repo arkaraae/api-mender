@@ -1,0 +1,32 @@
+{
+  "id": "v_fc1162d7dfb960e4",
+  "findingId": "f_7d605ef146ce6eeb",
+  "status": "failed",
+  "checks": [
+    {
+      "name": "TypeScript syntax",
+      "ok": true,
+      "output": "No parse errors"
+    },
+    {
+      "name": "Contract regression",
+      "ok": false,
+      "output": "src/payments.ts:9 missing capture_method"
+    },
+    {
+      "name": "tests/payments.test.cjs",
+      "ok": true,
+      "output": "✔ creates a USD payment intent for a positive amount (25.42475ms)\n✔ rejects invalid amounts before calling Stripe (0.349167ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 28.748666\n"
+    },
+    {
+      "name": "tests/contract.test.cjs",
+      "ok": false,
+      "output": "✖ payment request specifies capture method required by updated contract (24.737541ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 27.884959\n\n✖ failing tests:\n\ntest at tests/contract.test.cjs:3:1\n✖ payment request specifies capture method required by updated contract (24.737541ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  + actual - expected\n  \n  + undefined\n  - 'automatic'\n  \n      at TestContext.<anonymous> (/Users/arkara/Documents/Codex/2026-09-24/files-pasted-by-the-user-act/outputs/api-watch/data/current/workers/api-watch-a58eae9f78e4/tests/contract.test.cjs:7:10)\n      at async Test.run (node:internal/test_runner/test:1313:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: 'automatic',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+    }
+  ],
+  "baseCommit": "fdb25bfe8f74d9be31baee11c6e9aeaec7c4b882bfe70dcd87cfc0f21322f6bd",
+  "sourceHash": "67784235e5ae9ea0ccedbdf274c86e65244c05d09fa47b95442e753043b98099",
+  "model": "deterministic-fixture-v1",
+  "configuration": "node-permission-test-v1; syntax and contract AST",
+  "createdAt": "2026-09-25T06:44:37.100Z"
+}

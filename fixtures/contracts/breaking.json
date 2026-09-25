@@ -1,0 +1,5 @@
+{
+  "openapi":"3.0.0",
+  "info":{"title":"SIMULATED Stripe-like contract for test only","version":"2024-06-20"},
+  "paths":{"/v1/payment_intents":{"post":{"requestBody":{"content":{"application/json":{"schema":{"type":"object","required":["amount","currency","capture_method"]}}}}}}}
+}

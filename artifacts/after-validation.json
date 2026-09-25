@@ -1,0 +1,32 @@
+{
+  "id": "v_6bae31cb39d68226",
+  "findingId": "f_7d605ef146ce6eeb",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "TypeScript syntax",
+      "ok": true,
+      "output": "No parse errors"
+    },
+    {
+      "name": "Contract regression",
+      "ok": true,
+      "output": "All static calls satisfy required fields"
+    },
+    {
+      "name": "tests/payments.test.cjs",
+      "ok": true,
+      "output": "✔ creates a USD payment intent for a positive amount (24.532584ms)\n✔ rejects invalid amounts before calling Stripe (0.3585ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 28.332166\n"
+    },
+    {
+      "name": "tests/contract.test.cjs",
+      "ok": true,
+      "output": "✔ payment request specifies capture method required by updated contract (25.3495ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 28.620208\n"
+    }
+  ],
+  "baseCommit": "fdb25bfe8f74d9be31baee11c6e9aeaec7c4b882bfe70dcd87cfc0f21322f6bd",
+  "sourceHash": "67784235e5ae9ea0ccedbdf274c86e65244c05d09fa47b95442e753043b98099",
+  "model": "deterministic-fixture-v1",
+  "configuration": "node-permission-test-v1; syntax and contract AST",
+  "createdAt": "2026-09-25T06:44:37.240Z"
+}

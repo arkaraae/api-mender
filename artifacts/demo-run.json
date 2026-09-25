@@ -1,0 +1,123 @@
+{
+  "finding": {
+    "id": "f_7d605ef146ce6eeb",
+    "tenantId": "tenant_demo",
+    "repoId": "repo_demo",
+    "sourceId": "src_db2539ba803d65af",
+    "fingerprint": "7d605ef146ce6eebbdcb54f6bc72a4c5f91030cdef13c7e3dee85bf654236619",
+    "status": "Action required",
+    "severity": "high",
+    "confidence": "confirmed",
+    "title": "capture_method became required",
+    "description": "Published required request field at POST /v1/payment_intents.",
+    "applicability": "Applies within the simulated fixture; live API version applicability is unverified.",
+    "failureMode": "Requests without capture_method may be rejected.",
+    "remediation": "Add capture_method to affected request after reviewing intended behavior.",
+    "limitations": [
+      "Stripe API version not statically discoverable"
+    ],
+    "evidence": "paths./v1/payment_intents.post.requestBody.content.application/json.schema.required",
+    "evidenceUrl": "fixture://simulated-stripe-contract",
+    "effectiveDate": null,
+    "affected": [
+      {
+        "file": "src/payments.ts",
+        "symbol": "stripe.paymentIntents.create",
+        "line": 9,
+        "endpoint": "POST /v1/payment_intents",
+        "fields": [
+          "amount",
+          "currency"
+        ],
+        "uncertain": false
+      }
+    ],
+    "baseCommit": "fdb25bfe8f74d9be31baee11c6e9aeaec7c4b882bfe70dcd87cfc0f21322f6bd",
+    "createdAt": "2026-09-25T06:35:45.155Z",
+    "updatedAt": "2026-09-25T06:44:37.296Z",
+    "reason": "Local PR artifact ready for human review; no live GitHub PR"
+  },
+  "inventory": {
+    "provider": "stripe",
+    "sdkVersion": "17.7.0",
+    "apiVersion": null,
+    "files": [
+      "src/payments.ts",
+      "tests/payments.test.cjs"
+    ],
+    "calls": [
+      {
+        "file": "src/payments.ts",
+        "symbol": "stripe.paymentIntents.create",
+        "line": 9,
+        "endpoint": "POST /v1/payment_intents",
+        "fields": [
+          "amount",
+          "currency"
+        ],
+        "uncertain": false
+      }
+    ],
+    "tests": [
+      "tests/payments.test.cjs"
+    ],
+    "limitations": [
+      "Stripe API version not statically discoverable"
+    ]
+  },
+  "validation": {
+    "id": "v_6bae31cb39d68226",
+    "findingId": "f_7d605ef146ce6eeb",
+    "status": "passed",
+    "checks": [
+      {
+        "name": "TypeScript syntax",
+        "ok": true,
+        "output": "No parse errors"
+      },
+      {
+        "name": "Contract regression",
+        "ok": true,
+        "output": "All static calls satisfy required fields"
+      },
+      {
+        "name": "tests/payments.test.cjs",
+        "ok": true,
+        "output": "✔ creates a USD payment intent for a positive amount (24.532584ms)\n✔ rejects invalid amounts before calling Stripe (0.3585ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 28.332166\n"
+      },
+      {
+        "name": "tests/contract.test.cjs",
+        "ok": true,
+        "output": "✔ payment request specifies capture method required by updated contract (25.3495ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 28.620208\n"
+      }
+    ],
+    "baseCommit": "fdb25bfe8f74d9be31baee11c6e9aeaec7c4b882bfe70dcd87cfc0f21322f6bd",
+    "sourceHash": "67784235e5ae9ea0ccedbdf274c86e65244c05d09fa47b95442e753043b98099",
+    "model": "deterministic-fixture-v1",
+    "configuration": "node-permission-test-v1; syntax and contract AST",
+    "createdAt": "2026-09-25T06:44:37.240Z"
+  },
+  "patch": {
+    "proposal": {
+      "files": [
+        {
+          "path": "src/payments.ts",
+          "before": "export interface StripeLike {\n  paymentIntents: {\n    create(request: { amount: number; currency: string; capture_method?: string }): Promise<{ id: string }>;\n  };\n}\n\nexport async function createPaymentIntent(stripe: StripeLike, amount: number) {\n  if (!Number.isInteger(amount) || amount <= 0) throw new Error('Invalid amount');\n  return stripe.paymentIntents.create({\n    amount,\n    currency: \"usd\",\n  });\n}\n",
+          "after": "export interface StripeLike {\n  paymentIntents: {\n    create(request: { amount: number; currency: string; capture_method?: string }): Promise<{ id: string }>;\n  };\n}\n\nexport async function createPaymentIntent(stripe: StripeLike, amount: number) {\n  if (!Number.isInteger(amount) || amount <= 0) throw new Error('Invalid amount');\n  return stripe.paymentIntents.create({\n    amount,\n    currency: \"usd\",\n    capture_method: \"automatic\",\n  });\n}\n"
+        },
+        {
+          "path": "tests/contract.test.cjs",
+          "before": "",
+          "after": "const { test } = require('node:test');\nconst { strict: assert } = require('node:assert');\ntest('payment request specifies capture method required by updated contract', async () => {\n  const { createPaymentIntent } = await import('../src/payments.ts');\n  let request;\n  await createPaymentIntent({ paymentIntents: { create: async value => { request = value; return { id: 'pi_test' }; } } }, 2500);\n  assert.equal(request.capture_method, 'automatic');\n});\n"
+        }
+      ],
+      "assumptions": [
+        "Existing immediate capture behavior is preserved by automatic capture."
+      ],
+      "model": "deterministic-fixture-v1"
+    },
+    "artifact": "artifacts/demo-pr.md",
+    "prUrl": null
+  },
+  "artifact": "artifacts/demo-pr.md"
+}

@@ -1,0 +1,26 @@
+diff --git a/src/payments.ts b/src/payments.ts
+index 99f6f3f..241a881 100644
+--- a/src/payments.ts
++++ b/src/payments.ts
+@@ -9,5 +9,6 @@ export async function createPaymentIntent(stripe: StripeLike, amount: number) {
+   return stripe.paymentIntents.create({
+     amount,
+     currency: "usd",
++    capture_method: "automatic",
+   });
+ }
+
+diff --git a/tests/contract.test.cjs b/tests/contract.test.cjs
+new file mode 100644
+index 0000000..d7e9620
+--- /dev/null
++++ b/tests/contract.test.cjs
+@@ -0,0 +1,8 @@
++const { test } = require('node:test');
++const { strict: assert } = require('node:assert');
++test('payment request specifies capture method required by updated contract', async () => {
++  const { createPaymentIntent } = await import('../src/payments.ts');
++  let request;
++  await createPaymentIntent({ paymentIntents: { create: async value => { request = value; return { id: 'pi_test' }; } } }, 2500);
++  assert.equal(request.capture_method, 'automatic');
++});
