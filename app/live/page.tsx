@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
+import AuthScreen from '@/components/auth-screen';
 
 type Workspace = { id: string; name: string; owner_id: string };
 type Repository = { id: string; full_name: string; branch: string; head_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: { file: string; line: number; symbol: string }[]; limitations: string[]; scanned_at: string | null; paused: boolean };
@@ -22,6 +23,7 @@ export default function LiveWorkspace() {
   const [branch, setBranch] = useState('main');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   const refresh = useCallback(async (uid: string) => {
     if (!supabase) return;
@@ -63,8 +65,19 @@ export default function LiveWorkspace() {
     try {
       const result = mode === 'signin'
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
-      setMessage(result.error?.message || (mode === 'signup' && !result.data.session ? 'Check your email to confirm your account, then sign in.' : 'Signed in.'));
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/live` } });
+      const needsConfirmation = mode === 'signup' && !result.error && !result.data.session;
+      if (needsConfirmation) setAwaitingConfirmation(true);
+      setMessage(result.error?.message || (needsConfirmation ? 'Account created. Check your inbox and spam for a confirmation email, then sign in. You can resend it below.' : 'Signed in.'));
+    } finally { setBusy(false); }
+  }
+
+  async function resendConfirmation() {
+    if (!supabase || !email) return;
+    setBusy(true); setMessage('');
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}/live` } });
+      setMessage(error?.message || 'Supabase accepted the confirmation request. Check your inbox and spam.');
     } finally { setBusy(false); }
   }
 
@@ -113,12 +126,12 @@ export default function LiveWorkspace() {
     finally { setBusy(false); }
   }
 
-  if (!supabase) return <main className="live-shell"><a href="/">← Demo</a><h1>Live workspace unavailable</h1><p>Set the public Supabase URL and publishable key in the app environment.</p></main>;
-  return <main className="live-shell"><header className="live-header"><a href="/">← Simulated demo</a><strong>API Mender <span>LIVE WORKSPACE</span></strong>{user && <button onClick={() => void supabase.auth.signOut()}>Sign out</button>}</header>
-    {!ready ? <p>Loading…</p> : !user ? <section className="live-card live-auth"><div className="eyebrow">SUPABASE AUTH</div><h1>Sign in to API Mender</h1><p>Your live repositories and findings are stored in your Supabase workspace.</p><label>Email<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></label><div className="live-actions"><button disabled={busy || !email || !password} onClick={() => void authenticate('signin')}>Sign in</button><button disabled={busy || !email || !password} onClick={() => void authenticate('signup')}>Create account</button></div></section>
-      : <><div className="live-intro"><div><div className="eyebrow">CONNECTED TO SUPABASE</div><h1>{workspace?.name || 'Create a workspace'}</h1><p>Signed in as {user.email}. Repository scans use the current public GitHub commit.</p></div><span className="live-badge">LIVE DATA</span></div>
+  if (!supabase) return <main className="live-shell"><a href="/">← Home</a><h1>Live workspace unavailable</h1><p>Set the public Supabase URL and publishable key in the app environment.</p></main>;
+  if (!ready || !user) return <AuthScreen ready={ready} email={email} password={password} message={message} busy={busy} awaitingConfirmation={awaitingConfirmation} onEmailChange={setEmail} onPasswordChange={setPassword} onAuthenticate={authenticate} onResend={resendConfirmation} onBack={() => { setAwaitingConfirmation(false); setMessage(''); }} />;
+  return <main className="live-shell"><header className="live-header"><a href="/">← Home</a><strong>API Mender <span>LIVE WORKSPACE</span></strong>{user && <button onClick={() => void supabase.auth.signOut()}>Sign out</button>}</header>
+    <><div className="live-intro"><div><div className="eyebrow">CONNECTED TO SUPABASE</div><h1>{workspace?.name || 'Create a workspace'}</h1><p>Signed in as {user.email}. Repository scans use the current public GitHub commit.</p></div><span className="live-badge">LIVE DATA</span></div>
         {!workspace ? <section className="live-card"><h2>Your workspace</h2><p>Create a workspace before adding repositories.</p><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => setWorkspaceName(event.target.value)} /></label><button disabled={busy || !workspaceName.trim()} onClick={() => void createWorkspace()}>Create workspace</button></section>
           : <><section className="live-stats"><div><span>REPOSITORIES</span><strong>{repositories.length}</strong></div><div><span>FINDINGS</span><strong>{findings.length}</strong></div><div><span>SCANNED</span><strong>{repositories.filter(repo => repo.scanned_at).length}</strong></div></section><section className="live-card"><h2>Check official Stripe sources</h2><p>Compares the latest Stripe Node release and OpenAPI file with your workspace baseline. A changed source creates an informational review item for scanned Stripe repositories; it does not claim a breaking API change.</p><button disabled={busy} onClick={() => void checkSources()}>Check Stripe sources</button></section><section className="live-card"><h2>Add a public GitHub repository</h2><p>Public scans read source files only. Private access and pull requests need a GitHub App installation.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => setRepositoryName(event.target.value)} /></label><label>Branch<input value={branch} onChange={event => setBranch(event.target.value)} /></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim()} onClick={() => void addRepository()}>Add repository</button></section><section className="live-card"><h2>Monitored repositories</h2>{repositories.length ? <div className="live-list">{repositories.map(repo => <article key={repo.id}><div><strong><a href={`https://github.com/${repo.full_name}`} target="_blank" rel="noopener noreferrer">{repo.full_name} ↗</a></strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? new Date(repo.scanned_at).toLocaleString() : 'Waiting for first scan'}</small><p>Stripe SDK: {repo.sdk_version || 'Unresolved'} · API version: {repo.api_version || 'Unresolved'} · Call sites: {repo.call_sites.length}</p>{repo.limitations.length > 0 && <p className="live-muted">{repo.limitations.join('; ')}</p>}</div><button disabled={busy || repo.paused} onClick={() => void scan(repo.id)}>Scan now</button></article>)}</div> : <p className="live-muted">No repositories registered.</p>}</section><section className="live-card"><h2>Findings</h2>{findings.length ? findings.map(finding => <article key={finding.id} className="live-finding"><strong>{finding.title}</strong><p>{finding.description}</p><small>{finding.severity} · {finding.confidence} · {finding.status} · {new Date(finding.created_at).toLocaleString()}</small>{finding.evidence?.sourceUrl && <p><a href={finding.evidence.sourceUrl} target="_blank" rel="noopener noreferrer">Official source ↗</a> · {finding.evidence.note}</p>}</article>) : <p className="live-muted">No official source changes have been recorded beyond the baseline. Run a repository scan and source check to begin monitoring.</p>}</section></>}
-      </>}{message && <p className="live-message" role="status">{message}</p>}
+      </>{message && <p className="live-message" role="status">{message}</p>}
   </main>;
 }
