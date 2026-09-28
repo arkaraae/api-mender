@@ -15,6 +15,6 @@ The four supplied Folk screenshots were used as visual references for spacing, t
 
 ## Remaining operational check
 
-Supabase accepted the earlier signup and logged a confirmation send request, but inbox delivery is not verified. The exact local redirect URL has been configured and the UI now offers a resend action. If mail still does not arrive, configure custom SMTP for reliable delivery before treating signup as fully operational.
+The initial test account is now confirmed in Supabase, and its API Mender workspace exists. The exact local redirect URL is configured. Earlier confirmation links that return to the landing page now forward their token fragment to `/live` for session processing. Custom SMTP is still needed before relying on delivery to users outside the Supabase project team.
 
 final result: passed

@@ -1,7 +1,9 @@
 import ProductPreview from '@/components/product-preview';
+import AuthCallbackRedirect from '@/components/auth-callback-redirect';
 
 export default function Home() {
   return <main className="marketing-page">
+    <AuthCallbackRedirect />
     <header className="marketing-nav">
       <a className="site-brand" href="/" aria-label="API Mender home"><span className="site-brand-icon">↗</span><span>api mender<span className="brand-period">.</span></span></a>
       <nav aria-label="Main navigation"><a href="#product">Product</a><a href="#how-it-works">How it works</a><a href="#coverage">Coverage</a></nav>
