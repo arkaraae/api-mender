@@ -176,6 +176,7 @@
               <label class="field"><span class="label">New version headers, one per line</span><textarea class="short" id="new-headers" spellcheck="false" placeholder="Api-Version: 2026-09-01"></textarea></label>
             </div>
             <label class="field"><span class="label">Record paths to request, one per line (GET)</span><textarea class="short" id="paths" spellcheck="false"></textarea></label>
+            <label class="field"><span class="label">Ignore fields that change on every call, comma separated</span><input type="text" id="ignore" spellcheck="false" placeholder="place_id, timestamp, meta.request_id"></label>
             <div class="row"><button class="btn btn-primary" id="call-api" type="button">Call both versions</button></div>
             <div class="table-wrap" id="call-log-wrap" hidden>
               <table>
@@ -341,6 +342,7 @@
     $('old-headers').value = '';
     $('new-headers').value = '';
     $('paths').value = ['/orders/ord_1001', '/orders/ord_1002', '/orders/ord_1004', '/orders/ord_1005'].join('\n');
+    $('ignore').value = '';
     $('removed').value = 'GET /orders/{id}/label';
     $('guide').value = 'https://docs.parcel.example/migrate/2026-09-01';
     $('notes').value = 'Shipping labels moved to the new Labels API.';
@@ -380,6 +382,8 @@
       const ms = Math.round(performance.now() - started);
       let body;
       try { body = JSON.parse(text); } catch { body = undefined; }
+      // An API that answers with a list: use its first record.
+      if (Array.isArray(body) && body[0] && typeof body[0] === 'object') body = body[0];
       return { url, ok: response.ok, status: response.status, ms, bytes: text.length, body };
     } catch {
       return { url, blocked: true };
@@ -465,7 +469,24 @@
     const news = list(after);
     if (olds.length !== news.length) throw new Error(`"Before" has ${olds.length} records and "After" has ${news.length}. Put the same records in the same order on both sides.`);
     if (![...olds, ...news].every((r) => r && typeof r === 'object' && !Array.isArray(r))) throw new Error('Each record must be a JSON object, like { "id": 1 }.');
-    return olds.map((old, i) => ({ old, new: news[i] }));
+    const ignored = ignoredFields();
+    return olds.map((old, i) => ({ old: withoutFields(old, ignored), new: withoutFields(news[i], ignored) }));
+  }
+
+  // Fields such as ids and timestamps change on every call, so they say nothing about the version change.
+  function ignoredFields() {
+    return $('ignore').value.split(',').map((f) => f.trim()).filter(Boolean);
+  }
+
+  function withoutFields(record, fields) {
+    const copy = structuredClone(record);
+    for (const field of fields) {
+      const keys = field.split('.');
+      let node = copy;
+      for (const key of keys.slice(0, -1)) node = node?.[key];
+      if (node && typeof node === 'object') delete node[keys.at(-1)];
+    }
+    return copy;
   }
 
   function endpointRules() {
@@ -790,7 +811,7 @@ Return the complete corrected list.`;
   $('load-example').addEventListener('click', loadExample);
   $('call-api').addEventListener('click', callApi);
   $('clear').addEventListener('click', () => {
-    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up']) $(id).value = '';
+    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up', 'ignore']) $(id).value = '';
     setRules([], '');
     $('rules-source').textContent = 'No rules yet';
     showInputError(null);
@@ -812,6 +833,7 @@ Return the complete corrected list.`;
     setRules([...state.rules.filter((r) => r.op !== 'endpoint_removed'), ...endpointRules()], state.source || 'Edited by hand');
   }));
   for (const id of ['try-down', 'try-up', 'try-path', 'old-version', 'new-version', 'sunset']) $(id).addEventListener('input', later(refresh));
+  $('ignore').addEventListener('input', later(findRules));
   $('try-method').addEventListener('change', refresh);
 
   await loadExample();
