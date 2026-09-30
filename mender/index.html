@@ -605,8 +605,12 @@
       verdict.textContent = `Blocked. ${failing.length} of ${results.length} examples don't round-trip. Fix the rules in step 2${state.ai ? ', or ask the AI to fix them' : ''}.`;
       $('step-3').dataset.state = 'broken';
     } else {
-      verdict.className = lost.length ? 'callout warn' : 'callout ok';
-      verdict.textContent = `Proven on ${results.length} of ${results.length} example${results.length === 1 ? '' : 's'} in both directions.${lost.length ? ` Heads up: old customers will stop receiving ${lost.join(', ')}.` : ' Safe to try and ship.'}`;
+      const added = state.rules.filter((r) => r.op === 'add').map((r) => r.new);
+      const notes = [];
+      if (lost.length) notes.push(`old customers will stop receiving ${lost.join(', ')}`);
+      if (added.length) notes.push(`old customers never send ${added.join(', ')}, so check the default value in step 2 before shipping`);
+      verdict.className = notes.length ? 'callout warn' : 'callout ok';
+      verdict.textContent = `Proven on ${results.length} of ${results.length} example${results.length === 1 ? '' : 's'} in both directions.${notes.length ? ` Heads up: ${notes.join('; and ')}.` : ' Safe to try and ship.'}`;
       $('step-3').dataset.state = 'done';
     }
     $('ai-fix').hidden = !(state.ai && failing.length);
