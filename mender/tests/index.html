@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mender tests</title>
+<style>
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px; background: #fff; color: #16192b; }
+  .ok { color: #16794a; } .bad { color: #b42318; }
+  #summary { font-weight: 700; margin-top: 16px; }
+</style>
+</head>
+<body>
+<h1>Mender tests</h1>
+<ol id="results"></ol>
+<p id="summary">Running…</p>
+<script type="module">
+  import { run } from './mender.test.js';
+  const list = document.getElementById('results');
+  const { total, failed } = await run(({ name, ok, error }) => {
+    const item = document.createElement('li');
+    item.className = ok ? 'ok' : 'bad';
+    item.textContent = `${ok ? 'PASS' : 'FAIL'} ${name}${error ? ` — ${error}` : ''}`;
+    list.append(item);
+  });
+  document.getElementById('summary').textContent = `${total - failed} of ${total} passed`;
+  document.getElementById('summary').className = failed ? 'bad' : 'ok';
+</script>
+</body>
+</html>
