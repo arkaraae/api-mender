@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mender Walkthrough</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one workbench column. A stitched thread runs down the left edge and ties the five
+     steps together; each stitch turns solid when its step is done. */
+  :root {
+    --paper: #F3F5FA;
+    --surface: #FFFFFF;
+    --sunken: #ECEFF6;
+    --ink: #151A2D;
+    --muted: #586079;
+    --line: #D6DBE7;
+    --thread: #2C45CF;
+    --thread-soft: #E3E7FC;
+    --on-thread: #FFFFFF;
+    --ok: #13744A;
+    --ok-soft: #E1F2E8;
+    --bad: #B0261E;
+    --bad-soft: #FBE9E7;
+    --warn: #8A5300;
+    --warn-soft: #FCF0D8;
+    --code-comment: #6A7390;
+    --code-string: #1F6B52;
+    --code-keyword: #6A2FB8;
+    --display: 'Familjen Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
+      --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
+      --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
+      --code-comment: #7F88A6; --code-string: #7FD6B0; --code-keyword: #C3A2FF;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
+    --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
+    --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
+    --code-comment: #7F88A6; --code-string: #7FD6B0; --code-keyword: #C3A2FF;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.6 var(--body); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  code, pre, .mono { font-family: var(--mono); }
+  a { color: var(--thread); }
+  button { font: inherit; }
+  :focus-visible { outline: 3px solid var(--thread); outline-offset: 2px; }
+
+  /* Header */
+  .masthead { display: grid; gap: 20px; padding-bottom: 40px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .wordmark { font: 700 26px/1 var(--display); letter-spacing: -0.01em; text-decoration: underline dashed var(--thread); text-decoration-thickness: 2px; text-underline-offset: 7px; }
+  .tag { font: 500 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--thread); background: var(--thread-soft); padding: 6px 9px; border-radius: 999px; }
+  .masthead h1 { font-size: clamp(34px, 5.4vw, 58px); line-height: 1.02; letter-spacing: -0.02em; font-weight: 700; max-width: 16ch; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 62ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .fine { font-size: 13px; color: var(--muted); }
+
+  .btn { border: 1px solid transparent; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-primary { background: var(--thread); color: var(--on-thread); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .scenario { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 48px; }
+  .scenario div { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+  .label { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .scenario strong { font-weight: 600; }
+
+  /* Steps and the thread */
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .step { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; padding-bottom: 56px; }
+  .step::before { content: ''; position: absolute; left: 17px; top: 40px; bottom: 4px; border-left: 2px dashed var(--line); }
+  .step:last-child::before { display: none; }
+  .step[data-state="done"]::before { border-left: 2px solid var(--thread); }
+  .knot { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 600 15px/1 var(--mono); background: var(--surface); border: 2px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
+  .step[data-state="done"] .knot { background: var(--thread); border-color: var(--thread); color: var(--on-thread); }
+  .step[data-state="broken"] .knot { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .step-body { display: grid; gap: 16px; min-width: 0; }
+  .step h2 { font-size: clamp(22px, 2.6vw, 28px); line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; padding-top: 3px; }
+  .step .lead { color: var(--muted); max-width: 66ch; }
+
+  .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-head .label { color: var(--ink); }
+  .chip { font: 500 12px/1 var(--mono); padding: 5px 8px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.thread { background: var(--thread-soft); color: var(--thread); }
+
+  pre.code { margin: 0; padding: 14px 16px; background: var(--sunken); font-size: 13px; line-height: 1.6; overflow-x: auto; tab-size: 2; }
+  .code .c { color: var(--code-comment); }
+  .code .s { color: var(--code-string); }
+  .code .k { color: var(--code-keyword); }
+
+  .console { display: grid; }
+  .console-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .console-row:last-child { border-bottom: 0; }
+  .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 13px/1 var(--mono); }
+  .mark.ok { background: var(--ok-soft); color: var(--ok); }
+  .mark.bad { background: var(--bad-soft); color: var(--bad); }
+  .console-row strong { display: block; font-weight: 600; font-size: 14px; }
+  .console-row code { display: block; font-size: 13px; overflow-wrap: anywhere; color: var(--muted); }
+  .console-row.bad code { color: var(--bad); }
+  .empty { padding: 16px 14px; color: var(--muted); font-size: 14px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--sunken); }
+  td code { font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .callout { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 15px; }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+  .tabs { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tab { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 14px; }
+  .tab[aria-selected="true"] { background: var(--thread-soft); color: var(--thread); }
+  .code-note { padding: 10px 14px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }
+  .code-scroll { max-height: 440px; overflow: auto; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+  .stat b { font: 600 30px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+  .stat.ok b { color: var(--ok); }
+  .stat.bad b { color: var(--bad); }
+  .stat.warn b { color: var(--warn); }
+  .progress { height: 4px; background: var(--sunken); border-radius: 999px; overflow: hidden; }
+  .progress span { display: block; height: 100%; width: 0; background: var(--thread); transition: width 120ms linear; }
+  .noise { font-size: 14px; color: var(--muted); }
+
+  .headers dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); }
+  .headers dt, .headers dd { margin: 0; padding: 9px 14px; border-bottom: 1px solid var(--line); font: 400 13px/1.5 var(--mono); }
+  .headers dt { color: var(--muted); }
+  .headers dd { overflow-wrap: anywhere; }
+  .headers dl > :nth-last-child(-n+2) { border-bottom: 0; }
+
+  .ledger { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid var(--line); padding-top: 28px; }
+  .ledger h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .ledger ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 15px; display: grid; gap: 6px; }
+  .source { margin-top: 28px; font-size: 14px; color: var(--muted); }
+
+  @media (max-width: 760px) {
+    .wrap { padding-block: 28px 56px; }
+    .scenario, .pair, .ledger { grid-template-columns: minmax(0, 1fr); }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .step { grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; }
+    .knot { width: 28px; height: 28px; font-size: 13px; }
+    .step::before { left: 13px; top: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress span { transition: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand"><span class="wordmark">mender</span><span class="tag">Walkthrough</span><a class="fine" href="index.html">Try Mender on your own API →</a></div>
+    <h1>Ship breaking changes without breaking customers.</h1>
+    <p class="lede">Parcel, a shipping API, is moving from version 2026-03-01 to 2026-09-01. Follow one customer who wrote code against the old version, first without Mender, then with a Mender adapter.</p>
+    <div class="actions">
+      <button class="btn btn-primary" id="play" type="button">Play all steps</button>
+      <button class="btn btn-ghost" id="reset" type="button">Start over</button>
+    </div>
+    <p class="fine">Everything runs in your browser. Parcel and its customers are made up for this demo.</p>
+  </header>
+
+  <section class="scenario" aria-label="Scenario">
+    <div><span class="label">API provider</span><strong>Parcel</strong><span class="fine">Orders and shipping labels</span></div>
+    <div><span class="label">Still on 2026-03-01</span><strong>Acme Outdoor, Bloom &amp; Stem, Northwind Tea</strong></div>
+    <div><span class="label">New version</span><strong>2026-09-01</strong><span class="fine">Old version shuts off Mar 1, 2027</span></div>
+  </section>
+
+  <ol class="steps">
+    <li class="step" id="step-1" data-state="ready">
+      <div class="knot" aria-hidden="true">1</div>
+      <div class="step-body">
+        <h2>Acme's app works on 2026-03-01</h2>
+        <p class="lead">Acme Outdoor wrote its checkout code in March. It prints the last receipt and creates new orders. Acme never touches this code again.</p>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">acme-checkout.js</span><span class="chip">written March 2026</span></div>
+            <pre class="code" id="acme-code"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-1">Parcel 2026-03-01</span></div>
+            <div class="console" id="console-1" aria-live="polite"><p class="empty">Running…</p></div>
+          </div>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-2" data-state="ready">
+      <div class="knot" aria-hidden="true">2</div>
+      <div class="step-body">
+        <h2>Parcel ships 2026-09-01</h2>
+        <p class="lead">Parcel cleans up its API. These five changes break code written for the old version.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>What changed</th><th>2026-03-01</th><th>2026-09-01</th></tr></thead>
+            <tbody>
+              <tr><td>Customer name</td><td><code>customer_name</code></td><td><code>full_name</code></td></tr>
+              <tr><td>Price</td><td><code>amount: 25.5, currency: "usd"</code></td><td><code>total: { amount_cents: 2550, currency: "USD" }</code></td></tr>
+              <tr><td>Paid orders</td><td><code>status: "paid"</code></td><td><code>status: "succeeded"</code></td></tr>
+              <tr><td>Order time</td><td><code>created: 1767452400</code></td><td><code>created_at: "2026-01-03T15:00:00.000Z"</code></td></tr>
+              <tr><td>Shipping labels</td><td><code>GET /orders/{id}/label</code></td><td>Removed, moved to a new Labels API</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="row"><button class="btn btn-primary" id="ship" type="button">Switch Parcel to 2026-09-01</button></div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-2">Parcel 2026-09-01, no adapter</span></div>
+          <div class="console" id="console-2" aria-live="polite"><p class="empty">Acme's app hasn't run against 2026-09-01 yet.</p></div>
+        </div>
+        <p class="callout" id="broken-note" hidden>Acme didn't change a line of code, and its app broke anyway. Today Acme finds out from its own customers.</p>
+      </div>
+    </li>
+
+    <li class="step" id="step-3" data-state="ready">
+      <div class="knot" aria-hidden="true">3</div>
+      <div class="step-body">
+        <h2>Mender writes an adapter</h2>
+        <p class="lead">From Parcel's two API specs, Mender's AI writes a small adapter: rename fields on the way in, translate answers on the way out. The AI writes it once. On live requests it's plain code, so every answer is fast and predictable.</p>
+        <div class="panel">
+          <div class="tabs" role="tablist" aria-label="Adapter versions">
+            <button class="tab" role="tab" id="tab-final" aria-selected="true" aria-controls="adapter-code" type="button">Final adapter</button>
+            <button class="tab" role="tab" id="tab-draft" aria-selected="false" aria-controls="adapter-code" type="button">First draft</button>
+          </div>
+          <div class="code-scroll"><pre class="code" id="adapter-code" role="tabpanel">Loading…</pre></div>
+          <p class="code-note" id="adapter-note">This is the version that passed replay in step 4.</p>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-4" data-state="ready">
+      <div class="knot" aria-hidden="true">4</div>
+      <div class="step-body">
+        <h2>Replay proves it before any customer sees it</h2>
+        <p class="lead">Mender replays <span id="recorded-count">200</span> calls recorded last week from customers still on 2026-03-01. Each call runs twice: against the old version, to learn which fields change on every run, and through the adapter into 2026-09-01. Everything else has to match what the customer originally got.</p>
+        <div class="row">
+          <button class="btn btn-ghost" id="replay-draft" type="button">Replay first draft</button>
+          <button class="btn btn-primary" id="replay-final" type="button">Replay final adapter</button>
+          <span class="chip" id="replay-which">Not run yet</span>
+        </div>
+        <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+        <div class="stats" aria-live="polite">
+          <div class="stat"><span class="label">Calls replayed</span><b id="s-total">–</b></div>
+          <div class="stat ok"><span class="label">Match</span><b id="s-match">–</b></div>
+          <div class="stat bad"><span class="label">Differ</span><b id="s-differ">–</b></div>
+          <div class="stat warn"><span class="label">Need a code change</span><b id="s-gone">–</b></div>
+        </div>
+        <p class="callout" id="verdict" hidden></p>
+        <div class="table-wrap" id="diff-wrap" hidden>
+          <table>
+            <thead><tr><th>Call</th><th>Field</th><th>Customer got</th><th>Adapter returned</th></tr></thead>
+            <tbody id="diff-rows"></tbody>
+          </table>
+        </div>
+        <p class="noise" id="noise" hidden></p>
+      </div>
+    </li>
+
+    <li class="step" id="step-5" data-state="ready">
+      <div class="knot" aria-hidden="true">5</div>
+      <div class="step-body">
+        <h2>Turn the adapter on</h2>
+        <p class="lead">Parcel runs the adapter in front of 2026-09-01. Old callers keep working, every answer warns them the version is retiring, and Parcel sees exactly who still has to move.</p>
+        <div class="row"><button class="btn btn-primary" id="turn-on" type="button">Turn on the adapter</button></div>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-3">Parcel 2026-09-01 + Mender</span></div>
+            <div class="console" id="console-3" aria-live="polite"><p class="empty">Acme's app hasn't run through the adapter yet.</p></div>
+          </div>
+          <div class="panel headers">
+            <div class="panel-head"><span class="label">Response headers Acme receives</span></div>
+            <div id="headers"><p class="empty">Headers appear after the first call.</p></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Customer on 2026-03-01</th><th class="num">Calls last week</th><th class="num">Translated</th><th class="num">Need a code change</th><th>Next step</th></tr></thead>
+            <tbody id="customers"><tr><td colspan="5" class="fine">Filled in from the replay of the final adapter.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </li>
+  </ol>
+
+  <section class="ledger" aria-label="What is live and what is staged">
+    <div>
+      <h3>Live in this page</h3>
+      <ul>
+        <li>Parcel's two versions, running in your browser</li>
+        <li>The Mender runtime that runs the adapter on each call</li>
+        <li>Replay of 200 recorded calls, with noise detection</li>
+        <li>Deprecation, Sunset and Link headers, and per-customer counts</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Staged for the demo</h3>
+      <ul>
+        <li>Claude wrote both adapter drafts ahead of time, standing in for Mender's AI writer</li>
+        <li>Parcel, its customers and their traffic are made up</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Next</h3>
+      <ul>
+        <li>The AI writer running live from two API specs</li>
+        <li>A real case: Strapi v4 to v5</li>
+        <li>Migration pull requests for each customer on the old version</li>
+      </ul>
+    </div>
+  </section>
+  <p class="source">Source: <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender">github.com/arkaraae/api-mender, mender-demo branch</a></p>
+</div>
+
+<script type="module">
+  import { makeParcel, V1, V2 } from './src/parcel.js';
+  import { withMender } from './src/mender.js';
+  import { record, replay } from './src/replay.js';
+  import { sampleCalls, CUSTOMERS, customerFromKey } from './src/traffic.js';
+  import { parcelClient, acmeJobs } from './src/acme-app.js';
+  import finalAdapter from './src/adapters/2026-09-01.js';
+  import firstDraft from './src/adapters/2026-09-01.first-draft.js';
+
+  const $ = (id) => document.getElementById(id);
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, calm ? 0 : ms));
+  const state = { recorded: null, finalEvents: null, busy: false };
+
+  const ACME_CODE = `// Pinned to Parcel 2026-03-01
+const past = await parcel.get('/orders/ord_1001');
+print(\`\${past.customer_name} · $\${past.amount.toFixed(2)} · \${past.status}\`);
+
+const order = await parcel.post('/orders', {
+  customer_name: 'Jonas Berg',
+  amount: 25.50,
+  currency: 'usd',
+});`;
+
+  function highlight(source) {
+    const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const pattern = /(\/\/[^\n]*)|('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`)|\b(export|default|const|let|return|if|for|of|in|function|async|await|new)\b/g;
+    let html = '';
+    let last = 0;
+    let match;
+    while ((match = pattern.exec(source))) {
+      html += escape(source.slice(last, match.index));
+      const kind = match[1] ? 'c' : match[2] ? 's' : 'k';
+      html += `<span class="${kind}">${escape(match[0])}</span>`;
+      last = pattern.lastIndex;
+    }
+    return html + escape(source.slice(last));
+  }
+
+  function gateway(adapter, onCall = () => {}) {
+    return withMender(makeParcel(V2), {
+      latest: V2,
+      adapters: [adapter],
+      versionHeader: 'Parcel-Version',
+      sunset: '2027-03-01',
+      guide: 'https://docs.parcel.example/migrate/2026-09-01',
+      identify: (request) => customerFromKey(request.headers.get('authorization')).id,
+      onCall,
+    });
+  }
+
+  function setStep(n, value) {
+    $(`step-${n}`).dataset.state = value;
+  }
+
+  function renderConsole(target, rows) {
+    const box = $(target);
+    box.replaceChildren(...rows.map((row) => {
+      const line = document.createElement('div');
+      line.className = `console-row ${row.ok ? 'ok' : 'bad'}`;
+      const mark = document.createElement('span');
+      mark.className = `mark ${row.ok ? 'ok' : 'bad'}`;
+      mark.textContent = row.ok ? '✓' : '✕';
+      mark.setAttribute('aria-label', row.ok ? 'Worked' : 'Failed');
+      const text = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = row.job;
+      const output = document.createElement('code');
+      output.textContent = row.text;
+      text.append(name, output);
+      line.append(mark, text);
+      return line;
+    }));
+  }
+
+  async function runAcme(handler, target) {
+    const client = parcelClient(handler, CUSTOMERS[0].key);
+    const rows = [];
+    for (const job of acmeJobs) {
+      try {
+        rows.push({ job: job.name, ok: true, text: await job.run(client) });
+      } catch (error) {
+        rows.push({ job: job.name, ok: false, text: `${error.name}: ${error.message}` });
+      }
+    }
+    renderConsole(target, rows);
+    return { client, ok: rows.every((row) => row.ok) };
+  }
+
+  // Step 3: show the adapter source straight from the file Mender runs.
+  const sources = {};
+  async function showAdapter(which) {
+    const path = which === 'final' ? 'src/adapters/2026-09-01.js' : 'src/adapters/2026-09-01.first-draft.js';
+    sources[path] ??= await fetch(path).then((r) => r.text()).catch(() => '// Could not load the adapter source.');
+    $('adapter-code').innerHTML = highlight(sources[path]);
+    $('tab-final').setAttribute('aria-selected', String(which === 'final'));
+    $('tab-draft').setAttribute('aria-selected', String(which !== 'final'));
+    $('adapter-note').textContent = which === 'final'
+      ? 'This is the version that passed replay in step 4.'
+      : 'The first draft looks right at a glance. Replay it in step 4 to see what it gets wrong.';
+  }
+
+  async function ship() {
+    await runAcme(makeParcel(V2), 'console-2');
+    $('broken-note').hidden = false;
+    setStep(2, 'broken');
+  }
+
+  function slow(handler) {
+    let count = 0;
+    return async (request) => {
+      if (++count % 8 === 0) await wait(16);
+      return handler(request);
+    };
+  }
+
+  async function runReplay(which) {
+    if (state.busy) return;
+    state.busy = true;
+    for (const id of ['replay-draft', 'replay-final', 'turn-on', 'play']) $(id).disabled = true;
+    const adapter = which === 'final' ? finalAdapter : firstDraft;
+    await showAdapter(which);
+    const events = [];
+    $('replay-which').textContent = which === 'final' ? 'Final adapter' : 'First draft';
+    $('replay-which').className = 'chip thread';
+    $('verdict').hidden = true;
+    $('diff-wrap').hidden = true;
+    $('noise').hidden = true;
+    for (const id of ['s-total', 's-match', 's-differ', 's-gone']) $(id).textContent = '–';
+
+    const result = await replay({
+      recorded: state.recorded,
+      baseline: slow(makeParcel(V1)),
+      candidate: gateway(adapter, (event) => events.push(event)),
+      onProgress: (done, total) => {
+        $('progress').style.width = `${(done / total) * 100}%`;
+        $('s-total').textContent = done;
+      },
+    });
+
+    const translatable = result.total - result.untranslatable.length;
+    $('s-total').textContent = result.total;
+    $('s-match').textContent = result.matched;
+    $('s-differ').textContent = result.differed.length;
+    $('s-gone').textContent = result.untranslatable.length;
+
+    const verdict = $('verdict');
+    verdict.hidden = false;
+    if (result.differed.length) {
+      const fields = [...new Set(result.differed.flatMap((d) => d.diffs.map((x) => x.path.replace(/.*[.\]]/, ''))))];
+      verdict.className = 'callout';
+      verdict.textContent = `Blocked. ${result.differed.length} of ${translatable} translatable calls would have changed for customers (${fields.join(', ')}). This draft never goes live.`;
+      const rows = result.differed.slice(0, 6).map(({ call, diffs }) => {
+        const d = diffs[0];
+        const tr = document.createElement('tr');
+        for (const [text, mono] of [[`${call.method} ${call.path}`, true], [d.path, true], [JSON.stringify(d.expected), true], [JSON.stringify(d.got), true]]) {
+          const td = document.createElement('td');
+          const code = document.createElement('code');
+          code.textContent = text;
+          td.append(mono ? code : text);
+          tr.append(td);
+        }
+        return tr;
+      });
+      $('diff-rows').replaceChildren(...rows);
+      $('diff-wrap').hidden = false;
+      setStep(4, 'broken');
+    } else {
+      verdict.className = 'callout ok';
+      verdict.textContent = `Safe to turn on. All ${translatable} translatable calls match what customers got from 2026-03-01. ${result.untranslatable.length} label calls can't be translated, so those customers get a clear error and a migration link instead.`;
+      state.finalEvents = events;
+      setStep(3, 'done');
+      setStep(4, 'done');
+      renderCustomers(events);
+    }
+    const noise = [...result.noise].filter((n) => !n.startsWith('HTTP'));
+    if (noise.length) {
+      $('noise').textContent = `Ignored because they change on every run of the old version too: ${noise.join('; ')}.`;
+      $('noise').hidden = false;
+    }
+
+    for (const id of ['replay-draft', 'replay-final', 'turn-on', 'play']) $(id).disabled = false;
+    state.busy = false;
+    return result;
+  }
+
+  function renderCustomers(events) {
+    const rows = CUSTOMERS.map((customer) => {
+      const mine = events.filter((e) => e.customer === customer.id);
+      const gone = mine.filter((e) => e.outcome === 'untranslatable').length;
+      const translated = mine.length - gone;
+      const tr = document.createElement('tr');
+      const cells = [
+        customer.name,
+        String(mine.length),
+        String(translated),
+        String(gone),
+        gone ? 'Rewrite label calls, then migrate' : 'Send migration pull request',
+      ];
+      cells.forEach((text, i) => {
+        const td = document.createElement('td');
+        if (i >= 1 && i <= 3) td.className = 'num';
+        td.textContent = text;
+        tr.append(td);
+      });
+      return tr;
+    });
+    $('customers').replaceChildren(...rows);
+  }
+
+  function renderHeaders(headers) {
+    const list = document.createElement('dl');
+    for (const name of ['Parcel-Version', 'Deprecation', 'Sunset', 'Link']) {
+      const dt = document.createElement('dt');
+      dt.textContent = name;
+      const dd = document.createElement('dd');
+      dd.textContent = headers?.get(name) ?? '(none)';
+      list.append(dt, dd);
+    }
+    $('headers').replaceChildren(list);
+  }
+
+  async function turnOn() {
+    if (!state.finalEvents) await runReplay('final');
+    const { client, ok } = await runAcme(gateway(finalAdapter), 'console-3');
+    renderHeaders(client.lastHeaders);
+    if (ok) {
+      setStep(2, 'done');
+      setStep(5, 'done');
+    }
+  }
+
+  async function playAll() {
+    if (state.busy) return;
+    const show = (n) => $(`step-${n}`).scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    show(2); await wait(500); await ship(); await wait(1400);
+    show(3); await showAdapter('draft'); await wait(1600);
+    show(4); await runReplay('draft'); await wait(2200);
+    await runReplay('final'); await wait(1600);
+    show(5); await wait(400); await turnOn();
+  }
+
+  $('acme-code').innerHTML = highlight(ACME_CODE);
+  $('ship').addEventListener('click', ship);
+  $('tab-final').addEventListener('click', () => showAdapter('final'));
+  $('tab-draft').addEventListener('click', () => showAdapter('draft'));
+  $('replay-draft').addEventListener('click', () => runReplay('draft'));
+  $('replay-final').addEventListener('click', () => runReplay('final'));
+  $('turn-on').addEventListener('click', turnOn);
+  $('play').addEventListener('click', playAll);
+  $('reset').addEventListener('click', () => location.reload());
+
+  showAdapter('final');
+  const first = await runAcme(makeParcel(V1), 'console-1');
+  if (first.ok) setStep(1, 'done');
+  state.recorded = await record(makeParcel(V1), sampleCalls());
+  $('recorded-count').textContent = state.recorded.length;
+</script>
+</body>
+</html>

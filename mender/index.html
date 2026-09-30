@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mender Live Demo</title>
+<title>Mender Studio</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
   /* Layout: one workbench column. A stitched thread runs down the left edge and ties the five
-     steps together; each stitch turns solid when its step is done. */
+     stages of making an adapter together; each stitch turns solid when its stage is healthy. */
   :root {
     --paper: #F3F5FA;
     --surface: #FFFFFF;
@@ -24,9 +24,6 @@
     --bad-soft: #FBE9E7;
     --warn: #8A5300;
     --warn-soft: #FCF0D8;
-    --code-comment: #6A7390;
-    --code-string: #1F6B52;
-    --code-keyword: #6A2FB8;
     --display: 'Familjen Grotesk', 'Helvetica Neue', Arial, sans-serif;
     --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -36,7 +33,6 @@
       --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
       --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
       --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
-      --code-comment: #7F88A6; --code-string: #7FD6B0; --code-keyword: #C3A2FF;
       color-scheme: dark;
     }
   }
@@ -44,45 +40,36 @@
     --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
     --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
     --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
-    --code-comment: #7F88A6; --code-string: #7FD6B0; --code-keyword: #C3A2FF;
     color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.6 var(--body); }
   .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
   h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
   p { margin: 0; }
-  code, pre, .mono { font-family: var(--mono); }
   a { color: var(--thread); }
-  button { font: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 3px solid var(--thread); outline-offset: 2px; }
 
-  /* Header */
-  .masthead { display: grid; gap: 20px; padding-bottom: 40px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
+  .masthead { display: grid; gap: 18px; padding-bottom: 40px; }
+  .brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .wordmark { font: 700 26px/1 var(--display); letter-spacing: -0.01em; text-decoration: underline dashed var(--thread); text-decoration-thickness: 2px; text-underline-offset: 7px; }
   .tag { font: 500 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--thread); background: var(--thread-soft); padding: 6px 9px; border-radius: 999px; }
-  .masthead h1 { font-size: clamp(34px, 5.4vw, 58px); line-height: 1.02; letter-spacing: -0.02em; font-weight: 700; max-width: 16ch; }
-  .lede { font-size: 18px; color: var(--muted); max-width: 62ch; }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .masthead h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.03; letter-spacing: -0.02em; font-weight: 700; max-width: 17ch; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 64ch; }
   .fine { font-size: 13px; color: var(--muted); }
 
-  .btn { border: 1px solid transparent; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn { border: 1px solid transparent; border-radius: 8px; padding: 9px 15px; font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
   .btn-primary { background: var(--thread); color: var(--on-thread); }
   .btn-primary:hover { filter: brightness(1.08); }
-  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
   .btn-ghost:hover { border-color: var(--muted); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .scenario { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 48px; }
-  .scenario div { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
-  .label { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-  .scenario strong { font-weight: 600; }
-
-  /* Steps and the thread */
   .steps { list-style: none; margin: 0; padding: 0; }
-  .step { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; padding-bottom: 56px; }
+  .step { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; padding-bottom: 52px; }
   .step::before { content: ''; position: absolute; left: 17px; top: 40px; bottom: 4px; border-left: 2px dashed var(--line); }
   .step:last-child::before { display: none; }
   .step[data-state="done"]::before { border-left: 2px solid var(--thread); }
@@ -91,123 +78,107 @@
   .step[data-state="broken"] .knot { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
   .step-body { display: grid; gap: 16px; min-width: 0; }
   .step h2 { font-size: clamp(22px, 2.6vw, 28px); line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; padding-top: 3px; }
-  .step .lead { color: var(--muted); max-width: 66ch; }
+  .step .lead { color: var(--muted); max-width: 68ch; }
 
   .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .field { display: grid; gap: 6px; min-width: 0; }
+  .label { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  input[type="text"], input[type="date"], input[type="url"], select, textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; min-width: 0;
+  }
+  textarea { font: 400 13px/1.55 var(--mono); resize: vertical; tab-size: 2; }
+  textarea.tall { min-height: 300px; }
+  textarea.mid { min-height: 170px; }
+  textarea.short { min-height: 76px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--thread); outline: none; box-shadow: 0 0 0 3px var(--thread-soft); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden; }
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .panel-head .label { color: var(--ink); }
+  pre.out { margin: 0; padding: 12px 14px; background: var(--sunken); font: 400 13px/1.55 var(--mono); overflow: auto; max-height: 340px; white-space: pre; }
   .chip { font: 500 12px/1 var(--mono); padding: 5px 8px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
   .chip.ok { background: var(--ok-soft); color: var(--ok); }
   .chip.bad { background: var(--bad-soft); color: var(--bad); }
   .chip.warn { background: var(--warn-soft); color: var(--warn); }
   .chip.thread { background: var(--thread-soft); color: var(--thread); }
 
-  pre.code { margin: 0; padding: 14px 16px; background: var(--sunken); font-size: 13px; line-height: 1.6; overflow-x: auto; tab-size: 2; }
-  .code .c { color: var(--code-comment); }
-  .code .s { color: var(--code-string); }
-  .code .k { color: var(--code-keyword); }
+  .callout { border-left: 3px solid var(--thread); background: var(--thread-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 15px; }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .error-text { color: var(--bad); font-size: 14px; }
 
-  .console { display: grid; }
-  .console-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  .console-row:last-child { border-bottom: 0; }
-  .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 13px/1 var(--mono); }
-  .mark.ok { background: var(--ok-soft); color: var(--ok); }
-  .mark.bad { background: var(--bad-soft); color: var(--bad); }
-  .console-row strong { display: block; font-weight: 600; font-size: 14px; }
-  .console-row code { display: block; font-size: 13px; overflow-wrap: anywhere; color: var(--muted); }
-  .console-row.bad code { color: var(--bad); }
-  .empty { padding: 16px 14px; color: var(--muted); font-size: 14px; }
+  .rules { list-style: none; margin: 0; padding: 0; }
+  .rules li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .rules li:last-child { border-bottom: 0; }
+  .rules code { font: 400 13px/1.5 var(--mono); background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
+  .rules .chip { justify-self: start; }
+  details > summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 14px; }
+  details[open] > summary { border-bottom: 1px solid var(--line); }
+  .details-body { padding: 12px 14px; display: grid; gap: 10px; }
 
   .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
   tr:last-child td { border-bottom: 0; }
   th { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--sunken); }
-  td code { font-size: 13px; }
-  td.num { font-variant-numeric: tabular-nums; text-align: right; }
-  th.num { text-align: right; }
-
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .callout { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 15px; }
-  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
-  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
-
-  .tabs { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  .tab { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 14px; }
-  .tab[aria-selected="true"] { background: var(--thread-soft); color: var(--thread); }
-  .code-note { padding: 10px 14px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }
-  .code-scroll { max-height: 440px; overflow: auto; }
-
-  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
-  .stat b { font: 600 30px/1.1 var(--display); font-variant-numeric: tabular-nums; }
-  .stat.ok b { color: var(--ok); }
-  .stat.bad b { color: var(--bad); }
-  .stat.warn b { color: var(--warn); }
-  .progress { height: 4px; background: var(--sunken); border-radius: 999px; overflow: hidden; }
-  .progress span { display: block; height: 100%; width: 0; background: var(--thread); transition: width 120ms linear; }
-  .noise { font-size: 14px; color: var(--muted); }
+  td code { font: 400 13px/1.5 var(--mono); overflow-wrap: anywhere; }
 
   .headers dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); }
-  .headers dt, .headers dd { margin: 0; padding: 9px 14px; border-bottom: 1px solid var(--line); font: 400 13px/1.5 var(--mono); }
+  .headers dt, .headers dd { margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--line); font: 400 13px/1.5 var(--mono); }
   .headers dt { color: var(--muted); }
   .headers dd { overflow-wrap: anywhere; }
   .headers dl > :nth-last-child(-n+2) { border-bottom: 0; }
 
-  .ledger { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid var(--line); padding-top: 28px; }
-  .ledger h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-  .ledger ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 15px; display: grid; gap: 6px; }
-  .source { margin-top: 28px; font-size: 14px; color: var(--muted); }
+  .footer { border-top: 1px solid var(--line); padding-top: 24px; display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
 
   @media (max-width: 760px) {
     .wrap { padding-block: 28px 56px; }
-    .scenario, .pair, .ledger { grid-template-columns: minmax(0, 1fr); }
-    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pair, .trio { grid-template-columns: minmax(0, 1fr); }
     .step { grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; }
     .knot { width: 28px; height: 28px; font-size: 13px; }
     .step::before { left: 13px; top: 32px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .progress span { transition: none; }
-    html { scroll-behavior: auto; }
+    .rules li { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="masthead">
-    <div class="brand"><span class="wordmark">mender</span><span class="tag">Live demo</span></div>
-    <h1>Ship breaking changes without breaking customers.</h1>
-    <p class="lede">Parcel, a shipping API, is moving from version 2026-03-01 to 2026-09-01. Follow one customer who wrote code against the old version, first without Mender, then with a Mender adapter.</p>
-    <div class="actions">
-      <button class="btn btn-primary" id="play" type="button">Play all steps</button>
-      <button class="btn btn-ghost" id="reset" type="button">Start over</button>
-    </div>
-    <p class="fine">Everything runs in your browser. Parcel and its customers are made up for this demo.</p>
+    <div class="brand"><span class="wordmark">mender</span><span class="tag">Studio</span><a class="fine" href="walkthrough.html" id="walkthrough-link">New here? Watch the 5-step walkthrough →</a></div>
+    <h1>Make your breaking change safe to ship.</h1>
+    <p class="lede">Paste the same record from your API before and after your change. Mender works out the adapter that keeps customers on the old version working, proves it on your examples, and gives you the rules to deploy.</p>
+    <p class="fine">It opens with Parcel, a sample API, already filled in. Replace the examples with your own records to try it on your API. Nothing you paste leaves this page unless you use "Write with AI".</p>
   </header>
 
-  <section class="scenario" aria-label="Scenario">
-    <div><span class="label">API provider</span><strong>Parcel</strong><span class="fine">Orders and shipping labels</span></div>
-    <div><span class="label">Still on 2026-03-01</span><strong>Acme Outdoor, Bloom &amp; Stem, Northwind Tea</strong></div>
-    <div><span class="label">New version</span><strong>2026-09-01</strong><span class="fine">Old version shuts off Mar 1, 2027</span></div>
-  </section>
-
   <ol class="steps">
-    <li class="step" id="step-1" data-state="ready">
+    <li class="step" id="step-1" data-state="done">
       <div class="knot" aria-hidden="true">1</div>
       <div class="step-body">
-        <h2>Acme's app works on 2026-03-01</h2>
-        <p class="lead">Acme Outdoor wrote its checkout code in March. It prints the last receipt and creates new orders. Acme never touches this code again.</p>
+        <h2>Describe your change</h2>
+        <p class="lead">Paste one record as the old version returns it, and the same record as the new version returns it. Add more records as a list, in the same order on both sides, to show more cases.</p>
+        <div class="trio">
+          <label class="field"><span class="label">Old version</span><input type="text" id="old-version" value="2026-03-01"></label>
+          <label class="field"><span class="label">New version</span><input type="text" id="new-version" value="2026-09-01"></label>
+          <label class="field"><span class="label">Old version shuts off</span><input type="date" id="sunset" value="2027-03-01"></label>
+        </div>
         <div class="pair">
-          <div class="panel">
-            <div class="panel-head"><span class="label">acme-checkout.js</span><span class="chip">written March 2026</span></div>
-            <pre class="code" id="acme-code"></pre>
+          <label class="field"><span class="label">Before · old version (JSON)</span><textarea class="tall" id="before" spellcheck="false"></textarea></label>
+          <label class="field"><span class="label">After · new version (JSON)</span><textarea class="tall" id="after" spellcheck="false"></textarea></label>
+        </div>
+        <div class="pair">
+          <label class="field"><span class="label">Removed endpoints, one per line</span><textarea class="short" id="removed" spellcheck="false" placeholder="GET /orders/{id}/label"></textarea></label>
+          <div class="field">
+            <label class="field"><span class="label">Migration guide link</span><input type="url" id="guide" placeholder="https://docs.example.com/migrate"></label>
+            <label class="field"><span class="label">Notes for the AI (optional)</span><input type="text" id="notes" placeholder="Anything the examples can't show"></label>
           </div>
-          <div class="panel">
-            <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-1">Parcel 2026-03-01</span></div>
-            <div class="console" id="console-1" aria-live="polite"><p class="empty">Running…</p></div>
-          </div>
+        </div>
+        <p class="error-text" id="input-error" role="alert" hidden></p>
+        <div class="row">
+          <button class="btn btn-ghost" id="load-example" type="button">Load Parcel example</button>
+          <button class="btn btn-ghost" id="clear" type="button">Clear</button>
         </div>
       </div>
     </li>
@@ -215,385 +186,511 @@
     <li class="step" id="step-2" data-state="ready">
       <div class="knot" aria-hidden="true">2</div>
       <div class="step-body">
-        <h2>Parcel ships 2026-09-01</h2>
-        <p class="lead">Parcel cleans up its API. These five changes break code written for the old version.</p>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>What changed</th><th>2026-03-01</th><th>2026-09-01</th></tr></thead>
-            <tbody>
-              <tr><td>Customer name</td><td><code>customer_name</code></td><td><code>full_name</code></td></tr>
-              <tr><td>Price</td><td><code>amount: 25.5, currency: "usd"</code></td><td><code>total: { amount_cents: 2550, currency: "USD" }</code></td></tr>
-              <tr><td>Paid orders</td><td><code>status: "paid"</code></td><td><code>status: "succeeded"</code></td></tr>
-              <tr><td>Order time</td><td><code>created: 1767452400</code></td><td><code>created_at: "2026-01-03T15:00:00.000Z"</code></td></tr>
-              <tr><td>Shipping labels</td><td><code>GET /orders/{id}/label</code></td><td>Removed, moved to a new Labels API</td></tr>
-            </tbody>
-          </table>
+        <h2>Mender writes the adapter</h2>
+        <p class="lead">The adapter is a short list of rules: what was renamed, rescaled or reformatted, and what can't be saved. Mender runs the rules forward on requests from old customers and backward on the answers they get.</p>
+        <div class="row">
+          <button class="btn btn-primary" id="find" type="button">Find rules from examples</button>
+          <button class="btn btn-ghost" id="ai-write" type="button" hidden>Write with AI</button>
+          <span class="chip" id="rules-source">No rules yet</span>
         </div>
-        <div class="row"><button class="btn btn-primary" id="ship" type="button">Switch Parcel to 2026-09-01</button></div>
+        <p class="fine" id="ai-status" aria-live="polite"></p>
         <div class="panel">
-          <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-2">Parcel 2026-09-01, no adapter</span></div>
-          <div class="console" id="console-2" aria-live="polite"><p class="empty">Acme's app hasn't run against 2026-09-01 yet.</p></div>
+          <div class="panel-head"><span class="label">Adapter rules</span><span class="chip" id="rules-count">0 rules</span></div>
+          <ul class="rules" id="rules-list"><li><span></span><span class="fine">Find rules to fill this in.</span></li></ul>
+          <details id="rules-editor">
+            <summary>Edit the rules as JSON</summary>
+            <div class="details-body">
+              <textarea class="mid" id="rules-json" spellcheck="false" aria-label="Adapter rules as JSON"></textarea>
+              <p class="error-text" id="rules-error" role="alert" hidden></p>
+              <div class="row"><button class="btn btn-ghost" id="apply-json" type="button">Use these rules</button></div>
+            </div>
+          </details>
         </div>
-        <p class="callout" id="broken-note" hidden>Acme didn't change a line of code, and its app broke anyway. Today Acme finds out from its own customers.</p>
       </div>
     </li>
 
     <li class="step" id="step-3" data-state="ready">
       <div class="knot" aria-hidden="true">3</div>
       <div class="step-body">
-        <h2>Mender writes an adapter</h2>
-        <p class="lead">From Parcel's two API specs, Mender's AI writes a small adapter: rename fields on the way in, translate answers on the way out. The AI writes it once. On live requests it's plain code, so every answer is fast and predictable.</p>
-        <div class="panel">
-          <div class="tabs" role="tablist" aria-label="Adapter versions">
-            <button class="tab" role="tab" id="tab-final" aria-selected="true" aria-controls="adapter-code" type="button">Final adapter</button>
-            <button class="tab" role="tab" id="tab-draft" aria-selected="false" aria-controls="adapter-code" type="button">First draft</button>
-          </div>
-          <div class="code-scroll"><pre class="code" id="adapter-code" role="tabpanel">Loading…</pre></div>
-          <p class="code-note" id="adapter-note">This is the version that passed replay in step 4.</p>
+        <h2>Proof on your examples</h2>
+        <p class="lead">Every example runs through the rules both ways. Old → new must give exactly your "after" record, and new → old must give back exactly your "before" record. Any difference blocks the adapter.</p>
+        <p class="callout" id="verdict">Proof runs as soon as there are rules.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Example</th><th>Old → new</th><th>New → old</th><th>Differences</th></tr></thead>
+            <tbody id="proof-rows"></tbody>
+          </table>
         </div>
+        <div class="row"><button class="btn btn-ghost" id="ai-fix" type="button" hidden>Fix with AI</button></div>
       </div>
     </li>
 
     <li class="step" id="step-4" data-state="ready">
       <div class="knot" aria-hidden="true">4</div>
       <div class="step-body">
-        <h2>Replay proves it before any customer sees it</h2>
-        <p class="lead">Mender replays <span id="recorded-count">200</span> calls recorded last week from customers still on 2026-03-01. Each call runs twice: against the old version, to learn which fields change on every run, and through the adapter into 2026-09-01. Everything else has to match what the customer originally got.</p>
-        <div class="row">
-          <button class="btn btn-ghost" id="replay-draft" type="button">Replay first draft</button>
-          <button class="btn btn-primary" id="replay-final" type="button">Replay final adapter</button>
-          <span class="chip" id="replay-which">Not run yet</span>
+        <h2>Try it with your own data</h2>
+        <p class="lead">Edit either box and see what the adapter does, live. This is the same code Mender runs on every request.</p>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">Your new API answers</span><span class="chip" id="down-status">new version</span></div>
+            <textarea class="mid" id="try-down" spellcheck="false" aria-label="An answer from your new API" style="border:0;border-radius:0"></textarea>
+            <div class="panel-head" style="border-top:1px solid var(--line)"><span class="label">Old customers receive</span></div>
+            <pre class="out" id="try-down-out"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="label">An old customer sends</span><span class="chip" id="up-status">old version</span></div>
+            <textarea class="mid" id="try-up" spellcheck="false" aria-label="A request from an old customer" style="border:0;border-radius:0"></textarea>
+            <div class="panel-head" style="border-top:1px solid var(--line)"><span class="label">Your new API receives</span></div>
+            <pre class="out" id="try-up-out"></pre>
+          </div>
         </div>
-        <div class="progress" aria-hidden="true"><span id="progress"></span></div>
-        <div class="stats" aria-live="polite">
-          <div class="stat"><span class="label">Calls replayed</span><b id="s-total">–</b></div>
-          <div class="stat ok"><span class="label">Match</span><b id="s-match">–</b></div>
-          <div class="stat bad"><span class="label">Differ</span><b id="s-differ">–</b></div>
-          <div class="stat warn"><span class="label">Need a code change</span><b id="s-gone">–</b></div>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">Check an endpoint</span></div>
+            <div class="details-body">
+              <div class="row">
+                <select id="try-method" aria-label="Method" style="width:auto"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+                <input type="text" id="try-path" value="/orders/ord_1001/label" aria-label="Path" style="flex:1;min-width:160px">
+              </div>
+              <p id="try-endpoint-out" aria-live="polite"></p>
+            </div>
+          </div>
+          <div class="panel headers">
+            <div class="panel-head"><span class="label">Headers old customers get</span></div>
+            <div id="headers"></div>
+          </div>
         </div>
-        <p class="callout" id="verdict" hidden></p>
-        <div class="table-wrap" id="diff-wrap" hidden>
-          <table>
-            <thead><tr><th>Call</th><th>Field</th><th>Customer got</th><th>Adapter returned</th></tr></thead>
-            <tbody id="diff-rows"></tbody>
-          </table>
-        </div>
-        <p class="noise" id="noise" hidden></p>
       </div>
     </li>
 
     <li class="step" id="step-5" data-state="ready">
       <div class="knot" aria-hidden="true">5</div>
       <div class="step-body">
-        <h2>Turn the adapter on</h2>
-        <p class="lead">Parcel runs the adapter in front of 2026-09-01. Old callers keep working, every answer warns them the version is retiring, and Parcel sees exactly who still has to move.</p>
-        <div class="row"><button class="btn btn-primary" id="turn-on" type="button">Turn on the adapter</button></div>
+        <h2>Ship it</h2>
+        <p class="lead">Save the rules next to your API and put Mender in front of your newest handler. Customers on the old version keep working, and every call they make is counted, so you know who still has to move before the shut-off date.</p>
         <div class="pair">
           <div class="panel">
-            <div class="panel-head"><span class="label">Acme's app</span><span class="chip" id="target-3">Parcel 2026-09-01 + Mender</span></div>
-            <div class="console" id="console-3" aria-live="polite"><p class="empty">Acme's app hasn't run through the adapter yet.</p></div>
+            <div class="panel-head"><span class="label">mender-rules.json</span><button class="btn btn-ghost" id="copy-rules" type="button">Copy</button></div>
+            <pre class="out" id="ship-rules"></pre>
           </div>
-          <div class="panel headers">
-            <div class="panel-head"><span class="label">Response headers Acme receives</span></div>
-            <div id="headers"><p class="empty">Headers appear after the first call.</p></div>
+          <div class="panel">
+            <div class="panel-head"><span class="label">server.js</span><button class="btn btn-ghost" id="copy-code" type="button">Copy</button></div>
+            <pre class="out" id="ship-code"></pre>
           </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Customer on 2026-03-01</th><th class="num">Calls last week</th><th class="num">Translated</th><th class="num">Need a code change</th><th>Next step</th></tr></thead>
-            <tbody id="customers"><tr><td colspan="5" class="fine">Filled in from the replay of the final adapter.</td></tr></tbody>
-          </table>
-        </div>
+        <p class="fine">Get <code>mender.js</code> and <code>rules.js</code> from <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender/src">GitHub</a>. They work with any handler that takes a Request and returns a Response: Next.js route handlers, Hono, Cloudflare Workers, Bun and Deno.</p>
       </div>
     </li>
   </ol>
 
-  <section class="ledger" aria-label="What is live and what is staged">
-    <div>
-      <h3>Live in this page</h3>
-      <ul>
-        <li>Parcel's two versions, running in your browser</li>
-        <li>The Mender runtime that runs the adapter on each call</li>
-        <li>Replay of 200 recorded calls, with noise detection</li>
-        <li>Deprecation, Sunset and Link headers, and per-customer counts</li>
-      </ul>
-    </div>
-    <div>
-      <h3>Staged for the demo</h3>
-      <ul>
-        <li>Claude wrote both adapter drafts ahead of time, standing in for Mender's AI writer</li>
-        <li>Parcel, its customers and their traffic are made up</li>
-      </ul>
-    </div>
-    <div>
-      <h3>Next</h3>
-      <ul>
-        <li>The AI writer running live from two API specs</li>
-        <li>A real case: Strapi v4 to v5</li>
-        <li>Migration pull requests for each customer on the old version</li>
-      </ul>
-    </div>
-  </section>
-  <p class="source">Source: <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender">github.com/arkaraae/api-mender, mender-demo branch</a></p>
+  <footer class="footer">
+    <p><strong>How the rules are found.</strong> "Find rules from examples" matches fields between your two records by value: same value under a new name, the same number times 10, 100 or 1000, the same text in different case, the same moment in a different time format, and renamed values. It runs in this page with no AI. "Write with AI" asks Claude, on your own Claude account, and appears only where that's available.</p>
+    <p>Source: <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender">github.com/arkaraae/api-mender, mender-demo branch</a></p>
+  </footer>
 </div>
 
 <script type="module">
-  import { makeParcel, V1, V2 } from './src/parcel.js';
-  import { withMender } from './src/mender.js';
-  import { record, replay } from './src/replay.js';
-  import { sampleCalls, CUSTOMERS, customerFromKey } from './src/traffic.js';
-  import { parcelClient, acmeJobs } from './src/acme-app.js';
-  import finalAdapter from './src/adapters/2026-09-01.js';
-  import firstDraft from './src/adapters/2026-09-01.first-draft.js';
+  import { makeParcel, V1, V2, API } from './src/parcel.js';
+  import { inferRules, verifyRules, compileRules, describeRule, checkRule, TIME_FORMATS } from './src/rules.js';
 
   const $ = (id) => document.getElementById(id);
-  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, calm ? 0 : ms));
-  const state = { recorded: null, finalEvents: null, busy: false };
+  const state = { rules: [], source: '', ai: null, busy: false };
+  const pretty = (value) => JSON.stringify(value, null, 2);
 
-  const ACME_CODE = `// Pinned to Parcel 2026-03-01
-const past = await parcel.get('/orders/ord_1001');
-print(\`\${past.customer_name} · $\${past.amount.toFixed(2)} · \${past.status}\`);
+  // ---------- the Parcel example ----------
 
-const order = await parcel.post('/orders', {
-  customer_name: 'Jonas Berg',
-  amount: 25.50,
-  currency: 'usd',
-});`;
-
-  function highlight(source) {
-    const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const pattern = /(\/\/[^\n]*)|('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`)|\b(export|default|const|let|return|if|for|of|in|function|async|await|new)\b/g;
-    let html = '';
-    let last = 0;
-    let match;
-    while ((match = pattern.exec(source))) {
-      html += escape(source.slice(last, match.index));
-      const kind = match[1] ? 'c' : match[2] ? 's' : 'k';
-      html += `<span class="${kind}">${escape(match[0])}</span>`;
-      last = pattern.lastIndex;
-    }
-    return html + escape(source.slice(last));
+  async function parcelRecord(version, id) {
+    const response = await makeParcel(version)(new Request(`${API}/orders/${id}`, { headers: { 'parcel-version': version } }));
+    return response.json();
   }
 
-  function gateway(adapter, onCall = () => {}) {
-    return withMender(makeParcel(V2), {
-      latest: V2,
-      adapters: [adapter],
-      versionHeader: 'Parcel-Version',
-      sunset: '2027-03-01',
-      guide: 'https://docs.parcel.example/migrate/2026-09-01',
-      identify: (request) => customerFromKey(request.headers.get('authorization')).id,
-      onCall,
-    });
+  async function loadExample() {
+    const ids = ['ord_1001', 'ord_1004'];
+    const before = await Promise.all(ids.map((id) => parcelRecord(V1, id)));
+    const after = await Promise.all(ids.map((id) => parcelRecord(V2, id)));
+    $('old-version').value = V1;
+    $('new-version').value = V2;
+    $('sunset').value = '2027-03-01';
+    $('before').value = pretty(before);
+    $('after').value = pretty(after);
+    $('removed').value = 'GET /orders/{id}/label';
+    $('guide').value = 'https://docs.parcel.example/migrate/2026-09-01';
+    $('notes').value = 'Shipping labels moved to the new Labels API.';
+    $('try-down').value = pretty({ object: 'list', data: [after[0]], has_more: false });
+    $('try-up').value = pretty({ customer_name: 'Jonas Berg', amount: 19.99, currency: 'usd', items: [{ sku: 'TENT-2P', qty: 1 }] });
+    $('try-path').value = '/orders/ord_1001/label';
+    findRules();
   }
 
-  function setStep(n, value) {
-    $(`step-${n}`).dataset.state = value;
-  }
+  // ---------- reading the inputs ----------
 
-  function renderConsole(target, rows) {
-    const box = $(target);
-    box.replaceChildren(...rows.map((row) => {
-      const line = document.createElement('div');
-      line.className = `console-row ${row.ok ? 'ok' : 'bad'}`;
-      const mark = document.createElement('span');
-      mark.className = `mark ${row.ok ? 'ok' : 'bad'}`;
-      mark.textContent = row.ok ? '✓' : '✕';
-      mark.setAttribute('aria-label', row.ok ? 'Worked' : 'Failed');
-      const text = document.createElement('div');
-      const name = document.createElement('strong');
-      name.textContent = row.job;
-      const output = document.createElement('code');
-      output.textContent = row.text;
-      text.append(name, output);
-      line.append(mark, text);
-      return line;
-    }));
-  }
-
-  async function runAcme(handler, target) {
-    const client = parcelClient(handler, CUSTOMERS[0].key);
-    const rows = [];
-    for (const job of acmeJobs) {
-      try {
-        rows.push({ job: job.name, ok: true, text: await job.run(client) });
-      } catch (error) {
-        rows.push({ job: job.name, ok: false, text: `${error.name}: ${error.message}` });
-      }
-    }
-    renderConsole(target, rows);
-    return { client, ok: rows.every((row) => row.ok) };
-  }
-
-  // Step 3: show the adapter source straight from the file Mender runs.
-  const sources = {};
-  async function showAdapter(which) {
-    const path = which === 'final' ? 'src/adapters/2026-09-01.js' : 'src/adapters/2026-09-01.first-draft.js';
-    sources[path] ??= await fetch(path).then((r) => r.text()).catch(() => '// Could not load the adapter source.');
-    $('adapter-code').innerHTML = highlight(sources[path]);
-    $('tab-final').setAttribute('aria-selected', String(which === 'final'));
-    $('tab-draft').setAttribute('aria-selected', String(which !== 'final'));
-    $('adapter-note').textContent = which === 'final'
-      ? 'This is the version that passed replay in step 4.'
-      : 'The first draft looks right at a glance. Replay it in step 4 to see what it gets wrong.';
-  }
-
-  async function ship() {
-    await runAcme(makeParcel(V2), 'console-2');
-    $('broken-note').hidden = false;
-    setStep(2, 'broken');
-  }
-
-  function slow(handler) {
-    let count = 0;
-    return async (request) => {
-      if (++count % 8 === 0) await wait(16);
-      return handler(request);
+  function readPairs() {
+    const parse = (id, name) => {
+      const text = $(id).value.trim();
+      if (!text) throw new Error(`Paste a JSON record into "${name}".`);
+      try { return JSON.parse(text); } catch (error) { throw new Error(`"${name}" isn't valid JSON: ${error.message}`); }
     };
+    const before = parse('before', 'Before');
+    const after = parse('after', 'After');
+    const list = (v) => (Array.isArray(v) ? v : [v]);
+    const olds = list(before);
+    const news = list(after);
+    if (olds.length !== news.length) throw new Error(`"Before" has ${olds.length} records and "After" has ${news.length}. Put the same records in the same order on both sides.`);
+    if (![...olds, ...news].every((r) => r && typeof r === 'object' && !Array.isArray(r))) throw new Error('Each record must be a JSON object, like { "id": 1 }.');
+    return olds.map((old, i) => ({ old, new: news[i] }));
   }
 
-  async function runReplay(which) {
-    if (state.busy) return;
-    state.busy = true;
-    for (const id of ['replay-draft', 'replay-final', 'turn-on', 'play']) $(id).disabled = true;
-    const adapter = which === 'final' ? finalAdapter : firstDraft;
-    await showAdapter(which);
-    const events = [];
-    $('replay-which').textContent = which === 'final' ? 'Final adapter' : 'First draft';
-    $('replay-which').className = 'chip thread';
-    $('verdict').hidden = true;
-    $('diff-wrap').hidden = true;
-    $('noise').hidden = true;
-    for (const id of ['s-total', 's-match', 's-differ', 's-gone']) $(id).textContent = '–';
+  function endpointRules() {
+    const guide = $('guide').value.trim() || undefined;
+    return $('removed').value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [method, path] = line.split(/\s+/);
+      return path ? { op: 'endpoint_removed', method: method.toUpperCase(), path, guide } : null;
+    }).filter(Boolean);
+  }
 
-    const result = await replay({
-      recorded: state.recorded,
-      baseline: slow(makeParcel(V1)),
-      candidate: gateway(adapter, (event) => events.push(event)),
-      onProgress: (done, total) => {
-        $('progress').style.width = `${(done / total) * 100}%`;
-        $('s-total').textContent = done;
-      },
-    });
+  function showInputError(message) {
+    $('input-error').textContent = message ?? '';
+    $('input-error').hidden = !message;
+    $('step-1').dataset.state = message ? 'broken' : 'done';
+  }
 
-    const translatable = result.total - result.untranslatable.length;
-    $('s-total').textContent = result.total;
-    $('s-match').textContent = result.matched;
-    $('s-differ').textContent = result.differed.length;
-    $('s-gone').textContent = result.untranslatable.length;
+  // ---------- rules ----------
 
-    const verdict = $('verdict');
-    verdict.hidden = false;
-    if (result.differed.length) {
-      const fields = [...new Set(result.differed.flatMap((d) => d.diffs.map((x) => x.path.replace(/.*[.\]]/, ''))))];
-      verdict.className = 'callout';
-      verdict.textContent = `Blocked. ${result.differed.length} of ${translatable} translatable calls would have changed for customers (${fields.join(', ')}). This draft never goes live.`;
-      const rows = result.differed.slice(0, 6).map(({ call, diffs }) => {
-        const d = diffs[0];
-        const tr = document.createElement('tr');
-        for (const [text, mono] of [[`${call.method} ${call.path}`, true], [d.path, true], [JSON.stringify(d.expected), true], [JSON.stringify(d.got), true]]) {
-          const td = document.createElement('td');
-          const code = document.createElement('code');
-          code.textContent = text;
-          td.append(mono ? code : text);
-          tr.append(td);
-        }
-        return tr;
-      });
-      $('diff-rows').replaceChildren(...rows);
-      $('diff-wrap').hidden = false;
-      setStep(4, 'broken');
+  function setRules(rules, source) {
+    state.rules = rules;
+    state.source = source;
+    $('rules-source').textContent = source;
+    $('rules-source').className = `chip ${source ? 'thread' : ''}`;
+    $('rules-count').textContent = `${rules.length} rule${rules.length === 1 ? '' : 's'}`;
+    $('rules-json').value = pretty(rules);
+    $('rules-error').hidden = true;
+    const list = $('rules-list');
+    if (!rules.length) {
+      list.innerHTML = '<li><span></span><span class="fine">No differences found between your records.</span></li>';
     } else {
-      verdict.className = 'callout ok';
-      verdict.textContent = `Safe to turn on. All ${translatable} translatable calls match what customers got from 2026-03-01. ${result.untranslatable.length} label calls can't be translated, so those customers get a clear error and a migration link instead.`;
-      state.finalEvents = events;
-      setStep(3, 'done');
-      setStep(4, 'done');
-      renderCustomers(events);
+      list.replaceChildren(...rules.map((rule) => {
+        const li = document.createElement('li');
+        const chip = document.createElement('span');
+        const warn = rule.op === 'add' || rule.op === 'remove';
+        chip.className = `chip ${rule.op === 'endpoint_removed' ? 'bad' : warn ? 'warn' : 'thread'}`;
+        chip.textContent = rule.op.replace('_', ' ');
+        const text = document.createElement('span');
+        // describeRule marks field names with backticks; render them as code safely.
+        for (const [i, part] of describeRule(rule).split('`').entries()) {
+          if (i % 2) { const c = document.createElement('code'); c.textContent = part; text.append(c); } else text.append(part);
+        }
+        li.append(chip, text);
+        return li;
+      }));
     }
-    const noise = [...result.noise].filter((n) => !n.startsWith('HTTP'));
-    if (noise.length) {
-      $('noise').textContent = `Ignored because they change on every run of the old version too: ${noise.join('; ')}.`;
-      $('noise').hidden = false;
-    }
-
-    for (const id of ['replay-draft', 'replay-final', 'turn-on', 'play']) $(id).disabled = false;
-    state.busy = false;
-    return result;
+    $('step-2').dataset.state = rules.length ? 'done' : 'ready';
+    refresh();
   }
 
-  function renderCustomers(events) {
-    const rows = CUSTOMERS.map((customer) => {
-      const mine = events.filter((e) => e.customer === customer.id);
-      const gone = mine.filter((e) => e.outcome === 'untranslatable').length;
-      const translated = mine.length - gone;
+  function findRules() {
+    let pairs;
+    try { pairs = readPairs(); } catch (error) { showInputError(error.message); return; }
+    showInputError(null);
+    setRules([...inferRules(pairs), ...endpointRules()], 'Found from examples, no AI');
+  }
+
+  function applyJson() {
+    try {
+      const rules = JSON.parse($('rules-json').value);
+      if (!Array.isArray(rules)) throw new Error('The rules must be a JSON list: [ { "op": "rename", ... } ].');
+      const problem = rules.map(checkRule).find(Boolean);
+      if (problem) throw new Error(problem);
+      setRules(rules, 'Edited by hand');
+    } catch (error) {
+      $('rules-error').textContent = error.message;
+      $('rules-error').hidden = false;
+    }
+  }
+
+  // ---------- proof, try-it and ship ----------
+
+  function adapter() {
+    return compileRules({ from: $('old-version').value.trim(), to: $('new-version').value.trim(), rules: state.rules });
+  }
+
+  function refresh() {
+    renderProof();
+    renderTry();
+    renderShip();
+  }
+
+  let lastProof = [];
+  function renderProof() {
+    const rows = $('proof-rows');
+    const verdict = $('verdict');
+    let pairs;
+    try { pairs = readPairs(); } catch (error) {
+      verdict.className = 'callout warn';
+      verdict.textContent = `Fix the examples in step 1 to run the proof. ${error.message}`;
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'ready';
+      return;
+    }
+    if (!state.rules.length) {
+      verdict.className = 'callout';
+      verdict.textContent = 'Proof runs as soon as there are rules.';
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'ready';
+      return;
+    }
+    let results;
+    try { results = verifyRules(state.rules, pairs); } catch (error) {
+      verdict.className = 'callout bad';
+      verdict.textContent = `The rules couldn't run: ${error.message}`;
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'broken';
+      return;
+    }
+    lastProof = results;
+    const failing = results.filter((r) => r.upDiffs.length || r.downDiffs.length);
+    const lost = [...new Set(results.flatMap((r) => r.lost))];
+    rows.replaceChildren(...results.map((r) => {
       const tr = document.createElement('tr');
-      const cells = [
-        customer.name,
-        String(mine.length),
-        String(translated),
-        String(gone),
-        gone ? 'Rewrite label calls, then migrate' : 'Send migration pull request',
-      ];
+      const cells = [`#${r.index + 1}`, r.upDiffs.length ? `✕ ${r.upDiffs.length} off` : '✓ matches', r.downDiffs.length ? `✕ ${r.downDiffs.length} off` : '✓ matches'];
       cells.forEach((text, i) => {
         const td = document.createElement('td');
-        if (i >= 1 && i <= 3) td.className = 'num';
         td.textContent = text;
+        if (i && text.startsWith('✓')) td.style.color = 'var(--ok)';
+        if (i && text.startsWith('✕')) td.style.color = 'var(--bad)';
         tr.append(td);
       });
+      const td = document.createElement('td');
+      const diffs = [...r.upDiffs.map((d) => ({ ...d, way: 'old → new' })), ...r.downDiffs.map((d) => ({ ...d, way: 'new → old' }))];
+      if (!diffs.length) td.textContent = r.lost.length ? `Old customers stop getting ${r.lost.join(', ')}` : 'None';
+      for (const d of diffs.slice(0, 4)) {
+        const line = document.createElement('code');
+        line.style.display = 'block';
+        line.textContent = `${d.way} · ${d.path}: expected ${JSON.stringify(d.expected)}, got ${JSON.stringify(d.got)}`;
+        td.append(line);
+      }
+      if (diffs.length > 4) td.append(`and ${diffs.length - 4} more`);
+      tr.append(td);
       return tr;
-    });
-    $('customers').replaceChildren(...rows);
-  }
-
-  function renderHeaders(headers) {
-    const list = document.createElement('dl');
-    for (const name of ['Parcel-Version', 'Deprecation', 'Sunset', 'Link']) {
-      const dt = document.createElement('dt');
-      dt.textContent = name;
-      const dd = document.createElement('dd');
-      dd.textContent = headers?.get(name) ?? '(none)';
-      list.append(dt, dd);
+    }));
+    if (failing.length) {
+      verdict.className = 'callout bad';
+      verdict.textContent = `Blocked. ${failing.length} of ${results.length} examples don't round-trip. Fix the rules in step 2${state.ai ? ', or ask the AI to fix them' : ''}.`;
+      $('step-3').dataset.state = 'broken';
+    } else {
+      verdict.className = lost.length ? 'callout warn' : 'callout ok';
+      verdict.textContent = `Proven on ${results.length} of ${results.length} example${results.length === 1 ? '' : 's'} in both directions.${lost.length ? ` Heads up: old customers will stop receiving ${lost.join(', ')}.` : ' Safe to try and ship.'}`;
+      $('step-3').dataset.state = 'done';
     }
-    $('headers').replaceChildren(list);
+    $('ai-fix').hidden = !(state.ai && failing.length);
   }
 
-  async function turnOn() {
-    if (!state.finalEvents) await runReplay('final');
-    const { client, ok } = await runAcme(gateway(finalAdapter), 'console-3');
-    renderHeaders(client.lastHeaders);
-    if (ok) {
-      setStep(2, 'done');
-      setStep(5, 'done');
+  function renderTry() {
+    let adapt;
+    try { adapt = adapter(); } catch (error) {
+      $('try-down-out').textContent = $('try-up-out').textContent = error.message;
+      return;
+    }
+    const run = (inputId, outId, statusId, fn) => {
+      const text = $(inputId).value.trim();
+      if (!text) { $(outId).textContent = 'Paste JSON above.'; $(statusId).className = 'chip'; return; }
+      try {
+        $(outId).textContent = pretty(fn(JSON.parse(text)));
+        $(statusId).className = 'chip ok';
+      } catch (error) {
+        $(outId).textContent = `Not valid JSON yet: ${error.message}`;
+        $(statusId).className = 'chip bad';
+      }
+    };
+    run('try-down', 'try-down-out', 'down-status', (body) => adapt.downgradeResponse({ status: body?.error ? 400 : 200, body: structuredClone(body) }).body);
+    run('try-up', 'try-up-out', 'up-status', (body) => adapt.upgradeRequest({ method: 'POST', path: '/', body: structuredClone(body) }).body);
+
+    const method = $('try-method').value;
+    const path = $('try-path').value.trim() || '/';
+    const gone = adapt.untranslatable.find((u) => u.method === method && u.path.test(path));
+    const out = $('try-endpoint-out');
+    out.replaceChildren();
+    const chip = document.createElement('span');
+    chip.className = `chip ${gone ? 'bad' : 'ok'}`;
+    chip.textContent = gone ? '410 Gone' : 'Passes through the adapter';
+    out.append(chip, ' ', gone ? `${gone.reason}${gone.guide ? ` ${gone.guide}` : ''}` : `Old customers calling ${method} ${path} get translated answers.`);
+    $('step-4').dataset.state = state.rules.length ? 'done' : 'ready';
+
+    const headers = document.createElement('dl');
+    const newVersion = $('new-version').value.trim();
+    const released = Date.parse(`${newVersion}T00:00:00Z`);
+    const sunset = $('sunset').value;
+    const entries = [
+      ['Api-Version', $('old-version').value.trim()],
+      ['Deprecation', Number.isNaN(released) ? '?1' : `@${Math.floor(released / 1000)}`],
+      ['Sunset', sunset ? new Date(`${sunset}T00:00:00Z`).toUTCString() : '(set a shut-off date)'],
+      ['Link', $('guide').value.trim() ? `<${$('guide').value.trim()}>; rel="deprecation"; type="text/html"` : '(add a migration guide link)'],
+    ];
+    for (const [name, value] of entries) {
+      const dt = document.createElement('dt'); dt.textContent = name;
+      const dd = document.createElement('dd'); dd.textContent = value;
+      headers.append(dt, dd);
+    }
+    $('headers').replaceChildren(headers);
+  }
+
+  function renderShip() {
+    const spec = { from: $('old-version').value.trim(), to: $('new-version').value.trim(), rules: state.rules };
+    $('ship-rules').textContent = pretty(spec);
+    $('ship-code').textContent = `import { withMender } from './mender.js';
+import { compileRules } from './rules.js';
+import rules from './mender-rules.json' with { type: 'json' };
+
+// Put Mender in front of your newest handler.
+// Callers pinned to ${spec.from || 'the old version'} keep working.
+export default withMender(yourApiHandler, {
+  latest: '${spec.to}',
+  adapters: [compileRules(rules)],
+  versionHeader: 'Api-Version',
+  sunset: '${$('sunset').value}',
+  guide: '${$('guide').value.trim()}',
+  // Every translated call, per customer: who still has to move.
+  onCall: (call) => console.log(call.customer, call.version, call.outcome),
+});`;
+    $('step-5').dataset.state = $('step-3').dataset.state === 'done' ? 'done' : 'ready';
+  }
+
+  async function copy(id, button) {
+    const text = $(id).textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = 'Copied';
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents($(id));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      button.textContent = 'Selected, press Copy';
+    }
+    setTimeout(() => { button.textContent = 'Copy'; }, 1800);
+  }
+
+  // ---------- AI writer (only where the viewer can use Claude) ----------
+
+  const RULE_GUIDE = `Rule types (use only these; "old" and "new" are dotted field paths such as "total.amount_cents"):
+- {"op":"rename","old":P,"new":P}  same value under a new name or place
+- {"op":"scale","old":P,"new":P,"factor":100}  new = old × factor (use 0.01 for the reverse)
+- {"op":"case","old":P,"new":P,"oldCase":"lower","newCase":"upper"}
+- {"op":"values","old":P,"new":P,"map":{"oldValue":"newValue"}}  renamed values
+- {"op":"time","old":P,"new":P,"oldFormat":F,"newFormat":F}  F is one of ${TIME_FORMATS.join(', ')}; iso8601_ms has milliseconds
+- {"op":"add","new":P,"value":DEFAULT}  new field that old callers never send
+- {"op":"remove","old":P}  field the new version dropped
+- {"op":"endpoint_removed","method":"GET","path":"/orders/{id}/label","message":TEXT,"guide":URL}
+Rules run in order from old to new, and in reverse from new to old. Unchanged fields need no rule.`;
+
+  function aiPrompt(pairs, failing) {
+    const clip = (value) => JSON.stringify(value).slice(0, 6000);
+    let prompt = `You write adapter rules for Mender, which keeps API customers on an old version working after a breaking change.
+Reply with only a JSON object: {"rules": [ ... ]}.
+
+${RULE_GUIDE}
+
+Old version ${$('old-version').value}. Records as it returns them:
+${clip(pairs.map((p) => p.old))}
+
+New version ${$('new-version').value}. The same records, in the same order:
+${clip(pairs.map((p) => p.new))}
+
+Removed endpoints: ${endpointRules().map((r) => `${r.method} ${r.path}`).join('; ') || 'none'}
+Migration guide: ${$('guide').value.trim() || 'none'}
+Provider notes: ${$('notes').value.trim() || 'none'}`;
+    if (failing) {
+      prompt += `
+
+Current rules:
+${JSON.stringify(state.rules)}
+
+These rules failed the round-trip proof:
+${JSON.stringify(failing.map((r) => ({ example: r.index + 1, oldToNew: r.upDiffs, newToOld: r.downDiffs }))).slice(0, 6000)}
+Return the complete corrected list.`;
+    }
+    return prompt;
+  }
+
+  const AI_ERRORS = {
+    rate_limited: 'Too many AI requests right now. Try again in a minute, or use "Find rules from examples".',
+    invalid_json: "Claude's answer couldn't be read as rules. Try again.",
+    refused: 'Claude declined this request. Try different examples.',
+    session_expired: 'Sign in to Claude again to use the AI writer.',
+    prompt_too_large: 'The examples are too long for one request. Use fewer or shorter records.',
+  };
+
+  async function aiWrite(fix) {
+    if (!state.ai || state.busy) return;
+    let pairs;
+    try { pairs = readPairs(); } catch (error) { showInputError(error.message); return; }
+    showInputError(null);
+    state.busy = true;
+    for (const id of ['ai-write', 'ai-fix', 'find']) $(id).disabled = true;
+    $('ai-status').textContent = 'Claude is writing the rules. This usually takes 10 to 40 seconds.';
+    try {
+      const failing = fix ? lastProof.filter((r) => r.upDiffs.length || r.downDiffs.length) : null;
+      const reply = await state.ai.json(aiPrompt(pairs, failing), { cache: false });
+      const rules = Array.isArray(reply) ? reply : reply?.rules;
+      if (!Array.isArray(rules)) throw { code: 'invalid_json' };
+      const kept = rules.filter((r) => !checkRule(r));
+      const dropped = rules.length - kept.length;
+      $('ai-status').textContent = dropped ? `Claude wrote ${rules.length} rules; ${dropped} didn't follow the format and were left out.` : '';
+      setRules(kept, fix ? 'Fixed by AI' : 'Written by AI');
+    } catch (error) {
+      const hide = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(error?.code);
+      if (hide) {
+        state.ai = null;
+        $('ai-write').hidden = true;
+        $('ai-fix').hidden = true;
+        $('ai-status').textContent = 'The AI writer isn’t available here. "Find rules from examples" works without it.';
+      } else {
+        $('ai-status').textContent = AI_ERRORS[error?.code] ?? 'Couldn’t reach Claude. Try again.';
+      }
+    } finally {
+      state.busy = false;
+      for (const id of ['ai-write', 'ai-fix', 'find']) $(id).disabled = false;
     }
   }
 
-  async function playAll() {
-    if (state.busy) return;
-    const show = (n) => $(`step-${n}`).scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
-    show(2); await wait(500); await ship(); await wait(1400);
-    show(3); await showAdapter('draft'); await wait(1600);
-    show(4); await runReplay('draft'); await wait(2200);
-    await runReplay('final'); await wait(1600);
-    show(5); await wait(400); await turnOn();
+  // ---------- wiring ----------
+
+  $('load-example').addEventListener('click', loadExample);
+  $('clear').addEventListener('click', () => {
+    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up']) $(id).value = '';
+    setRules([], '');
+    $('rules-source').textContent = 'No rules yet';
+    showInputError(null);
+  });
+  $('find').addEventListener('click', findRules);
+  $('apply-json').addEventListener('click', applyJson);
+  $('ai-write').addEventListener('click', () => aiWrite(false));
+  $('ai-fix').addEventListener('click', () => aiWrite(true));
+  $('copy-rules').addEventListener('click', (e) => copy('ship-rules', e.currentTarget));
+  $('copy-code').addEventListener('click', (e) => copy('ship-code', e.currentTarget));
+
+  let timer;
+  const later = (fn) => () => { clearTimeout(timer); timer = setTimeout(fn, 250); };
+  for (const id of ['before', 'after']) $(id).addEventListener('input', later(() => {
+    try { readPairs(); showInputError(null); } catch (error) { showInputError(error.message); }
+    refresh();
+  }));
+  for (const id of ['removed', 'guide']) $(id).addEventListener('input', later(() => {
+    setRules([...state.rules.filter((r) => r.op !== 'endpoint_removed'), ...endpointRules()], state.source || 'Edited by hand');
+  }));
+  for (const id of ['try-down', 'try-up', 'try-path', 'old-version', 'new-version', 'sunset']) $(id).addEventListener('input', later(refresh));
+  $('try-method').addEventListener('change', refresh);
+
+  await loadExample();
+
+  // The AI writer lights up only where this viewer can use Claude.
+  const sample = await window.claude?.use?.('sample').catch(() => null);
+  if (sample) {
+    state.ai = sample;
+    $('ai-write').hidden = false;
+    $('ai-write').className = 'btn btn-primary';
+    $('find').className = 'btn btn-ghost';
   }
-
-  $('acme-code').innerHTML = highlight(ACME_CODE);
-  $('ship').addEventListener('click', ship);
-  $('tab-final').addEventListener('click', () => showAdapter('final'));
-  $('tab-draft').addEventListener('click', () => showAdapter('draft'));
-  $('replay-draft').addEventListener('click', () => runReplay('draft'));
-  $('replay-final').addEventListener('click', () => runReplay('final'));
-  $('turn-on').addEventListener('click', turnOn);
-  $('play').addEventListener('click', playAll);
-  $('reset').addEventListener('click', () => location.reload());
-
-  showAdapter('final');
-  const first = await runAcme(makeParcel(V1), 'console-1');
-  if (first.ok) setStep(1, 'done');
-  state.recorded = await record(makeParcel(V1), sampleCalls());
-  $('recorded-count').textContent = state.recorded.length;
 </script>
 </body>
 </html>

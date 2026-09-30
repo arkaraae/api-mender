@@ -7,6 +7,7 @@ import { record, replay, toRequest } from '../src/replay.js';
 import { sampleCalls, CUSTOMERS } from '../src/traffic.js';
 import adapter from '../src/adapters/2026-09-01.js';
 import firstDraft from '../src/adapters/2026-09-01.first-draft.js';
+import { inferRules, verifyRules, compileRules } from '../src/rules.js';
 
 const acme = { customer: 'acme', key: CUSTOMERS[0].key, version: V1 };
 
@@ -113,6 +114,53 @@ export const tests = [
     assert([...paths].some((p) => p.endsWith('created')), 'created bug not caught');
   }],
 ];
+
+const LABELS_GONE = { op: 'endpoint_removed', method: 'GET', path: '/orders/{id}/label', message: 'Shipping labels moved to the Labels API in 2026-09-01. This call needs a code change.', guide: 'https://docs.parcel.example/migrate/2026-09-01#labels' };
+
+async function examplePair(id = 'ord_1001') {
+  const spec = { ...acme, method: 'GET', path: `/orders/${id}` };
+  return { old: (await call(makeParcel(V1), spec)).body, new: (await call(makeParcel(V2), { ...spec, version: V2 })).body };
+}
+
+tests.push(
+  ['Rule finder reads every change from one example pair', async () => {
+    const rules = inferRules([await examplePair()]);
+    const has = (op, from, to) => rules.some((r) => r.op === op && r.old === from && (to === undefined || r.new === to));
+    assert(has('rename', 'customer_name', 'full_name'), 'missed customer_name → full_name');
+    assert(has('scale', 'amount', 'total.amount_cents') && rules.find((r) => r.op === 'scale').factor === 100, 'missed amount × 100');
+    assert(has('case', 'currency', 'total.currency'), 'missed currency case');
+    assert(has('time', 'created', 'created_at'), 'missed created → created_at');
+    assert(has('values', 'status', 'status') && rules.find((r) => r.op === 'values').map.paid === 'succeeded', 'missed paid → succeeded');
+    assert(!rules.some((r) => r.op === 'add' || r.op === 'remove'), `unexpected add/remove: ${JSON.stringify(rules)}`);
+  }],
+
+  ['Found rules prove out on their examples in both directions', async () => {
+    const pairs = [await examplePair('ord_1001'), await examplePair('ord_1004')];
+    const results = verifyRules(inferRules(pairs), pairs);
+    for (const r of results) assert(r.upDiffs.length === 0 && r.downDiffs.length === 0, `pair ${r.index}: ${JSON.stringify([...r.upDiffs, ...r.downDiffs])}`);
+  }],
+
+  ['Rules found from one example pass replay on all 200 calls', async () => {
+    const rules = [...inferRules([await examplePair()]), LABELS_GONE];
+    const recorded = await record(makeParcel(V1), sampleCalls());
+    await sleep(1100);
+    const result = await replay({ recorded, baseline: makeParcel(V1), candidate: mendered([compileRules({ from: V1, to: V2, rules })]) });
+    assert(result.differed.length === 0, `${result.differed.length} calls differ: ${JSON.stringify(result.differed[0]?.diffs)}`);
+    assert(result.matched === 196 && result.untranslatable.length === 4, `matched ${result.matched}, untranslatable ${result.untranslatable.length}`);
+  }],
+
+  ['Compiled rules name the old field in validation errors', async () => {
+    const rules = [...inferRules([await examplePair()]), LABELS_GONE];
+    const res = await call(mendered([compileRules({ from: V1, to: V2, rules })]), { ...acme, method: 'POST', path: '/orders', body: { amount: 10, currency: 'usd' } });
+    assert(res.status === 400 && res.body.error.param === 'customer_name', `got ${res.status} ${JSON.stringify(res.body)}`);
+  }],
+
+  ['Unknown rule types are refused', async () => {
+    let message = '';
+    try { compileRules({ from: V1, to: V2, rules: [{ op: 'teleport', old: 'a', new: 'b' }] }); } catch (error) { message = error.message; }
+    assert(message.includes('Unknown rule type'), 'bad rule was accepted');
+  }],
+);
 
 function sorted(value) {
   if (Array.isArray(value)) return value.map(sorted);
