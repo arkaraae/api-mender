@@ -2,6 +2,10 @@
 
 API Mender connects code to upstream API evidence and prepares reviewable fixes. The landing page is at `/`, the **live Supabase Auth workspace and public GitHub repository inventory** are at `/live`, and the **simulated Stripe vertical slice** is at `/demo`. The demo never represents its fixture as a live Stripe change or its local PR artifact as a GitHub pull request.
 
+## Public demo website
+
+The separate [API Mender website](https://code-sync-bot.lovable.app/) gives visitors a no-login, five-step walkthrough and an early-access contact form. Its source is under [`website/`](website/README.md). The walkthrough uses a simulated case based on the team's fixture; it does not invoke this repository's live scanner or replace the Next.js application.
+
 ## Live Supabase and GitHub path
 
 The Supabase project is `eeejqyvtdvahofwoiicv` (`API Mender`). Its applied migration is [`supabase/migrations/20260925070522_api_mender_live_workspace.sql`](supabase/migrations/20260925070522_api_mender_live_workspace.sql). All four exposed tables have row level security. Anonymous access has no table grants; authenticated users can access only workspaces they own and their repositories. The Supabase security advisor reported no findings after migration.
