@@ -1,0 +1,15 @@
+{
+  "id": "ord_1002",
+  "object": "order",
+  "customer_name": "Omar Haddad",
+  "amount": 19.87,
+  "currency": "usd",
+  "status": "paid",
+  "created": 1767540137,
+  "items": [
+    {
+      "sku": "SKU-201",
+      "qty": 2
+    }
+  ]
+}

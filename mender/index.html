@@ -149,21 +149,44 @@
   <header class="masthead">
     <div class="brand"><span class="wordmark">mender</span><span class="tag">Studio</span><a class="fine" href="walkthrough.html" id="walkthrough-link">New here? Watch the 5-step walkthrough →</a></div>
     <h1>Make your breaking change safe to ship.</h1>
-    <p class="lede">Paste the same record from your API before and after your change. Mender works out the adapter that keeps customers on the old version working, proves it on your examples, and gives you the rules to deploy.</p>
-    <p class="fine">It opens with Parcel, a sample API, already filled in. Replace the examples with your own records to try it on your API. Nothing you paste leaves this page unless you use "Write with AI".</p>
+    <p class="lede">Point Mender at the old and new version of your API. It calls both, finds what changed, writes the adapter that keeps customers on the old version working, proves it, and gives you the rules to deploy.</p>
+    <p class="fine">It opens connected to the Parcel sandbox, a small test API. Swap in your own URLs to try it on your API, or paste records by hand. Your data only goes to the URLs you enter, and to Claude if you use "Write with AI".</p>
   </header>
 
   <ol class="steps">
     <li class="step" id="step-1" data-state="done">
       <div class="knot" aria-hidden="true">1</div>
       <div class="step-body">
-        <h2>Describe your change</h2>
-        <p class="lead">Paste one record as the old version returns it, and the same record as the new version returns it. Add more records as a list, in the same order on both sides, to show more cases.</p>
+        <h2>Call your API, old and new</h2>
+        <p class="lead">Mender requests the same records from both versions. Use <code>{path}</code> in each URL where the record path goes, and add any headers your API needs, such as a version header or a test key.</p>
         <div class="trio">
           <label class="field"><span class="label">Old version</span><input type="text" id="old-version" value="2026-03-01"></label>
           <label class="field"><span class="label">New version</span><input type="text" id="new-version" value="2026-09-01"></label>
           <label class="field"><span class="label">Old version shuts off</span><input type="date" id="sunset" value="2027-03-01"></label>
         </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Call the API</span><span class="chip" id="call-status">Not called yet</span></div>
+          <div class="details-body">
+            <div class="pair">
+              <label class="field"><span class="label">Old version URL</span><input type="text" id="old-url" spellcheck="false"></label>
+              <label class="field"><span class="label">New version URL</span><input type="text" id="new-url" spellcheck="false"></label>
+            </div>
+            <div class="pair">
+              <label class="field"><span class="label">Old version headers, one per line</span><textarea class="short" id="old-headers" spellcheck="false" placeholder="Authorization: Bearer sk_test_..."></textarea></label>
+              <label class="field"><span class="label">New version headers, one per line</span><textarea class="short" id="new-headers" spellcheck="false" placeholder="Api-Version: 2026-09-01"></textarea></label>
+            </div>
+            <label class="field"><span class="label">Record paths to request, one per line (GET)</span><textarea class="short" id="paths" spellcheck="false"></textarea></label>
+            <div class="row"><button class="btn btn-primary" id="call-api" type="button">Call both versions</button></div>
+            <div class="table-wrap" id="call-log-wrap" hidden>
+              <table>
+                <thead><tr><th>Path</th><th>Old version</th><th>New version</th></tr></thead>
+                <tbody id="call-log"></tbody>
+              </table>
+            </div>
+            <p class="error-text" id="call-error" role="alert" hidden></p>
+          </div>
+        </div>
+        <p class="fine">The answers land below as "before" and "after" records. You can also paste records there by hand.</p>
         <div class="pair">
           <label class="field"><span class="label">Before · old version (JSON)</span><textarea class="tall" id="before" spellcheck="false"></textarea></label>
           <label class="field"><span class="label">After · new version (JSON)</span><textarea class="tall" id="after" spellcheck="false"></textarea></label>
@@ -304,22 +327,127 @@
     return response.json();
   }
 
+  // The Parcel sandbox is a read-only copy of both versions served as plain files next to this page.
+  function sandboxBase() {
+    try { return new URL('sandbox/', document.baseURI).href; } catch { return 'sandbox/'; }
+  }
+
   async function loadExample() {
-    const ids = ['ord_1001', 'ord_1004'];
-    const before = await Promise.all(ids.map((id) => parcelRecord(V1, id)));
-    const after = await Promise.all(ids.map((id) => parcelRecord(V2, id)));
     $('old-version').value = V1;
     $('new-version').value = V2;
     $('sunset').value = '2027-03-01';
-    $('before').value = pretty(before);
-    $('after').value = pretty(after);
+    $('old-url').value = `${sandboxBase()}${V1}{path}`;
+    $('new-url').value = `${sandboxBase()}${V2}{path}`;
+    $('old-headers').value = '';
+    $('new-headers').value = '';
+    $('paths').value = ['/orders/ord_1001', '/orders/ord_1002', '/orders/ord_1004', '/orders/ord_1005'].join('\n');
     $('removed').value = 'GET /orders/{id}/label';
     $('guide').value = 'https://docs.parcel.example/migrate/2026-09-01';
     $('notes').value = 'Shipping labels moved to the new Labels API.';
-    $('try-down').value = pretty({ object: 'list', data: [after[0]], has_more: false });
     $('try-up').value = pretty({ customer_name: 'Jonas Berg', amount: 19.99, currency: 'usd', items: [{ sku: 'TENT-2P', qty: 1 }] });
     $('try-path').value = '/orders/ord_1001/label';
+    $('try-down').value = '';
+    const called = await callApi();
+    if (!called) {
+      // The sandbox couldn't be reached, so fall back to Parcel running inside this page.
+      const ids = ['ord_1001', 'ord_1004'];
+      $('before').value = pretty(await Promise.all(ids.map((id) => parcelRecord(V1, id))));
+      $('after').value = pretty(await Promise.all(ids.map((id) => parcelRecord(V2, id))));
+      findRules();
+    }
+    const after = JSON.parse($('after').value);
+    $('try-down').value = pretty({ object: 'list', data: [Array.isArray(after) ? after[0] : after], has_more: false });
+    refresh();
+  }
+
+  // ---------- calling the API ----------
+
+  function readHeaders(id) {
+    const headers = {};
+    for (const line of $(id).value.split('\n')) {
+      const at = line.indexOf(':');
+      if (at > 0) headers[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+    }
+    return headers;
+  }
+
+  async function request(template, path, headers) {
+    const url = template.includes('{path}') ? template.replace('{path}', path) : template.replace(/\/$/, '') + path;
+    const started = performance.now();
+    try {
+      const response = await fetch(url, { headers, cache: 'no-store' });
+      const text = await response.text();
+      const ms = Math.round(performance.now() - started);
+      let body;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      return { url, ok: response.ok, status: response.status, ms, bytes: text.length, body };
+    } catch {
+      return { url, blocked: true };
+    }
+  }
+
+  const describeCall = (r) => (r.blocked ? 'Blocked by the browser' : `${r.status} · ${r.ms} ms · ${r.bytes} B${r.body === undefined ? ' · not JSON' : ''}`);
+
+  async function callApi() {
+    const paths = $('paths').value.split('\n').map((p) => p.trim()).filter(Boolean);
+    const oldUrl = $('old-url').value.trim();
+    const newUrl = $('new-url').value.trim();
+    const error = $('call-error');
+    error.hidden = true;
+    if (!oldUrl || !newUrl || !paths.length) {
+      error.textContent = 'Enter both URLs and at least one record path.';
+      error.hidden = false;
+      return false;
+    }
+    $('call-api').disabled = true;
+    $('call-status').textContent = 'Calling…';
+    $('call-status').className = 'chip thread';
+    const oldHeaders = readHeaders('old-headers');
+    const newHeaders = readHeaders('new-headers');
+    const results = [];
+    for (const path of paths) {
+      const [before, after] = await Promise.all([request(oldUrl, path, oldHeaders), request(newUrl, path, newHeaders)]);
+      results.push({ path, before, after });
+    }
+    $('call-api').disabled = false;
+
+    $('call-log').replaceChildren(...results.map(({ path, before, after }) => {
+      const tr = document.createElement('tr');
+      for (const [text, good] of [[path, null], [describeCall(before), before.ok && before.body !== undefined], [describeCall(after), after.ok && after.body !== undefined]]) {
+        const td = document.createElement('td');
+        const code = document.createElement('code');
+        code.textContent = text;
+        if (good === true) code.style.color = 'var(--ok)';
+        if (good === false) code.style.color = 'var(--bad)';
+        td.append(code);
+        tr.append(td);
+      }
+      return tr;
+    }));
+    $('call-log-wrap').hidden = false;
+
+    const usable = results.filter(({ before, after }) => before.ok && after.ok
+      && before.body && after.body && typeof before.body === 'object' && typeof after.body === 'object'
+      && !Array.isArray(before.body) && !Array.isArray(after.body));
+    const blocked = results.some(({ before, after }) => before.blocked || after.blocked);
+    if (blocked) {
+      error.textContent = 'The browser couldn’t reach one of the URLs. Your API has to allow calls from this page (CORS), and a page hosted on claude.ai can only call the Parcel sandbox. To call your own API, open Mender from GitHub or run it locally.';
+      error.hidden = false;
+    } else if (usable.length < results.length) {
+      error.textContent = 'Some calls didn’t return a JSON record in both versions. Only the ones that did are used below.';
+      error.hidden = false;
+    }
+    if (!usable.length) {
+      $('call-status').textContent = 'No usable answers';
+      $('call-status').className = 'chip bad';
+      return false;
+    }
+    $('call-status').textContent = `${usable.length * 2} calls answered`;
+    $('call-status').className = 'chip ok';
+    $('before').value = pretty(usable.map((r) => r.before.body));
+    $('after').value = pretty(usable.map((r) => r.after.body));
     findRules();
+    return true;
   }
 
   // ---------- reading the inputs ----------
@@ -656,6 +784,7 @@ Return the complete corrected list.`;
   // ---------- wiring ----------
 
   $('load-example').addEventListener('click', loadExample);
+  $('call-api').addEventListener('click', callApi);
   $('clear').addEventListener('click', () => {
     for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up']) $(id).value = '';
     setRules([], '');

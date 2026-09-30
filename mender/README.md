@@ -18,7 +18,7 @@ python3 -m http.server 4173 --directory mender
 
 ## Mender Studio
 
-1. **Describe your change.** Paste the same record as the old and the new version return it, plus any removed endpoints.
+1. **Call your API, old and new.** Enter a URL for each version (with `{path}` where the record path goes), any headers such as a version header or test key, and the record paths. Mender makes real GET calls to both versions and uses the answers as before/after records. It opens connected to the Parcel sandbox (`sandbox/`), a read-only test API served as plain files. You can also paste records by hand.
 2. **Mender writes the adapter** as a short list of readable rules (`src/rules.js`): rename, scale, case, values, time, add, remove, endpoint_removed. "Find rules from examples" matches fields by value with no AI. "Write with AI" asks Claude, where the viewer can use it.
 3. **Proof on your examples.** Every example runs through the rules both ways and must round-trip exactly.
 4. **Try it.** Paste any answer from the new API and see what old customers receive, or any old request and see what the new API receives. Check whether an endpoint passes through or gets 410 Gone.
@@ -43,6 +43,7 @@ Rules found from a single Parcel example pass replay on all 200 recorded calls (
 | `src/replay.js` | Replay with noise detection, the idea behind Twitter's Diffy applied to version adapters. |
 | `src/adapters/2026-09-01.js` | The final adapter for Parcel 2026-03-01 → 2026-09-01. |
 | `src/adapters/2026-09-01.first-draft.js` | A first draft with two bugs, kept to show replay catching them. |
+| `sandbox/` | Parcel sandbox API: `GET sandbox/<version>/orders/<id>` over real HTTP. |
 | `src/parcel.js` | Parcel's two versions, simulated in memory. |
 | `src/traffic.js` | 200 sample calls from three customers, generated from a fixed seed. |
 | `src/acme-app.js` | Acme's unchanged checkout code. |
