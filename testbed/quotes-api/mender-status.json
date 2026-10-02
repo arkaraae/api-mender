@@ -1,0 +1,13 @@
+{
+  "contractCommit": "dba0421e7862c4cbfe3b85e78233e522b333f6f0",
+  "contractVersion": 2,
+  "findingId": "f_72569b7c3cf78c1b",
+  "findingStatus": "Action required",
+  "validation": "passed",
+  "oldConsumer": "failed as expected",
+  "patchedConsumer": "passed",
+  "sourceHash": "1f2c7ad613a7246085b7caa9a138e33471d85c042516ab41a5e94f16f9db4984",
+  "runUrl": "https://github.com/arkaraae/api-mender/actions/runs/36953494106",
+  "fixBranchUrl": "https://github.com/arkaraae/api-mender/tree/codex/quotes-fix-dba0421e7862",
+  "pullRequestUrl": "https://github.com/arkaraae/api-mender/pull/2"
+}
