@@ -48,7 +48,7 @@ Add a word to run a part of them (`node mender/tests/run.mjs quotes`). Set `MEND
 | `/api/mender/explain` | `POST { "oldSpec", "newSpec" }` or `{ "pairs": [{ "old", "new" }] }` and get rules, notes and a proof back. |
 | `/studio` | Mender Studio, copied from this folder by `node mender/tools/publish-to-site.mjs`. A test fails if the copy is out of date. |
 
-The code is `lib/mender-gateway.js` plus three small route files. It reads the contracts the API already publishes (`/api/managed/openapi.json` and `?version=N`), so a new version is picked up within a minute and nothing has to be configured per change. Answers carry a `Mender-Status` header: `translated`, `current-version`, or `no-proven-adapter` when the rules did not pass the proof and Mender changed nothing.
+The code is `lib/mender-gateway.js` plus three small route files. It reads the contracts the API already publishes (`/api/managed/openapi.json` and `?version=N`), so a new version is picked up within a minute and nothing has to be configured per change. Answers carry a `Mender-Status` header: `translated`, `current-version`, or `no-proven-adapter` when the rules did not pass the proof and Mender changed nothing. Calls Mender has to refuse say why: `unknown-version`, `untranslatable`, `contract-unavailable`, `api-unreachable`.
 
 The gateway reaches the API over HTTP at the site's own address. Two settings change that:
 

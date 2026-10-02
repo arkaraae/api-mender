@@ -64,6 +64,7 @@ test('the API\'s own errors and unknown versions are reported honestly', async (
   assert.deepEqual(await unknownProduct.json(), { error: 'Product not found' });
   const future = await call('v9', '/api/managed/quotes', { customerId: 'customer_1', sku: 'WIDGET-1' });
   assert.equal(future.status, 400);
+  assert.equal(future.headers.get('mender-status'), 'unknown-version');
   assert.equal((await future.json()).error.type, 'unknown_version');
   const badVersion = await call('latest', '/api/managed/quotes', {});
   assert.equal(badVersion.status, 400);
@@ -104,6 +105,45 @@ test('a site can hand over its own handlers, and then nothing is sent over HTTP'
     process.env.MENDER_UPSTREAM_URL = upstream;
     forget();
   }
+});
+
+test('rules that fail the proof are never used: the call goes through untouched', async () => {
+  // Version 2 also demands a region. Nothing an old request carries can fill it, so no rule can be proven.
+  const contract = (version: number, required: string[]) => ({
+    openapi: '3.0.3', info: { title: 'Quotes', version: String(version) },
+    paths: { '/api/managed/quotes': { post: { requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required, properties: Object.fromEntries(required.map((field) => [field, { type: 'string' }])) } } } }, responses: { 200: { description: 'ok' } } } } },
+  });
+  let received: unknown = null;
+  forget();
+  serveInProcess({
+    '/api/managed/openapi.json': (request: Request) => Response.json(new URL(request.url).searchParams.get('version') === '1' ? contract(1, ['customerId', 'sku']) : contract(2, ['customerId', 'sku', 'region'])),
+    '/api/managed/quotes': async (request: Request) => { received = await request.json(); return Response.json({ error: 'region is required' }, { status: 422, headers: { 'content-encoding': 'identity' } }); },
+  });
+  try {
+    const api = await describe('managed', upstream);
+    assert.equal(api.proven, false);
+    assert.match(api.steps[0].proof.failures.join(' '), /region is required and missing/);
+    const response = await call('v1', '/api/managed/quotes', { customerId: 'customer_1', sku: 'WIDGET-1' });
+    assert.equal(response.status, 422);
+    assert.equal(response.headers.get('mender-status'), 'no-proven-adapter');
+    assert.equal(response.headers.get('content-encoding'), null);
+    assert.deepEqual(await response.json(), { error: 'region is required' });
+    assert.deepEqual(received, { customerId: 'customer_1', sku: 'WIDGET-1' });
+  } finally {
+    serveInProcess({ '/api/managed/openapi.json': null, '/api/managed/quotes': null });
+    forget();
+  }
+});
+
+test('when the API cannot be reached the caller gets a clear 502, not a crash', async () => {
+  await describe('managed', upstream); // the contracts are read and remembered
+  serveInProcess({ '/api/managed/quotes': () => { throw new Error('connection refused'); } });
+  try {
+    const response = await call('v1', '/api/managed/quotes', { customerId: 'customer_1', sku: 'WIDGET-1' });
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get('mender-status'), 'api-unreachable');
+    assert.equal((await response.json()).error.type, 'api_unreachable');
+  } finally { serveInProcess({ '/api/managed/quotes': null }); }
 });
 
 test('when the contract cannot be read the gateway says so instead of guessing', async () => {
