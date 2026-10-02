@@ -5,6 +5,8 @@ import { evidence, kinds, shapes } from './infer.edge.test.js';
 import { versions, requests, answers, failures, forms } from './runtime.edge.test.js';
 import { reading, endpoints, judgement, formats } from './openapi.edge.test.js';
 import { quotes, live, liveEnabled } from './quotes.test.js';
+import { managed } from './managed.test.js';
+import { codefix } from './codefix.test.js';
 
 export const suites = [
   ['Parcel walkthrough: adapter, replay, rules', parcel],
@@ -26,5 +28,7 @@ export const suites = [
   ['Specs: judgement calls', judgement],
   ['Specs: formats and robustness', formats],
   ['Quotes API: the unchanged consumer keeps working', quotes],
+  ['Managed Quote API: versions published one after another', managed],
+  ['Consumer fix: rewriting the request from the rules', codefix],
   ...(liveEnabled ? [['Quotes API, deployed: real calls', live]] : []),
 ];

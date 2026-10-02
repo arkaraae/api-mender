@@ -221,14 +221,62 @@ export const judgement = [
     const [real] = verifyRules(wrongFactor, [{ old: { amount: 12.5 }, new: { amount_cents: 1250 } }]);
     assert(real.upDiffs.length === 1 && real.downDiffs.length === 1, 'real records did not catch the wrong factor');
   }],
+
+  ['A field with several shapes is flagged only when a shape Mender did not read changed, however deep', () => {
+    // "customer" is an id or the whole customer. Mender reads the id; the change is two levels inside the other shape.
+    const paths = { '/charges/{id}': { get: { responses: ok(obj({ id: str, customer: { anyOf: [str, ref('Customer')] } })) } } };
+    const schemas = (city) => ({ Customer: obj({ id: str, address: ref('Address') }), Address: obj({ [city]: str }) });
+    same(rulesFromOpenApi(doc(paths, schemas('city')), doc(paths, schemas('city'))).notes, []);
+    const found = rulesFromOpenApi(doc(paths, schemas('city')), doc(paths, schemas('town')));
+    same([found.rules, found.notes.map((n) => [n.code, n.path])], [[], [['one_of', 'customer']]]);
+    same(found.notes[0].message, 'GET /charges/{id} response: Address changed, and it belongs to a shape Mender does not read: some fields here can take several shapes (oneOf/anyOf) and Mender translates only the first. Check the other shapes with real records. Fields: customer.');
+    // A reworded description is not a change of shape.
+    const reworded = { Customer: { ...obj({ id: str, address: ref('Address') }), description: 'A buyer.' }, Address: obj({ city: { type: 'string', description: 'Town or city.' } }) };
+    same(rulesFromOpenApi(doc(paths, schemas('city')), doc(paths, reworded)).notes, []);
+  }],
+
+  ['The same finding on many endpoints is reported once, with the endpoints named', () => {
+    const things = () => Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`/things${i}`, { get: { responses: ok(ref('Thing')) } }]));
+    const found = rulesFromOpenApi(doc(things(), { Thing: obj({ id: str, legacy_code: str }) }), doc(things(), { Thing: obj({ id: str }) }));
+    same(found.rules, [{ op: 'remove', old: 'legacy_code', in: 'response' }]);
+    same(found.notes, [{
+      code: 'removed', path: 'legacy_code',
+      message: 'Response: legacy_code is no longer returned, so old callers stop receiving it. (6 endpoints: GET /things0, GET /things1, GET /things2 and 3 more)',
+      endpoints: ['GET /things0', 'GET /things1', 'GET /things2', 'GET /things3', 'GET /things4', 'GET /things5'],
+    }]);
+    // Endpoints that describe no answer at all are one note, not one each.
+    const bare = doc({ '/a': { get: { responses: { 200: { description: 'ok' } } } }, '/b': { get: { responses: { 200: { description: 'ok' } } } } });
+    same(rulesFromOpenApi(bare, structuredClone(bare)).notes.map((n) => n.message),
+      ['Neither version describes its answer, so changes to the answer can\'t be read from the specs. Check them with real records. (2 endpoints: GET /a, GET /b)']);
+  }],
+
+  ['A large description with one change gives one rule and nothing else to check', () => {
+    // 200 endpoints, each answering with 40 fields that can be an id or a whole record.
+    const expandable = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`link_${i}`, { anyOf: [str, ref('Other')] }]));
+    const paths = (field) => ({
+      ...Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`/records${i}`, { get: { responses: ok(ref('Record')) } }])),
+      '/payments': { post: { requestBody: body(obj({ [field]: str })), responses: ok(ref('Record')) } },
+    });
+    const schemas = { Record: obj({ id: str, ...expandable }), Other: obj({ id: str, name: str }) };
+    const started = Date.now();
+    const found = rulesFromOpenApi(doc(paths('capture_method'), schemas), doc(paths('capture_mode'), schemas));
+    same([found.rules, found.notes], [[{ op: 'rename', old: 'capture_method', new: 'capture_mode', in: 'request' }], []]);
+    // The record every one of those fields can expand into changes: still one thing to check, not 8,000.
+    const renamed = { ...schemas, Other: obj({ id: str, label: str }) };
+    const wide = rulesFromOpenApi(doc(paths('capture_method'), schemas), doc(paths('capture_method'), renamed));
+    same([wide.rules, wide.notes.length, wide.notes[0].endpoints.length], [[], 1, 201]);
+    assert(/^Response: Other changed, .* Fields: link_0, link_1, link_2 and 37 more\. \(201 endpoints: /.test(wide.notes[0].message), wide.notes[0].message);
+    assert(Date.now() - started < 3000, `took ${Date.now() - started} ms`);
+  }],
 ];
 
 export const formats = [
   ['Schemas built with allOf are merged; oneOf is read and flagged; nullable is honoured', () => {
     const merged = (key) => single({ allOf: [obj({ id: str }), { type: 'object', properties: { [key]: str }, required: [key] }] });
     same(rulesFromOpenApi(merged('customer_name'), merged('full_name')).rules, [{ op: 'rename', old: 'customer_name', new: 'full_name' }]);
-    const poly = single({ oneOf: [obj({ card: str }), obj({ iban: str })] });
-    assert(codes(rulesFromOpenApi(poly, poly)).includes('one_of'), 'oneOf was not flagged');
+    const poly = (second) => single({ oneOf: [obj({ card: str }), obj(second)] });
+    same(rulesFromOpenApi(poly({ iban: str }), poly({ iban: str })).notes, []);
+    assert(codes(rulesFromOpenApi(poly({ iban: str }), poly({ account_number: str }))).includes('one_of'), 'a change in a shape Mender does not read was not flagged');
     const spec = single(obj({ a: { type: 'string', nullable: true }, b: { type: ['string', 'null'] }, c: { anyOf: [str, { type: 'null' }] }, d: str }));
     const schema = spec.paths['/orders'].post.requestBody.content['application/json'].schema;
     same(validate({ a: null, b: null, c: null, d: null }, schema, spec).map((e) => e.path), ['d']);

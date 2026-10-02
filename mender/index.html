@@ -195,6 +195,11 @@
           <div class="details-body">
             <p class="fine">Paste the description of the old version and of the new one. Mender reads what changed between them, then proves the rules with samples it generates from the descriptions themselves.</p>
             <div class="pair">
+              <label class="field"><span class="label">Old version: address of the description</span><input type="text" id="spec-old-url" spellcheck="false" placeholder="/api/managed/openapi.json?version=1"></label>
+              <label class="field"><span class="label">New version: address of the description</span><input type="text" id="spec-new-url" spellcheck="false" placeholder="/api/managed/openapi.json"></label>
+            </div>
+            <div class="row"><button class="btn btn-ghost" id="fetch-specs" type="button">Fetch both descriptions</button><span class="fine">or paste them below</span></div>
+            <div class="pair">
               <label class="field"><span class="label">Old version description</span><textarea class="mid" id="spec-old" spellcheck="false"></textarea></label>
               <label class="field"><span class="label">New version description</span><textarea class="mid" id="spec-new" spellcheck="false"></textarea></label>
             </div>
@@ -321,7 +326,7 @@
             <p class="fine">Mender sends your request to the new API twice: once as it is, and once through the adapter. This makes real calls, so use a test endpoint.</p>
             <div class="row">
               <select id="live-method" aria-label="Method" style="width:auto"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
-              <input type="text" id="live-url" spellcheck="false" aria-label="Address of the new API" placeholder="https://api.example.com/orders" style="flex:1;min-width:200px">
+              <input type="text" id="live-url" spellcheck="false" aria-label="Address of the new API" placeholder="https://api.example.com/orders, or a path on this site such as /api/orders" style="flex:1;min-width:200px">
               <button class="btn btn-primary" id="live-send" type="button">Send both</button>
             </div>
             <label class="field"><span class="label">Request body, as the old customer sends it (JSON)</span><textarea class="short" id="live-body" spellcheck="false"></textarea></label>
@@ -567,11 +572,24 @@
     state.notes = notes;
     $('notes-panel').hidden = notes.length === 0;
     $('notes-count').textContent = `${notes.length} to check`;
-    $('notes-list').replaceChildren(...notes.map((note) => {
+    const line = (note) => {
       const li = document.createElement('li');
       li.textContent = note.message;
       return li;
-    }));
+    };
+    // A long list opens with its first 30 lines.
+    const lines = notes.slice(0, 30).map(line);
+    if (notes.length > lines.length) {
+      const more = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-ghost';
+      button.textContent = `Show all ${notes.length}`;
+      button.addEventListener('click', () => $('notes-list').replaceChildren(...notes.map(line)));
+      more.append(button);
+      lines.push(more);
+    }
+    $('notes-list').replaceChildren(...lines);
     $('rules-source').textContent = source;
     $('rules-source').className = `chip ${source ? 'thread' : ''}`;
     $('rules-count').textContent = `${rules.length} rule${rules.length === 1 ? '' : 's'}`;
@@ -640,6 +658,36 @@
     const found = rulesFromOpenApi(before, after);
     state.specs = { before, after };
     setRules(found.rules, 'Read from the two descriptions, no AI', found.notes);
+  }
+
+  // Reads the two descriptions from their addresses: a path on this site, or any address the
+  // browser (or the dev server's proxy) can reach.
+  async function fetchSpecs() {
+    const error = $('spec-error');
+    error.hidden = true;
+    const read = async (id, name) => {
+      const address = $(id).value.trim();
+      if (!address) throw new Error(`Enter the address of the ${name} version's description.`);
+      const url = new URL(address, location.href).href;
+      const response = await fetch(url, { cache: 'no-store' }).catch((problem) => {
+        if (state.proxy) return fetch(`/__proxy?url=${encodeURIComponent(url)}`, { cache: 'no-store' });
+        throw problem;
+      }).catch(() => { throw new Error(`The browser could not reach ${address}.`); });
+      if (!response.ok) throw new Error(`${address} answered ${response.status}.`);
+      return response.text();
+    };
+    $('fetch-specs').disabled = true;
+    try {
+      const [before, after] = await Promise.all([read('spec-old-url', 'old'), read('spec-new-url', 'new')]);
+      $('spec-old').value = before;
+      $('spec-new').value = after;
+      findFromSpecs();
+    } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+    } finally {
+      $('fetch-specs').disabled = false;
+    }
   }
 
   async function loadQuotes() {
@@ -894,10 +942,11 @@ export default withMender(yourApiHandler, {
   }
 
   async function liveSend() {
-    const url = $('live-url').value.trim();
+    const address = $('live-url').value.trim();
     const method = $('live-method').value;
     const body = method === 'GET' || method === 'DELETE' ? undefined : $('live-body').value;
-    if (!/^https?:\/\//.test(url)) { $('live-direct').textContent = 'Enter the full address, starting with https://'; return; }
+    if (!/^(https?:\/\/|\/)/.test(address)) { $('live-direct').textContent = 'Enter the full address, starting with https://, or a path on this site, starting with /'; return; }
+    const url = new URL(address, location.href).href;
     let adapt;
     try { adapt = adapter(); } catch (error) { $('live-mender').textContent = error.message; return; }
     $('live-send').disabled = true;
@@ -1032,6 +1081,7 @@ Return the complete corrected list.`;
   $('copy-code').addEventListener('click', (e) => copy('ship-code', e.currentTarget));
   $('copy-log').addEventListener('click', (e) => copy('ship-log', e.currentTarget));
   $('find-specs').addEventListener('click', findFromSpecs);
+  $('fetch-specs').addEventListener('click', fetchSpecs);
   $('load-quotes').addEventListener('click', loadQuotes);
   $('live-send').addEventListener('click', liveSend);
 

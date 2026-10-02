@@ -40,15 +40,70 @@ export function resolve(schema, spec, depth = 0) {
     }
     Object.assign(merged.properties, s.properties ?? {});
     delete merged.allOf;
+    const several = parts.filter((p) => p.polymorphic);
+    if (several.length) Object.assign(merged, { polymorphic: true, unread: several.flatMap((p) => p.unread ?? []) });
     return merged;
   }
   const options = s.oneOf ?? s.anyOf;
   if (Array.isArray(options) && options.length && !s.properties && !s.type && depth < 8) {
     const picks = options.map((option) => resolve(option, spec, depth + 1));
     const real = picks.filter((p) => typeOf(p) !== 'null');
-    return { ...(real[0] ?? {}), nullable: real.length !== picks.length || Boolean(real[0]?.nullable), polymorphic: real.length > 1 };
+    // The options Mender does not read, kept as written so two versions of them can be compared.
+    const unread = [...options.filter((_, i) => picks[i] !== real[0] && typeOf(picks[i]) !== 'null'), ...(real[0]?.unread ?? [])];
+    return { ...(real[0] ?? {}), nullable: real.length !== picks.length || Boolean(real[0]?.nullable), polymorphic: real.length > 1 || Boolean(real[0]?.polymorphic), unread };
   }
   return s;
+}
+
+// Every $ref inside a piece of a spec.
+function refsIn(node, out = new Set()) {
+  if (Array.isArray(node)) { for (const item of node) refsIn(item, out); return out; }
+  if (!isRecord(node)) return out;
+  if (typeof node.$ref === 'string') out.add(node.$ref);
+  for (const value of Object.values(node)) if (value !== null && typeof value === 'object') refsIn(value, out);
+  return out;
+}
+
+// Wording does not change a shape, so descriptions are left out when two pieces are compared.
+const shapeText = (node) => JSON.stringify(node, (key, value) => (typeof value === 'string' && (key === 'description' || key === 'summary' || key === 'title') ? undefined : value));
+
+// Returns changed(a, b) for two pieces of the specs. A piece is unchanged (null) when it is
+// written identically in both and everything it refers to, however indirectly, is too.
+// Otherwise the answer says why: 'rewritten', or the shared schemas that changed underneath it.
+// Mender uses it to stay quiet about parts that did not change.
+function changesBetween(oldSpec, newSpec) {
+  let causes = null; // $ref → the rewritten schemas it leads to, itself included
+  const settle = () => {
+    causes = new Map();
+    const usedBy = new Map();
+    const rewritten = [];
+    for (const ref of new Set([...refsIn(oldSpec), ...refsIn(newSpec)])) {
+      const before = pointer(oldSpec, ref);
+      if (shapeText(before) !== shapeText(pointer(newSpec, ref))) rewritten.push(ref);
+      for (const inner of refsIn(before)) {
+        if (!usedBy.has(inner)) usedBy.set(inner, []);
+        usedBy.get(inner).push(ref);
+      }
+    }
+    // Whatever refers to a schema that changed has changed too.
+    for (const cause of rewritten) {
+      const queue = [cause];
+      const reached = new Set(queue);
+      while (queue.length) {
+        const ref = queue.pop();
+        if (!causes.has(ref)) causes.set(ref, new Set());
+        causes.get(ref).add(cause);
+        for (const user of usedBy.get(ref) ?? []) if (!reached.has(user)) { reached.add(user); queue.push(user); }
+      }
+    }
+  };
+  return (a, b) => {
+    if (shapeText(a) !== shapeText(b)) return 'rewritten';
+    if (!causes) settle();
+    const found = new Set();
+    for (const ref of refsIn(a)) for (const cause of causes.get(ref) ?? []) found.add(cause);
+    return found.size ? [...found] : null;
+  };
 }
 
 function typeOf(s) {
@@ -67,6 +122,7 @@ const nullable = (s) => Boolean(s.nullable) || (Array.isArray(s.type) && s.type.
 export function flattenSchema(schema, spec, where) {
   const leaves = new Map();
   const notes = [];
+  const shapes = new Map(); // path → the oneOf/anyOf options that were not read there
   let list = false;
   const walk = (raw, path, required, depth, trail = []) => {
     // A schema that contains itself (a category with a parent category) is followed once.
@@ -75,7 +131,10 @@ export function flattenSchema(schema, spec, where) {
     if (name) trail = [...trail, name];
     const s = resolve(raw, spec);
     if ((where === 'request' && s.readOnly) || (where === 'response' && s.writeOnly)) return;
-    if (s.polymorphic) notes.push({ code: 'one_of', path, message: `${path || 'The body'} can take several shapes (oneOf/anyOf). Mender read the first one only.` });
+    if (s.polymorphic) {
+      if (!shapes.has(path)) notes.push({ code: 'one_of', path, message: `${path || 'The body'} can take several shapes (oneOf/anyOf). Mender read the first one only.` });
+      shapes.set(path, [...(shapes.get(path) ?? []), ...(s.unread ?? [])]);
+    }
     const type = typeOf(s);
     if (type === 'object' && isRecord(s.properties) && depth < 12) {
       const needed = new Set(s.required ?? []);
@@ -99,7 +158,7 @@ export function flattenSchema(schema, spec, where) {
     from: s['x-mender-from'], description: typeof s.description === 'string' ? s.description : '',
   });
   walk(schema, '', true, 0);
-  return { leaves, notes, list };
+  return { leaves, notes, list, shapes };
 }
 
 // ---------- reading operations ----------
@@ -335,9 +394,12 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
   const after = operationsOf(newSpec);
   const structural = [];
   const scoped = [];
-  const notes = [];
   const operations = [];
   const claimed = new Set();
+  const changed = changesBetween(oldSpec, newSpec);
+  // A finding is kept apart from its wording, so the same finding on many endpoints is said once.
+  const raised = [];
+  const raise = (code, endpoint, text, extra = {}) => raised.push({ code, endpoint, text, ...extra });
   // Which old operations contain a field, per place: decides whether a rule can drop its scope.
   const holders = new Map();
 
@@ -356,7 +418,7 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
         const path = target.path.replace(/\{[^}]+\}/g, () => `{${names[i++] ?? `id${i}`}}`);
         moved = { op: 'endpoint_moved', method: op.method, old: op.path, new: path, ...(target.method !== op.method ? { newMethod: target.method } : {}) };
         if (namesIn(op.path).length !== namesIn(target.path).length) {
-          notes.push({ code: 'path_changed', path: key, message: `${key} moved to ${target.method} ${target.path}, which takes different ids. This call needs a code change.` });
+          raise('path_changed', key, `moved to ${target.method} ${target.path}, which takes different ids. This call needs a code change.`);
           moved = null;
           target = null;
         }
@@ -373,15 +435,15 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
 
     for (const where of ['request', 'response']) {
       if (!op[where] && !target[where]) {
-        if (where === 'response' && op.method !== 'DELETE') notes.push({ code: 'no_schema', path: key, message: `${key}: neither version describes its answer, so changes to the answer can't be read from the specs. Check them with real records.` });
+        if (where === 'response' && op.method !== 'DELETE') raise('no_schema', key, 'neither version describes its answer, so changes to the answer can\'t be read from the specs. Check them with real records.');
         continue;
       }
       if (!op[where] || !target[where]) {
-        notes.push({ code: 'no_schema', path: key, message: `${key}: only one version describes its ${where}, so ${where} changes can't be read from the specs.` });
+        raise('no_schema', key, `only one version describes its ${where}, so ${where} changes can't be read from the specs.`);
         continue;
       }
       if (where === 'request' && /json/i.test(op.request.contentType) !== /json/i.test(target.request.contentType)) {
-        notes.push({ code: 'content_type', path: key, message: `${key} changed its request format from ${op.request.contentType} to ${target.request.contentType}. Mender translates fields, not formats.` });
+        raise('content_type', key, `the request format changed from ${op.request.contentType} to ${target.request.contentType}. Mender translates fields, not formats.`);
       }
       const a = flattenSchema(op[where].schema, oldSpec, where);
       const b = flattenSchema(target[where].schema, newSpec, where);
@@ -390,12 +452,22 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
         holders.set(id, [...(holders.get(id) ?? []), key]);
       }
       if (a.list !== b.list) {
-        notes.push({ code: 'list_shape', path: key, message: `${key}: the ${where} switched between a bare list and an object. Mender can't wrap or unwrap a list yet, so this call needs a code change.` });
+        raise('list_shape', key, `the ${where} switched between a bare list and an object. Mender can't wrap or unwrap a list yet, so this call needs a code change.`);
         continue;
       }
       const found = compare(a.leaves, b.leaves, where);
       for (const rule of found.rules) scoped.push({ ...rule, in: where, endpoint: key });
-      for (const n of [...a.notes, ...b.notes, ...found.notes]) notes.push({ ...n, message: `${key} ${where}: ${n.message}` });
+      // A field with several possible shapes is only worth a note when a shape Mender did not
+      // read differs between the versions.
+      for (const path of new Set([...a.shapes.keys(), ...b.shapes.keys()])) {
+        const both = a.shapes.has(path) && b.shapes.has(path);
+        const why = both ? changed(a.shapes.get(path), b.shapes.get(path)) : 'rewritten';
+        if (!why) continue;
+        if (why === 'rewritten') raise('one_of', key, `${path || 'the body'} can take several shapes (oneOf/anyOf)${both ? '. Mender compared the first one only, and another one changed' : ' in one version only. Mender compared the first one'}. Check it with a real record.`, { where, path });
+        // A shared schema changed underneath: one finding for the schema, however many fields carry it.
+        else for (const ref of why) raise('one_of', key, `${ref.split('/').pop()} changed, and it belongs to a shape Mender does not read: some fields here can take several shapes (oneOf/anyOf) and Mender translates only the first. Check the other shapes with real records.`, { where, field: path || 'the body' });
+      }
+      for (const n of found.notes) raise(n.code, key, n.message, { where, path: n.path });
     }
 
     // Query parameters: renamed, or newly required.
@@ -411,7 +483,7 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
       }
     }
     for (const name of cameQuery) {
-      if (newQuery.get(name).required) notes.push({ code: 'needs_default', path: key, message: `${key}: the query parameter ${name} is now required and old callers never send it.` });
+      if (newQuery.get(name).required) raise('needs_default', key, `the query parameter ${name} is now required and old callers never send it.`);
     }
   }
 
@@ -440,12 +512,23 @@ export function rulesFromOpenApi(oldSpec, newSpec) {
     else if (where === 'request') merged.push(rest);
   }
 
-  const seenNotes = new Set();
-  return {
-    rules: [...structural, ...merged],
-    notes: notes.filter((n) => !seenNotes.has(n.message) && seenNotes.add(n.message)),
-    operations,
-  };
+  const findings = new Map();
+  for (const n of raised) {
+    const id = `${n.code}|${n.where ?? ''}|${n.text}`;
+    if (!findings.has(id)) findings.set(id, { ...n, endpoints: new Set(), fields: new Set() });
+    findings.get(id).endpoints.add(n.endpoint);
+    if (n.field) findings.get(id).fields.add(n.field);
+  }
+  const few = (items) => (items.length > 4 ? `${items.slice(0, 3).join(', ')} and ${items.length - 3} more` : items.join(', '));
+  const notes = [...findings.values()].map(({ code, path, where, text, endpoints, fields }) => {
+    const names = [...endpoints];
+    const said = `${where ? `${where}: ` : ''}${text}${fields.size ? ` Fields: ${few([...fields])}.` : ''}`;
+    const at = path ?? [...fields][0] ?? names[0];
+    if (names.length === 1) return { code, path: at, message: `${names[0]}${where ? ' ' : ': '}${said}` };
+    return { code, path: at, message: `${said[0].toUpperCase()}${said.slice(1)} (${names.length} endpoints: ${few(names)})`, endpoints: names };
+  });
+
+  return { rules: [...structural, ...merged], notes, operations };
 }
 
 // ---------- samples and validation ----------
