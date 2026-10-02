@@ -4,5 +4,11 @@ data/
 .env
 .env.local
 *.tsbuildinfo
+artifacts/quotes-db/
+artifacts/quotes-fix.patch
+artifacts/quotes-mender-report.json
+artifacts/quotes-baseline.json
+artifacts/quotes-pr.md
+artifacts/managed-api/
 AGENTS.md
 CLAUDE.md

@@ -1,0 +1,9 @@
+{
+  "name": "api-mender-s3-fixture",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A public, non-production AWS SDK for JavaScript scan fixture",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0"
+  }
+}

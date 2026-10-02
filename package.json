@@ -12,6 +12,7 @@
     "worker": "node --env-file-if-exists=.env.local --import tsx scripts/worker.ts",
     "publish": "node --env-file-if-exists=.env.local --import tsx scripts/publish.ts",
     "tenant": "node --env-file-if-exists=.env.local --import tsx scripts/tenant.ts",
+    "testbed:quotes": "node --env-file-if-exists=.env.local --import tsx scripts/testbed-quotes.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

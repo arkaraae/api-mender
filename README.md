@@ -1,5 +1,15 @@
 # API Mender: API change monitor
 
+## Database-backed Quote API and AI repair path
+
+The current end-to-end path is the public [Quote API](https://api-mender.aom31905.chatgpt.site/api/managed/openapi.json). Its contract versions and product records live in the owner-controlled Supabase project. In the signed-in [API Mender workspace](https://api-mender.aom31905.chatgpt.site/live), **Your Quote API** lets the owner edit product data and publish a new required identity field with a change note. Published versions are immutable. The API reads the latest published version for each request; other applications call `POST /api/managed/quotes` with that identity field and a `sku`.
+
+[`examples/quote-api-consumer/`](examples/quote-api-consumer/) is a separate Node application that calls this public API. Its test makes a live request. [The monitoring workflow](.github/workflows/managed-quote-api.yml) checks the published OpenAPI contract on a five minute GitHub Actions schedule or by manual dispatch. On a required field change, it confirms the old consumer fails with HTTP 422, asks the OpenAI Responses API for a replacement of only the client file, then reruns the live test in a temporary copy. A passing proposal is pushed to a version-specific branch and offered as a draft pull request for human review. It never merges or deploys the consumer automatically. GitHub Actions scheduling can be delayed, so five minutes is a check interval rather than a detection guarantee.
+
+For AI repair, the repository owner must create an OpenAI API key and add it as the `OPENAI_API_KEY` **Actions repository secret** in `arkaraae/api-mender`. Do not put the key in source, Supabase, or the browser. GitHub repository settings must also allow Actions to create pull requests; if not, the workflow pushes the validated branch and records that PR creation was blocked. Until a key exists, the monitor reports that review is needed and does not claim to have generated a fix. The initial live contract is v1 with `customerId`; changing it to `accountId` with an explanatory note is one way to exercise the first real break after the key is configured. The applied database migration is [`supabase/migrations/20261002023537_managed_api_versions_and_products.sql`](supabase/migrations/20261002023537_managed_api_versions_and_products.sql).
+
+The older Stripe, AWS and Quotes testbed paths below remain development prototypes. They do not feed this managed Quote API workflow.
+
 API Mender connects code to upstream API evidence and prepares reviewable fixes. The landing page is at `/`, the **live Supabase Auth workspace and public GitHub repository inventory** are at `/live`, and the **simulated Stripe vertical slice** is at `/demo`. The demo never represents its fixture as a live Stripe change or its local PR artifact as a GitHub pull request.
 
 ## Live Supabase and GitHub path
