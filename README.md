@@ -1,5 +1,9 @@
 # API Mender: API change monitor
 
+## Cloudflare team deployment
+
+The current deployable website and API live in [`web/`](web/). Cloudflare Workers Builds can build that directory from this GitHub repository and publish every merged change on `main`. This lets repository collaborators ship updates through pull requests. The Cloudflare Worker serves the frontend and API routes; Supabase continues to provide Auth and database storage, and GitHub Actions continues to run the managed Quote API monitor and AI repair workflow. See [web deployment instructions](web/README.md) for build settings and the cutover checklist. The older ChatGPT Site remains the current public endpoint until the Cloudflare hostname, authentication redirects, and monitor URL are verified.
+
 ## Database-backed Quote API and AI repair path
 
 The current end-to-end path is the public [Quote API](https://api-mender.aom31905.chatgpt.site/api/managed/openapi.json). Its contract versions and product records live in the owner-controlled Supabase project. In the signed-in [API Mender workspace](https://api-mender.aom31905.chatgpt.site/live), **Your Quote API** lets the owner edit product data and publish a new required identity field with a change note. Published versions are immutable. The API reads the latest published version for each request; other applications call `POST /api/managed/quotes` with that identity field and a `sku`.
