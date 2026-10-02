@@ -7,7 +7,8 @@ import { record, replay, toRequest } from '../src/replay.js';
 import { sampleCalls, CUSTOMERS } from '../src/traffic.js';
 import adapter from '../src/adapters/2026-09-01.js';
 import firstDraft from '../src/adapters/2026-09-01.first-draft.js';
-import { inferRules, verifyRules, compileRules } from '../src/rules.js';
+import { verifyRules, compileRules } from '../src/rules.js';
+import { inferRules } from '../src/infer.js';
 
 const acme = { customer: 'acme', key: CUSTOMERS[0].key, version: V1 };
 
