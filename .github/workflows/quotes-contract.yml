@@ -1,0 +1,57 @@
+name: API Mender Quotes contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - testbed/quotes-api/contract.json
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  mend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Detect contract break and validate fix
+        id: mend
+        env:
+          MENDER_PREVIOUS_COMMIT: ${{ github.event.before }}
+        run: node scripts/testbed-quotes-ci.mjs
+      - name: Save Mender evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotes-mender-${{ github.sha }}
+          path: |
+            artifacts/quotes-baseline.json
+            artifacts/quotes-mender-report.json
+            artifacts/quotes-fix.patch
+            artifacts/quotes-pr.md
+            artifacts/quotes-db/api-watch.sqlite
+          if-no-files-found: ignore
+      - name: Open a reviewable fix
+        if: steps.mend.outputs.fix_ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git apply artifacts/quotes-fix.patch
+          MENDER_TEST_API_URL=https://api-mender.aom31905.chatgpt.site npm test --prefix testbed/quotes-consumer
+          branch="codex/quotes-fix-${SOURCE_SHA:0:12}"
+          git checkout -b "$branch"
+          git config user.name 'api-mender[bot]'
+          git config user.email 'api-mender[bot]@users.noreply.github.com'
+          git add testbed/quotes-consumer/src/client.mjs
+          git commit -m 'Fix Quotes consumer for accountId contract'
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title 'Fix Quotes consumer for accountId contract' --body-file artifacts/quotes-pr.md
