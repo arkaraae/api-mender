@@ -11,8 +11,8 @@ export default function Home() {
     </header>
     <section className="marketing-hero" aria-labelledby="hero-title">
       <p className="hero-kicker">THE API CHANGE WORKSPACE</p>
-      <h1 id="hero-title">Keep every integration<br/> one step ahead<span className="brand-period">.</span></h1>
-      <p className="hero-subtitle">Spot upstream changes, find the code they touch, and prepare fixes your team can review.</p>
+      <h1 id="hero-title">Stay Ahead of API Changes<br/> Without the Manual Work</h1>
+      <p className="hero-subtitle">Follow API updates, inspect recognized Stripe calls, and explore a proposed fix in our interactive demo. Built for engineering teams who want fewer integration surprises.</p>
       <div className="hero-actions"><a className="pill-button pill-dark" href="/live">Get started <span aria-hidden="true">↗</span></a><a className="pill-button pill-outline" href="/demo">Explore the demo <span aria-hidden="true">↗</span></a></div>
     </section>
     <section id="product" className="marketing-product" aria-label="API Mender product preview">
