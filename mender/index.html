@@ -115,6 +115,9 @@
   .rules li:last-child { border-bottom: 0; }
   .rules code { font: 400 13px/1.5 var(--mono); background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
   .rules .chip { justify-self: start; }
+  .notes { list-style: none; margin: 0; padding: 0; }
+  .notes li { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 14px; overflow-wrap: anywhere; }
+  .notes li:last-child { border-bottom: 0; }
   details > summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 14px; }
   details[open] > summary { border-bottom: 1px solid var(--line); }
   .details-body { padding: 12px 14px; display: grid; gap: 10px; }
@@ -187,6 +190,21 @@
             <p class="error-text" id="call-error" role="alert" hidden></p>
           </div>
         </div>
+        <details class="panel" id="specs-panel">
+          <summary>Or compare two API descriptions (OpenAPI or Swagger, JSON or YAML)</summary>
+          <div class="details-body">
+            <p class="fine">Paste the description of the old version and of the new one. Mender reads what changed between them, then proves the rules with samples it generates from the descriptions themselves.</p>
+            <div class="pair">
+              <label class="field"><span class="label">Old version description</span><textarea class="mid" id="spec-old" spellcheck="false"></textarea></label>
+              <label class="field"><span class="label">New version description</span><textarea class="mid" id="spec-new" spellcheck="false"></textarea></label>
+            </div>
+            <p class="error-text" id="spec-error" role="alert" hidden></p>
+            <div class="row">
+              <button class="btn btn-primary" id="find-specs" type="button">Find rules from descriptions</button>
+              <button class="btn btn-ghost" id="load-quotes" type="button">Load the Quotes API example</button>
+            </div>
+          </div>
+        </details>
         <p class="fine">The answers land below as "before" and "after" records. You can also paste records there by hand.</p>
         <div class="pair">
           <label class="field"><span class="label">Before · old version (JSON)</span><textarea class="tall" id="before" spellcheck="false"></textarea></label>
@@ -230,6 +248,10 @@
             </div>
           </details>
         </div>
+        <div class="panel" id="notes-panel" hidden>
+          <div class="panel-head"><span class="label">What Mender could not settle</span><span class="chip warn" id="notes-count"></span></div>
+          <ul class="notes" id="notes-list"></ul>
+        </div>
       </div>
     </li>
 
@@ -246,6 +268,15 @@
           </table>
         </div>
         <div class="row"><button class="btn btn-ghost" id="ai-fix" type="button" hidden>Fix with AI</button></div>
+        <div id="spec-proof" hidden>
+          <p class="callout" id="spec-verdict"></p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Endpoint</th><th>Samples</th><th>Result</th><th>What failed</th></tr></thead>
+              <tbody id="spec-rows"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </li>
 
@@ -284,6 +315,22 @@
             <div id="headers"></div>
           </div>
         </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Send a real request, as an old customer would</span><span class="chip" id="live-status">Not sent yet</span></div>
+          <div class="details-body">
+            <p class="fine">Mender sends your request to the new API twice: once as it is, and once through the adapter. This makes real calls, so use a test endpoint.</p>
+            <div class="row">
+              <select id="live-method" aria-label="Method" style="width:auto"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+              <input type="text" id="live-url" spellcheck="false" aria-label="Address of the new API" placeholder="https://api.example.com/orders" style="flex:1;min-width:200px">
+              <button class="btn btn-primary" id="live-send" type="button">Send both</button>
+            </div>
+            <label class="field"><span class="label">Request body, as the old customer sends it (JSON)</span><textarea class="short" id="live-body" spellcheck="false"></textarea></label>
+            <div class="pair">
+              <div class="field"><span class="label">Sent as it is</span><pre class="out" id="live-direct">–</pre></div>
+              <div class="field"><span class="label">Sent through the adapter</span><pre class="out" id="live-mender">–</pre></div>
+            </div>
+          </div>
+        </div>
       </div>
     </li>
 
@@ -302,6 +349,10 @@
             <pre class="out" id="ship-code"></pre>
           </div>
         </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Changelog for your customers</span><button class="btn btn-ghost" id="copy-log" type="button">Copy</button></div>
+          <pre class="out" id="ship-log"></pre>
+        </div>
         <p class="fine">Get <code>mender.js</code> and <code>rules.js</code> from <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender/src">GitHub</a>. They work with any handler that takes a Request and returns a Response: Next.js route handlers, Hono, Cloudflare Workers, Bun and Deno.</p>
       </div>
     </li>
@@ -313,12 +364,16 @@
   </footer>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script type="module">
   import { makeParcel, V1, V2, API } from './src/parcel.js';
-  import { inferRules, verifyRules, compileRules, describeRule, checkRule, TIME_FORMATS } from './src/rules.js';
+  import { verifyRules, compileRules, describeRule, checkRule, checkRules, changelog, TIME_FORMATS } from './src/rules.js';
+  import { explainRules } from './src/infer.js';
+  import { rulesFromOpenApi, proveWithSchemas } from './src/openapi.js';
+  import { withMender } from './src/mender.js';
 
   const $ = (id) => document.getElementById(id);
-  const state = { rules: [], source: '', ai: null, busy: false };
+  const state = { rules: [], source: '', notes: [], specs: null, proxy: false, ai: null, busy: false };
   const pretty = (value) => JSON.stringify(value, null, 2);
 
   // ---------- the Parcel example ----------
@@ -377,7 +432,8 @@
     const url = template.includes('{path}') ? template.replace('{path}', path) : template.replace(/\/$/, '') + path;
     const started = performance.now();
     try {
-      const response = await fetch(url, { headers, cache: 'no-store' });
+      const viaProxy = () => fetch(`/__proxy?url=${encodeURIComponent(new URL(url, location.href).href)}`, { headers, cache: 'no-store' });
+      const response = await fetch(url, { headers, cache: 'no-store' }).catch((error) => { if (state.proxy) return viaProxy(); throw error; });
       const text = await response.text();
       const ms = Math.round(performance.now() - started);
       let body;
@@ -435,7 +491,7 @@
       && !Array.isArray(before.body) && !Array.isArray(after.body));
     const blocked = results.some(({ before, after }) => before.blocked || after.blocked);
     if (blocked) {
-      error.textContent = 'The browser couldn’t reach one of the URLs. Your API has to allow calls from this page (CORS), and a page hosted on claude.ai can only call the Parcel sandbox. To call your own API, open Mender from GitHub or run it locally.';
+      error.textContent = 'The browser couldn’t reach one of the URLs. Your API has to allow calls from this page (CORS), and a page hosted on claude.ai can only call the Parcel sandbox. To call any API, run Mender Studio from its dev server: python3 mender/tools/serve.py';
       error.hidden = false;
     } else if (usable.length < results.length) {
       error.textContent = 'Some calls didn’t return a JSON record in both versions. Only the ones that did are used below.';
@@ -505,9 +561,17 @@
 
   // ---------- rules ----------
 
-  function setRules(rules, source) {
+  function setRules(rules, source, notes = []) {
     state.rules = rules;
     state.source = source;
+    state.notes = notes;
+    $('notes-panel').hidden = notes.length === 0;
+    $('notes-count').textContent = `${notes.length} to check`;
+    $('notes-list').replaceChildren(...notes.map((note) => {
+      const li = document.createElement('li');
+      li.textContent = note.message;
+      return li;
+    }));
     $('rules-source').textContent = source;
     $('rules-source').className = `chip ${source ? 'thread' : ''}`;
     $('rules-count').textContent = `${rules.length} rule${rules.length === 1 ? '' : 's'}`;
@@ -540,16 +604,75 @@
     let pairs;
     try { pairs = readPairs(); } catch (error) { showInputError(error.message); return; }
     showInputError(null);
-    setRules([...inferRules(pairs), ...endpointRules()], 'Found from examples, no AI');
+    state.specs = null;
+    const found = explainRules(pairs);
+    setRules([...found.rules, ...endpointRules()], 'Found from examples, no AI', found.notes);
+  }
+
+  // ---------- rules from two API descriptions ----------
+
+  function parseSpec(id, name) {
+    const text = $(id).value.trim();
+    if (!text) throw new Error(`Paste the ${name} version's description.`);
+    try { return JSON.parse(text); } catch { /* not JSON: try YAML */ }
+    if (!window.jsyaml) throw new Error(`The ${name} description isn't valid JSON, and the YAML reader could not be loaded.`);
+    let spec;
+    try { spec = window.jsyaml.load(text); } catch (error) { throw new Error(`The ${name} description isn't valid JSON or YAML: ${error.message.split('\n')[0]}`); }
+    if (!spec || typeof spec !== 'object') throw new Error(`The ${name} description isn't an API description.`);
+    return spec;
+  }
+
+  function findFromSpecs() {
+    const error = $('spec-error');
+    error.hidden = true;
+    let before;
+    let after;
+    try { before = parseSpec('spec-old', 'old'); after = parseSpec('spec-new', 'new'); } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+      return;
+    }
+    if (!before.paths || !after.paths) {
+      error.textContent = 'Both descriptions need a "paths" section listing the endpoints.';
+      error.hidden = false;
+      return;
+    }
+    const found = rulesFromOpenApi(before, after);
+    state.specs = { before, after };
+    setRules(found.rules, 'Read from the two descriptions, no AI', found.notes);
+  }
+
+  async function loadQuotes() {
+    const [before, after] = await Promise.all(['openapi-v1.json', 'openapi-v2.json'].map((file) => fetch(`sandbox/quotes/${file}`).then((r) => r.text())));
+    $('spec-old').value = before;
+    $('spec-new').value = after;
+    $('specs-panel').open = true;
+    $('old-version').value = '1';
+    $('new-version').value = '2';
+    $('removed').value = '';
+    $('guide').value = '';
+    $('ignore').value = '';
+    // The change is in what callers send, so the example records are two requests.
+    $('before').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    $('after').value = pretty({ accountId: 'acct_fixture_1', amountCents: 2500 });
+    $('try-up').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    $('try-down').value = pretty({ id: 'quote_test_1', identity: 'acct_fixture_1', amountCents: 2500, contractVersion: 2 });
+    $('try-method').value = 'POST';
+    $('try-path').value = '/api/testbed/quotes';
+    $('live-method').value = 'POST';
+    $('live-url').value = 'https://api-mender.aom31905.chatgpt.site/api/testbed/quotes';
+    $('live-body').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    showInputError(null);
+    findFromSpecs();
   }
 
   function applyJson() {
     try {
       const rules = JSON.parse($('rules-json').value);
       if (!Array.isArray(rules)) throw new Error('The rules must be a JSON list: [ { "op": "rename", ... } ].');
-      const problem = rules.map(checkRule).find(Boolean);
+      const problem = checkRules(rules);
       if (problem) throw new Error(problem);
-      setRules(rules, 'Edited by hand');
+      setRules(rules, 'Edited by hand', state.notes);
     } catch (error) {
       $('rules-error').textContent = error.message;
       $('rules-error').hidden = false;
@@ -564,8 +687,41 @@
 
   function refresh() {
     renderProof();
+    renderSpecProof();
     renderTry();
     renderShip();
+  }
+
+  // Samples generated from one description must fit the other after translation.
+  function renderSpecProof() {
+    $('spec-proof').hidden = !state.specs;
+    if (!state.specs) return;
+    let proof;
+    try { proof = proveWithSchemas(state.specs.before, state.specs.after, state.rules); } catch (error) {
+      $('spec-verdict').className = 'callout bad';
+      $('spec-verdict').textContent = `The rules couldn't run: ${error.message}`;
+      $('spec-rows').replaceChildren();
+      return;
+    }
+    const failing = proof.checks.filter((c) => c.failures.length);
+    $('spec-verdict').className = proof.ok ? 'callout ok' : 'callout bad';
+    $('spec-verdict').textContent = proof.ok
+      ? `Description proof passed: ${proof.samples} generated sample${proof.samples === 1 ? '' : 's'} across ${proof.checks.length} endpoint${proof.checks.length === 1 ? '' : 's'} fit the other version after translation. This checks structure; confirm meaning with a real record or a real call.`
+      : `Description proof failed on ${failing.length} of ${proof.checks.length} endpoints. The rules leave requests or answers that the other version would reject.`;
+    const shown = [...failing, ...proof.checks.filter((c) => !c.failures.length)].slice(0, 40);
+    $('spec-rows').replaceChildren(...shown.map((check) => {
+      const tr = document.createElement('tr');
+      const result = check.status === 'removed' ? 'removed: old callers get 410' : check.failures.length ? '✕ failed' : '✓ passed';
+      const detail = check.failures.slice(0, 3).map((f) => `${f.where}: ${f.path} ${f.message}`).join(' · ');
+      [check.endpoint, String(check.samples), result, detail || 'None'].forEach((text, i) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 2) td.style.color = check.failures.length ? 'var(--bad)' : check.status === 'removed' ? 'var(--warn)' : 'var(--ok)';
+        tr.append(td);
+      });
+      return tr;
+    }));
+    if (state.specs && $('step-3').dataset.state !== 'broken') $('step-3').dataset.state = proof.ok ? 'done' : 'broken';
   }
 
   let lastProof = [];
@@ -574,8 +730,9 @@
     const verdict = $('verdict');
     let pairs;
     try { pairs = readPairs(); } catch (error) {
-      verdict.className = 'callout warn';
-      verdict.textContent = `Fix the examples in step 1 to run the proof. ${error.message}`;
+      const empty = !$('before').value.trim() && !$('after').value.trim();
+      verdict.className = empty ? 'callout' : 'callout warn';
+      verdict.textContent = empty ? 'No example records to check. Paste a before and after record in step 1 to prove the rules on real data.' : `Fix the examples in step 1 to run the proof. ${error.message}`;
       rows.replaceChildren();
       $('step-3').dataset.state = 'ready';
       return;
@@ -626,10 +783,12 @@
       verdict.textContent = `Blocked. ${failing.length} of ${results.length} examples don't round-trip. Fix the rules in step 2${state.ai ? ', or ask the AI to fix them' : ''}.`;
       $('step-3').dataset.state = 'broken';
     } else {
-      const added = state.rules.filter((r) => r.op === 'add').map((r) => r.new);
+      const added = state.rules.filter((r) => r.op === 'add' && 'value' in r).map((r) => r.new);
+      const unfilled = [...new Set(results.flatMap((r) => r.unfilled))];
       const notes = [];
       if (lost.length) notes.push(`old customers will stop receiving ${lost.join(', ')}`);
       if (added.length) notes.push(`old customers never send ${added.join(', ')}, so check the default value in step 2 before shipping`);
+      if (unfilled.length) notes.push(`${unfilled.join(', ')} has no default, so it is hidden from old customers' answers but can't be filled in on their requests`);
       verdict.className = notes.length ? 'callout warn' : 'callout ok';
       verdict.textContent = `Proven on ${results.length} of ${results.length} example${results.length === 1 ? '' : 's'} in both directions.${notes.length ? ` Heads up: ${notes.join('; and ')}.` : ' Safe to try and ship.'}`;
       $('step-3').dataset.state = 'done';
@@ -704,7 +863,53 @@ export default withMender(yourApiHandler, {
   // Every translated call, per customer: who still has to move.
   onCall: (call) => console.log(call.customer, call.version, call.outcome),
 });`;
+    $('ship-log').textContent = changelog(spec);
     $('step-5').dataset.state = $('step-3').dataset.state === 'done' ? 'done' : 'ready';
+  }
+
+  // ---------- a real request, with and without the adapter ----------
+
+  // Makes the network call. From the dev server it goes through /__proxy, which is not bound
+  // by the browser's cross-site rules; anywhere else it is a plain browser call.
+  async function callOut(request) {
+    const bodyless = request.method === 'GET' || request.method === 'HEAD';
+    const headers = {};
+    for (const name of ['content-type', 'authorization', 'api-version']) if (request.headers.get(name)) headers[name] = request.headers.get(name);
+    const init = { method: request.method, headers, body: bodyless ? undefined : await request.arrayBuffer() };
+    return fetch(state.proxy ? `/__proxy?url=${encodeURIComponent(request.url)}` : request.url, init);
+  }
+
+  async function show(id, promise) {
+    try {
+      const response = await promise;
+      const text = await response.text();
+      let body = text;
+      try { body = pretty(JSON.parse(text)); } catch { /* not JSON: show as is */ }
+      $(id).textContent = `${response.status} ${response.statusText}\n${body}`.trim();
+      return response.status;
+    } catch {
+      $(id).textContent = 'The browser could not reach this address. The API has to allow calls from this page (CORS). Run Mender Studio from its dev server (python3 mender/tools/serve.py) to call any API.';
+      return 0;
+    }
+  }
+
+  async function liveSend() {
+    const url = $('live-url').value.trim();
+    const method = $('live-method').value;
+    const body = method === 'GET' || method === 'DELETE' ? undefined : $('live-body').value;
+    if (!/^https?:\/\//.test(url)) { $('live-direct').textContent = 'Enter the full address, starting with https://'; return; }
+    let adapt;
+    try { adapt = adapter(); } catch (error) { $('live-mender').textContent = error.message; return; }
+    $('live-send').disabled = true;
+    $('live-status').textContent = 'Sending…';
+    $('live-status').className = 'chip thread';
+    const build = () => new Request(url, { method, headers: body ? { 'content-type': 'application/json' } : {}, body });
+    const gateway = withMender(callOut, { latest: $('new-version').value.trim(), adapters: [adapt], defaultVersion: $('old-version').value.trim() });
+    const [direct, through] = await Promise.all([show('live-direct', callOut(build())), show('live-mender', gateway(build()))]);
+    $('live-send').disabled = false;
+    const ok = (status) => status >= 200 && status < 300;
+    $('live-status').textContent = ok(through) && !ok(direct) ? 'The adapter made it work' : ok(through) ? 'Both worked' : 'The adapter did not help';
+    $('live-status').className = `chip ${ok(through) ? 'ok' : 'bad'}`;
   }
 
   async function copy(id, button) {
@@ -731,10 +936,12 @@ export default withMender(yourApiHandler, {
 - {"op":"case","old":P,"new":P,"oldCase":"lower","newCase":"upper"}
 - {"op":"values","old":P,"new":P,"map":{"oldValue":"newValue"}}  renamed values
 - {"op":"time","old":P,"new":P,"oldFormat":F,"newFormat":F}  F is one of ${TIME_FORMATS.join(', ')}; iso8601_ms has milliseconds
+- {"op":"type","old":P,"new":P,"oldType":"number","newType":"string"}  same value, different JSON type (string, number, boolean)
 - {"op":"add","new":P,"value":DEFAULT}  new field that old callers never send
 - {"op":"remove","old":P}  field the new version dropped
 - {"op":"endpoint_removed","method":"GET","path":"/orders/{id}/label","message":TEXT,"guide":URL}
-Rules run in order from old to new, and in reverse from new to old. Unchanged fields need no rule.`;
+Use "items[].sku" for a field of every item in a list. Add "in":"request" or "in":"response" when a rule holds for only one of them.
+All rules read the original record and then write, so order does not matter. Unchanged fields need no rule.`;
 
   function aiPrompt(pairs, failing) {
     const clip = (value) => JSON.stringify(value).slice(0, 6000);
@@ -811,7 +1018,8 @@ Return the complete corrected list.`;
   $('load-example').addEventListener('click', loadExample);
   $('call-api').addEventListener('click', callApi);
   $('clear').addEventListener('click', () => {
-    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up', 'ignore']) $(id).value = '';
+    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up', 'ignore', 'spec-old', 'spec-new']) $(id).value = '';
+    state.specs = null;
     setRules([], '');
     $('rules-source').textContent = 'No rules yet';
     showInputError(null);
@@ -822,6 +1030,10 @@ Return the complete corrected list.`;
   $('ai-fix').addEventListener('click', () => aiWrite(true));
   $('copy-rules').addEventListener('click', (e) => copy('ship-rules', e.currentTarget));
   $('copy-code').addEventListener('click', (e) => copy('ship-code', e.currentTarget));
+  $('copy-log').addEventListener('click', (e) => copy('ship-log', e.currentTarget));
+  $('find-specs').addEventListener('click', findFromSpecs);
+  $('load-quotes').addEventListener('click', loadQuotes);
+  $('live-send').addEventListener('click', liveSend);
 
   let timer;
   const later = (fn) => () => { clearTimeout(timer); timer = setTimeout(fn, 250); };
@@ -830,12 +1042,14 @@ Return the complete corrected list.`;
     refresh();
   }));
   for (const id of ['removed', 'guide']) $(id).addEventListener('input', later(() => {
-    setRules([...state.rules.filter((r) => r.op !== 'endpoint_removed'), ...endpointRules()], state.source || 'Edited by hand');
+    setRules([...state.rules.filter((r) => r.op !== 'endpoint_removed'), ...endpointRules()], state.source || 'Edited by hand', state.notes);
   }));
   for (const id of ['try-down', 'try-up', 'try-path', 'old-version', 'new-version', 'sunset']) $(id).addEventListener('input', later(refresh));
   $('ignore').addEventListener('input', later(findRules));
   $('try-method').addEventListener('change', refresh);
 
+  // The dev server (tools/serve.py) can make calls the browser is not allowed to make itself.
+  state.proxy = await fetch('/__proxy?ping=1').then((r) => r.ok && r.headers.get('content-type')?.includes('json')).catch(() => false);
   await loadExample();
 
   // The AI writer lights up only where this viewer can use Claude.
