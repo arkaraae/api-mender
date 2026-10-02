@@ -1,5 +1,7 @@
-# Quotes API test contract
+# Quotes API breaking-change test
 
-`contract.json` is the active contract for API Mender's controlled integration test. The hosted API reads it from this repository's `main` branch at a pinned commit. Version 1 accepts `customerId`; version 2 in `versions/v2.json` requires `accountId` and rejects the old request. The endpoint is a test fixture and does not process payments or store customer data.
+The hosted API at `https://api-mender.aom31905.chatgpt.site/api/testbed/quotes` reads `contract.json` from this repository. Version 1 accepts `customerId`; version 2 requires `accountId`. The separate consumer in `testbed/quotes-consumer` intentionally sends the old field until Mender fixes it.
 
-To exercise a breaking push after the monitor is connected, replace `contract.json` with the v2 file and push to `main`. The consumer in `../quotes-consumer` should fail until Mender's proposed patch is applied.
+On a contract push to `main`, `.github/workflows/quotes-contract.yml` compares the previous OpenAPI snapshot with the hosted contract, scans the consumer call site, records the finding and validation in a SQLite database, and uploads the database and report as run artifacts. For the supported v1-to-v2 change it tests the old consumer failure, tests a deterministic patch, and pushes a review branch. The branch includes `mender-status.json` for the Site's live testbed view. GitHub Actions pull request creation must be enabled in repository settings to open the PR automatically; the branch and evidence are still produced if that setting is disabled.
+
+This is a controlled fixture, not an arbitrary API repair engine. Do not merge the fix until its identifier mapping has been reviewed.
