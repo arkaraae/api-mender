@@ -37,6 +37,20 @@ const report = JSON.parse(readFileSync(join(root, 'artifacts/quotes-mender-repor
 const fixReady = report.state === 'fix_ready' && report.validation?.status === 'passed' && report.finding?.confidence === 'confirmed';
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `fix_ready=${fixReady}\n`);
 if (fixReady) {
+  const branch = `codex/quotes-fix-${process.env.GITHUB_SHA?.slice(0, 12) || 'local'}`;
+  mkdirSync(join(root, 'testbed/quotes-api'), { recursive: true });
+  writeFileSync(join(root, 'testbed/quotes-api/mender-status.json'), JSON.stringify({
+    contractCommit: process.env.GITHUB_SHA || null,
+    contractVersion: current.version,
+    findingId: report.findingId,
+    findingStatus: report.finding.status,
+    validation: report.validation.status,
+    oldConsumer: report.validation.checks[0].ok ? 'failed as expected' : 'unexpected result',
+    patchedConsumer: report.validation.checks[1].ok ? 'passed' : 'failed',
+    sourceHash: report.sourceHash,
+    runUrl: process.env.GITHUB_RUN_ID ? `https://github.com/arkaraae/api-mender/actions/runs/${process.env.GITHUB_RUN_ID}` : null,
+    fixBranchUrl: `https://github.com/arkaraae/api-mender/tree/${branch}`,
+  }, null, 2) + '\n');
   const body = `## API Mender testbed fix\n\nThe Quotes API contract added required \`accountId\` on \`POST /api/testbed/quotes\`. The consumer at ${report.repositoryHead} still sent \`customerId\`.\n\n- Source snapshot SHA-256: \`${report.sourceHash}\`\n- Finding: \`${report.findingId}\` (${report.finding.confidence})\n- Old consumer against the changed API: failed as expected\n- Patched consumer against the changed API: passed\n- Fix generator: deterministic Quotes fixture recipe; no OpenAI API request\n\nThis is a controlled test API. Review the request mapping before merging.\n`;
   writeFileSync(join(root, 'artifacts/quotes-pr.md'), body);
 }
