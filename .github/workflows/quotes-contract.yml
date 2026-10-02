@@ -47,7 +47,7 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           git apply artifacts/quotes-fix.patch
-          MENDER_TEST_API_URL=https://api-mender.aom31905.chatgpt.site npm test --prefix testbed/quotes-consumer
+          MENDER_TEST_API_URL="${{ vars.MENDER_TEST_API_URL || 'https://api-mender.aom31905.chatgpt.site' }}" npm test --prefix testbed/quotes-consumer
           branch="codex/quotes-fix-${SOURCE_SHA:0:12}"
           git checkout -b "$branch"
           git config user.name 'api-mender[bot]'

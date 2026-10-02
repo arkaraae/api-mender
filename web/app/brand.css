@@ -1,0 +1,18 @@
+.brand-logo{display:inline-block;position:relative;width:150px;aspect-ratio:1672/502;overflow:hidden;flex:none;vertical-align:middle}
+.brand-logo img{position:absolute;display:block;width:129.9%;height:auto;max-width:none;left:-14.65%;top:-22.5%}
+.brand-mark{display:inline-block;position:relative;width:28px;height:28px;overflow:hidden;flex:none;vertical-align:middle;background:#fff}
+.brand-mark img{position:absolute;display:block;width:359%;height:auto;max-width:none;left:-40.5%;top:-8.3%}
+.auth-brand.brand-logo{width:195px;margin-bottom:32px}
+.marketing-footer .brand-logo{width:140px}
+.demo-logo .brand-logo{width:155px}
+.live-header .brand-logo{width:130px}
+.live-brand{display:flex;align-items:center;gap:10px}
+.live-brand>span:last-child{font-size:10px;letter-spacing:1px;background:#e2f5ec;color:#147651;padding:5px 8px;border-radius:4px;white-space:nowrap}
+.preview-project-icon.brand-mark{width:22px;height:22px}
+.preview-topline .brand-mark{width:24px;height:24px}
+.aws-release{margin-top:18px;padding-top:16px;border-top:1px solid #e5e5e5}
+.aws-release>div{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.aws-release>div span,.aws-release p{font-size:12px;color:#667}
+.aws-release p{margin:8px 0 0;line-height:1.5}
+.aws-release .live-muted{max-height:4.5em;overflow:hidden}
+@media(max-width:650px){.marketing-nav .brand-logo{width:126px}.auth-brand.brand-logo{width:168px}.demo-logo .brand-logo{width:140px}.live-brand>span:last-child{display:none}}
