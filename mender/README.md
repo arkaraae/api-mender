@@ -107,7 +107,7 @@ A rule names an old field and a new one, with dotted paths (`customer.address.ci
 | `src/replay.js` | Replays recorded calls through an adapter and ignores fields that change on every call. |
 | `sandbox/` | Read-only test data: the Parcel sandbox API and both Quotes API descriptions. |
 | `tools/serve.py` | Dev server. Also forwards calls to APIs that a browser may not call directly. |
-| `tools/managed-standin.mjs` | A local copy of the managed Quote API at any version. |
+| `tools/managed-standin.mjs` | A local copy of the site's two Quote APIs, with the managed one at any version. |
 | `tools/publish-to-site.mjs` | Copies the Studio to `public/studio`. |
 | `tests/` | 218 tests, the same files in Node and in the browser. |
 

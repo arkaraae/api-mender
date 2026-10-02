@@ -109,7 +109,10 @@ export default function MenderPage() {
           ))}
           {api.check && (
             <div style={{ display: 'grid', gap: 10 }}>
-              <p className="label">Real request: {api.check.request.method} {api.check.request.path} {JSON.stringify(api.check.request.body)}</p>
+              <div>
+                <p className="label">Real request, as a version 1 caller sends it</p>
+                <pre>{`${api.check.request.method} ${api.check.request.path}\n${JSON.stringify(api.check.request.body)}`}</pre>
+              </div>
               <div className="pair">
                 <Answer title="Sent as it is" probe={api.check.direct} />
                 <Answer title="Sent through Mender" probe={api.check.throughMender} />
