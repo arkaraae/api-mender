@@ -1,0 +1,17 @@
+{
+  "id": "ord_1001",
+  "object": "order",
+  "full_name": "Maya Chen",
+  "total": {
+    "amount_cents": 1250,
+    "currency": "USD"
+  },
+  "status": "succeeded",
+  "created_at": "2026-01-03T15:00:00.000Z",
+  "items": [
+    {
+      "sku": "SKU-200",
+      "qty": 1
+    }
+  ]
+}

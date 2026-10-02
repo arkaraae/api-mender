@@ -1,0 +1,15 @@
+{
+  "id": "ord_1001",
+  "object": "order",
+  "customer_name": "Maya Chen",
+  "amount": 12.5,
+  "currency": "usd",
+  "status": "paid",
+  "created": 1767452400,
+  "items": [
+    {
+      "sku": "SKU-200",
+      "qty": 1
+    }
+  ]
+}
