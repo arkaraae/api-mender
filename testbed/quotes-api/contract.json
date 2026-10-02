@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "operation": "POST /api/testbed/quotes",
+  "requiredRequestFields": ["customerId", "amountCents"],
+  "acceptedIdentityField": "customerId"
+}
