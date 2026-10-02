@@ -1,0 +1,59 @@
+name: Monitor managed Quote API
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: managed-quote-api
+  cancel-in-progress: false
+
+jobs:
+  mend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Check the published contract and validate an AI fix
+        id: mend
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          MENDER_TEST_API_URL: https://api-mender.aom31905.chatgpt.site
+        run: node scripts/managed-api-mender.mjs
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-quote-api-${{ github.run_id }}
+          path: artifacts/managed-api/
+          if-no-files-found: ignore
+      - name: Open a draft repair pull request
+        if: steps.mend.outputs.fix_ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.mend.outputs.version }}
+        run: |
+          cp artifacts/managed-api/client.mjs examples/quote-api-consumer/src/client.mjs
+          MENDER_TEST_API_URL=https://api-mender.aom31905.chatgpt.site npm test --prefix examples/quote-api-consumer
+          branch="codex/managed-quote-v${VERSION}"
+          git checkout -b "$branch"
+          git config user.name 'api-mender[bot]'
+          git config user.email 'api-mender[bot]@users.noreply.github.com'
+          git add examples/quote-api-consumer/src/client.mjs
+          git commit -m "Repair Quote API consumer for contract v${VERSION}"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64)" push origin "$branch"
+          if ! gh pr create --draft --base main --head "$branch" --title "Repair Quote API consumer for contract v${VERSION}" --body-file artifacts/managed-api/pull-request.md; then
+            echo "Validated fix branch pushed: $branch. GitHub did not allow Actions to open a PR; open the branch for review or enable Actions pull request creation in this repository." >> "$GITHUB_STEP_SUMMARY"
+          fi
