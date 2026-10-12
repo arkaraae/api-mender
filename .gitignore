@@ -12,3 +12,8 @@ artifacts/quotes-pr.md
 artifacts/managed-api/
 AGENTS.md
 CLAUDE.md
+web/dist/
+web/.vinext/
+web/.wrangler/
+web/node_modules
+web/next-env.d.ts

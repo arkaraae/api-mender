@@ -30,7 +30,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          MENDER_TEST_API_URL: https://api-mender.aom31905.chatgpt.site
+          MENDER_TEST_API_URL: ${{ vars.MENDER_TEST_API_URL || 'https://api-mender.aom31905.chatgpt.site' }}
         run: node scripts/managed-api-mender.mjs
       - name: Save evidence
         if: always()
@@ -46,7 +46,7 @@ jobs:
           VERSION: ${{ steps.mend.outputs.version }}
         run: |
           cp artifacts/managed-api/client.mjs examples/quote-api-consumer/src/client.mjs
-          MENDER_TEST_API_URL=https://api-mender.aom31905.chatgpt.site npm test --prefix examples/quote-api-consumer
+          MENDER_TEST_API_URL="${{ vars.MENDER_TEST_API_URL || 'https://api-mender.aom31905.chatgpt.site' }}" npm test --prefix examples/quote-api-consumer
           branch="codex/managed-quote-v${VERSION}"
           git checkout -b "$branch"
           git config user.name 'api-mender[bot]'
