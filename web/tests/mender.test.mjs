@@ -91,6 +91,28 @@ test('when the API cannot be reached the caller gets a clear 502', async () => {
   }
 });
 
+test('a contract that cannot be read right now falls back to the last proven reading, for up to an hour', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  let failing = false;
+  registerApi('flaky', {
+    title: 'Flaky contract',
+    endpoint: '/api/flaky/quotes',
+    owns: (path) => path.startsWith('/api/flaky/'),
+    async contracts() {
+      if (failing) throw new Error('GitHub did not answer');
+      return [{ version: '1', spec: { openapi: '3.0.3', paths: {} } }, { version: '2', spec: { openapi: '3.0.3', paths: {} } }];
+    },
+    probe: { method: 'POST', path: '/api/flaky/quotes', body: {} },
+  });
+  forget();
+  assert.deepEqual((await describe('flaky', ORIGIN)).versions, ['1', '2']);
+  failing = true;
+  t.mock.timers.tick(5 * 60_000);
+  assert.deepEqual((await describe('flaky', ORIGIN)).versions, ['1', '2']);
+  t.mock.timers.tick(2 * 60 * 60_000);
+  await assert.rejects(describe('flaky', ORIGIN), /GitHub did not answer/);
+});
+
 // ---------- the /check report ----------
 
 const json = (properties, required = Object.keys(properties)) => ({ type: 'object', properties, required });

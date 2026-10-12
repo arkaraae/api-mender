@@ -25,7 +25,7 @@
         { "pattern": "www.apimender.com", "custom_domain": true }
       ],
       // Watched API descriptions and their kept versions (lib/mender/watch.js).
-      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "mender-watch-local" }],
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "743c7ff42511443f9ab0333f783c2f9a" }],
       // Every hour, check the watched descriptions that were not checked for a day.
       "triggers": { "crons": ["17 * * * *"] },
       "vars": {

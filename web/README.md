@@ -37,7 +37,7 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 
 apimender.com is served from its own Cloudflare account, as the Worker `apimender-site`, using the `apimender` environment in `wrangler.jsonc` (its account, the apimender.com and www.apimender.com custom domains, the `MENDER_WATCH` KV namespace and the hourly cron). The default environment stays as it was for the team's Workers Builds, without the watch list.
 
-Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces`.
+Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces` (done for apimender.com: `743c7ff4…`).
 
 Each release, from `web/`:
 

@@ -14,6 +14,8 @@ import { proveWithSchemas, rulesFromOpenApi } from './openapi.js';
 import { explainRules } from './infer.js';
 
 const TTL_MS = 60_000;
+// When a contract can't be read right now, the last proven reading stands for up to an hour.
+const STALE_MS = 60 * 60_000;
 const FORWARDED = ['content-type', 'accept', 'authorization', 'x-consumer', 'idempotency-key'];
 
 // ---------- the APIs this gateway fronts ----------
@@ -64,7 +66,13 @@ export async function describe(name, origin) {
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const api = apis.get(name);
   if (!api) throw new Error(`Mender does not front an API called ${name}.`);
-  const contracts = await api.contracts(origin, readJson);
+  let contracts;
+  try {
+    contracts = await api.contracts(origin, readJson);
+  } catch (error) {
+    if (hit && Date.now() - hit.at < STALE_MS) return hit.value;
+    throw error;
+  }
   const steps = [];
   for (let i = 0; i + 1 < contracts.length; i++) {
     const before = contracts[i];
