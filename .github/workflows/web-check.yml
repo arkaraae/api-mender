@@ -5,12 +5,14 @@ on:
     paths:
       - 'web/**'
       - 'mender/**'
+      - '.github/actions/mender-check/**'
       - '.github/workflows/web-check.yml'
   push:
     branches: [main]
     paths:
       - 'web/**'
       - 'mender/**'
+      - '.github/actions/mender-check/**'
       - '.github/workflows/web-check.yml'
 
 permissions:
