@@ -3,6 +3,7 @@
 declare namespace Cloudflare {
   interface Env {
     MENDER_WATCH?: KVNamespace;
+    MENDER_DB?: D1Database;
     SITE_ORIGIN?: string;
   }
 }

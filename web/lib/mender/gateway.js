@@ -112,7 +112,16 @@ export const forget = () => cache.clear();
 
 // ---------- who still calls an old version ----------
 
+// Counted in memory, and also saved through a call log when the site gives one:
+// { record(entry) → Promise, list() → Promise<entries>, defer?(promise) }.
 const calls = new Map();
+let callLog = null;
+
+export function setCallLog(log) {
+  callLog = log;
+}
+
+export const callsSaved = () => Boolean(callLog);
 
 function count(name, event) {
   const key = `${name}|${event.customer}|${event.version}|${event.method} ${event.path}|${event.outcome}`;
@@ -120,10 +129,21 @@ function count(name, event) {
   entry.calls += 1;
   entry.lastAt = new Date().toISOString();
   if (calls.size < 500 || calls.has(key)) calls.set(key, entry);
+  if (callLog) {
+    // Saving never slows down or breaks the call it describes.
+    const saving = Promise.resolve().then(() => callLog.record({ ...entry, calls: 1 })).catch(() => {});
+    if (callLog.defer) callLog.defer(saving);
+  }
 }
 
-// Counts live in memory, per server instance.
+// What this server instance counted since it started.
 export const oldVersionCalls = () => [...calls.values()].sort((a, b) => b.calls - a.calls);
+
+// Every old-version call ever saved, or this instance's counts when nothing is saved.
+export async function callers() {
+  if (!callLog) return oldVersionCalls();
+  try { return await callLog.list(); } catch { return oldVersionCalls(); }
+}
 
 // ---------- the gateway ----------
 

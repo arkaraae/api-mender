@@ -97,3 +97,12 @@
 .pricing-questions dt{font-weight:700;margin-bottom:4px}
 .pricing-questions dd{margin:0;color:#555;line-height:1.5}
 @media(max-width:760px){.pricing-plans{grid-template-columns:minmax(0,1fr)}.pricing-plan{padding:22px}}
+.change-rule{margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.change-rule code,.note-rule{font:12px/1.4 ui-monospace,Menlo,monospace;color:#555}
+.severity{font:700 11px/1 Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:.06em;border-radius:5px;padding:4px 6px}
+.severity-error{background:#c0392b;color:#fff}
+.severity-warning{background:#f3c66a;color:#4a3300}
+.severity-info{background:#dfe9f2;color:#25445e}
+.check-levels .level-error{color:#c0392b}
+.check-levels .level-warning{color:#a86b08}
+.check-levels .level-info{color:#25445e}

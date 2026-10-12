@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { makeManaged } from '../../mender/tests/managed.fixture.js';
-import { check, describe, forget, handle, oldVersionCalls, registerApi, serveInProcess } from '../lib/mender/gateway.js';
+import { callers, callsSaved, check, describe, forget, handle, oldVersionCalls, registerApi, serveInProcess, setCallLog } from '../lib/mender/gateway.js';
 import { rulesFromOpenApi, proveWithSchemas } from '../lib/mender/openapi.js';
 import { pathsOf, summarize, touches } from '../lib/mender/report.js';
 
@@ -73,6 +73,25 @@ test('callers on the newest version, unknown versions and other paths are handle
   assert.deepEqual(await missing.json(), { error: 'Product not found' });
 });
 
+test('with a call log, every old-version call is saved, and saving never holds up or breaks the call', async () => {
+  const saved = [];
+  const deferred = [];
+  setCallLog({ record: async (entry) => { saved.push(entry); }, list: async () => saved, defer: (promise) => deferred.push(promise) });
+  try {
+    assert.equal(callsSaved(), true);
+    const response = await call('v1', '/api/managed/quotes', { customerId: 'customer_1', sku: 'WIDGET-1' }, { 'x-consumer': 'billing-service' });
+    assert.equal(response.status, 200);
+    await Promise.all(deferred);
+    assert.deepEqual(saved.map((entry) => [entry.api, entry.caller, entry.version, entry.endpoint, entry.outcome, entry.calls]), [['managed', 'billing-service', '1', 'POST /api/managed/quotes', 'translated', 1]]);
+    assert.deepEqual(await callers(), saved);
+    setCallLog({ record: async () => { throw new Error('database is down'); }, list: async () => { throw new Error('database is down'); } });
+    assert.equal((await call('v1', '/api/managed/quotes', { customerId: 'customer_1', sku: 'WIDGET-1' })).status, 200);
+    assert.ok((await callers()).length > 0, 'falls back to this instance\'s counts');
+  } finally {
+    setCallLog(null);
+  }
+});
+
 test('the status check sends one real request both ways', async () => {
   const result = await check('managed', ORIGIN);
   assert.equal(result.direct.status, 422);
@@ -136,14 +155,16 @@ test('the report says "safe" when nothing old callers use changed', () => {
 test('the report says "bridged" for a rename Mender can translate', () => {
   const result = report(spec(json({ customerId: str }), json({ id: str })), spec(json({ accountId: str }), json({ id: str })));
   assert.equal(result.verdict, 'bridged');
-  assert.deepEqual(result.items.map((item) => [item.kind, item.title]), [['bridged', 'customerId is now accountId']]);
+  assert.deepEqual(result.items.map((item) => [item.kind, item.severity, item.rule, item.title]), [['bridged', 'warning', 'request-property-renamed', 'customerId is now accountId']]);
+  assert.deepEqual([result.counts.error, result.counts.warning], [0, 1]);
 });
 
 test('the report says "breaks" when old callers lose data, and groups fields of one object', () => {
   const user = json({ login: str, email: str, name: str, url: str });
   const result = report(spec(json({ a: str }), json({ id: str, user })), spec(json({ a: str }), json({ id: str })));
   assert.equal(result.verdict, 'breaks');
-  assert.deepEqual(result.items.map((item) => [item.kind, item.title]), [['lost', 'user: 4 fields are no longer returned']]);
+  assert.deepEqual(result.items.map((item) => [item.kind, item.severity, item.rule, item.title]), [['lost', 'error', 'response-property-removed', 'user: 4 fields are no longer returned']]);
+  assert.equal(result.counts.error, 1);
 });
 
 test('a request field the new version ignores counts as lost, not bridged', () => {

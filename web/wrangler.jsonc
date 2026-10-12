@@ -26,6 +26,8 @@
       ],
       // Watched API descriptions and their kept versions (lib/mender/watch.js).
       "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "743c7ff42511443f9ab0333f783c2f9a" }],
+      // Who still calls an old API version, kept across restarts (migrations/).
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "apimender", "database_id": "54c9bfd1-0ebc-45ef-8a74-843d85cff805", "migrations_dir": "migrations" }],
       // Every hour, check the watched descriptions that were not checked for a day.
       "triggers": { "crons": ["17 * * * *"] },
       "vars": {

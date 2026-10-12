@@ -45,7 +45,8 @@ test('a renamed request field is reported as bridged, with a link to open it on 
     const result = check(dir, { HEAD_SHA: 'abc', REPO: 'acme/quotes', FAIL_ON: 'breaks' });
     assert.equal(result.status, 0);
     assert.match(result.markdown, /### 🟢 `openapi.json`: Breaking changes that Mender can bridge/);
-    assert.match(result.markdown, /\| 🟢 Mender bridges this \| customerId is now accountId \| in requests \|/);
+    assert.match(result.markdown, /\| warning \| `request-property-renamed` \| 🟢 Mender bridges this \| customerId is now accountId \| in requests \|/);
+    assert.match(result.markdown, /\(0 errors, 1 warning, \d+ info\)/);
     assert.match(result.markdown, /check\?before=https%3A%2F%2Fraw\.githubusercontent\.com%2Facme%2Fquotes%2FHEAD%2Fopenapi\.json&after=/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -60,7 +61,7 @@ test('a dropped answer field fails the check when asked to, and only reports oth
     writeFileSync(join(dir, 'openapi.json'), JSON.stringify(changed));
     const strict = check(dir, { FAIL_ON: 'breaks' });
     assert.equal(strict.status, 1);
-    assert.match(strict.markdown, /🔴 Old callers lose this \| total was dropped/);
+    assert.match(strict.markdown, /\| \*\*error\*\* \| `response-property-removed` \| 🔴 Old callers lose this \| total was dropped/);
     assert.equal(check(dir, { FAIL_ON: 'never' }).status, 0);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

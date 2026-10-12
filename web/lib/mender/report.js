@@ -15,6 +15,50 @@ function kindOf(rule) {
   return 'bridged';
 }
 
+// Severity and rule names as engineers know them from breaking-change checkers such as oasdiff:
+// error = old callers break, warning = breaking but bridged (or worth a look), info = nothing breaks.
+export const SEVERITIES = ['error', 'warning', 'info'];
+
+function ruleIdOf(rule) {
+  const where = rule.in === 'query' ? 'query-param' : rule.in === 'response' ? 'response-property' : rule.in === 'request' ? 'request-property' : 'property';
+  switch (rule.op) {
+    case 'endpoint_removed': return 'endpoint-removed';
+    case 'endpoint_moved': return 'endpoint-path-changed';
+    case 'remove': return `${where}-removed`;
+    case 'rename': return `${where}-renamed`;
+    case 'add': return rule.in === 'response' ? 'response-property-added' : `${where}-added-with-default`;
+    case 'scale': return `${where}-unit-changed`;
+    case 'time': return `${where}-format-changed`;
+    case 'type': return `${where}-type-changed`;
+    case 'case':
+    case 'values': return `${where}-enum-values-changed`;
+    default: return `${where}-changed`;
+  }
+}
+
+function severityOf(rule, kind) {
+  if (kind === 'lost' || kind === 'gone') return 'error';
+  if (rule.op === 'add' && rule.in === 'response') return 'info';
+  return 'warning';
+}
+
+// What each kind of note means: [rule name, severity].
+const NOTE_RULES = {
+  needs_default: ['request-property-became-required', 'error'],
+  type_changed: ['property-type-changed', 'error'],
+  list_shape: ['body-shape-changed', 'error'],
+  path_changed: ['endpoint-path-changed', 'error'],
+  content_type: ['request-content-type-changed', 'error'],
+  enum_removed: ['enum-value-removed', 'error'],
+  enum_added: ['enum-value-added', 'warning'],
+  one_of: ['other-shape-changed', 'warning'],
+  required_swap: ['required-property-swapped', 'warning'],
+  weak_match: ['rename-guessed', 'warning'],
+  no_schema: ['schema-missing', 'info'],
+};
+
+const bySeverity = (a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity);
+
 const endpointsOf = (rule) => (rule.endpoint === undefined ? [] : [].concat(rule.endpoint));
 
 function scopeOf(rule) {
@@ -61,10 +105,10 @@ function group(rules) {
       const what = `${fields.length} fields are no longer ${item.rules[0].in === 'request' ? 'accepted' : 'returned'}`;
       const named = `${fields.slice(0, 2).join(', ')} and ${fields.length - 2} more fields are no longer ${item.rules[0].in === 'request' ? 'accepted' : 'returned'}`;
       const title = item.parent === '*' ? named : `${item.parent}: ${what}`;
-      return { kind: item.kind, title, scope: item.scope, fields, rules: item.rules };
+      return { kind: item.kind, severity: severityOf(item.rules[0], item.kind), rule: ruleIdOf(item.rules[0]), title, scope: item.scope, fields, rules: item.rules };
     }
-    return item.rules.map((rule) => ({ kind: item.kind, title: titleOf(rule), scope: item.scope, fields: [rule.old ?? rule.new ?? rule.path].filter(Boolean), rules: [rule] }));
-  }).flat();
+    return item.rules.map((rule) => ({ kind: item.kind, severity: severityOf(rule, item.kind), rule: ruleIdOf(rule), title: titleOf(rule), scope: item.scope, fields: [rule.old ?? rule.new ?? rule.path].filter(Boolean), rules: [rule] }));
+  }).flat().sort(bySeverity);
 }
 
 // summarize({ found, proof }) → { verdict, headline, detail, items, attention, counts }
@@ -73,13 +117,18 @@ export function summarize({ found, proof }) {
   const items = group(found.rules);
   const attention = found.notes
     .filter((note) => note.code !== 'removed') // already listed as a change
-    .map((note) => ({ ...note, blocking: BLOCKING.has(note.code) }))
-    .sort((a, b) => Number(b.blocking) - Number(a.blocking));
+    .map((note) => {
+      const [rule, severity] = NOTE_RULES[note.code] ?? ['note', 'info'];
+      return { ...note, rule, severity, blocking: BLOCKING.has(note.code) };
+    })
+    .sort(bySeverity);
   const bridged = items.filter((item) => item.kind === 'bridged').length;
   const broken = items.length - bridged + attention.filter((note) => note.blocking).length;
   const statuses = { kept: 0, moved: 0, removed: 0 };
   for (const operation of found.operations ?? []) statuses[operation.status] = (statuses[operation.status] ?? 0) + 1;
-  const counts = { endpoints: (found.operations ?? []).length, ...statuses, changes: items.length, toCheck: attention.length };
+  const levels = { error: 0, warning: 0, info: 0 };
+  for (const entry of [...items, ...attention]) levels[entry.severity] += 1;
+  const counts = { endpoints: (found.operations ?? []).length, ...statuses, changes: items.length, toCheck: attention.length, ...levels };
   const proofFailed = proof && !proof.ok;
 
   if (!items.length && !attention.some((note) => note.blocking)) {

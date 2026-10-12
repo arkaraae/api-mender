@@ -29,6 +29,7 @@ function atBase(path) {
 }
 
 const ICON = { bridged: '🟢 Mender bridges this', lost: '🔴 Old callers lose this', gone: '🔴 Endpoint removed' };
+const LEVEL = { error: '**error**', warning: 'warning', info: 'info' };
 const VERDICT = { safe: '✅', bridged: '🟢', breaks: '🔴' };
 const cell = (text) => String(text ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
 
@@ -50,16 +51,17 @@ for (const path of specs) {
   const proof = proveWithSchemas(oldSpec, newSpec, found.rules);
   const report = summarize({ found, proof });
   if (report.verdict === 'breaks') breaks = true;
-  const lines = [`### ${VERDICT[report.verdict]} \`${path}\`: ${report.headline}`, '', report.detail, ''];
+  const { error, warning, info } = report.counts;
+  const lines = [`### ${VERDICT[report.verdict]} \`${path}\`: ${report.headline}`, '', `${report.detail} (${error} error${error === 1 ? '' : 's'}, ${warning} warning${warning === 1 ? '' : 's'}, ${info} info)`, ''];
   if (report.items.length) {
-    lines.push('| | What changed for old callers | Where |', '|---|---|---|');
-    for (const item of report.items.slice(0, 25)) lines.push(`| ${ICON[item.kind]} | ${cell(item.title)} | ${cell(item.scope)} |`);
-    if (report.items.length > 25) lines.push(`| | …and ${report.items.length - 25} more | |`);
+    lines.push('| Level | Rule | | What changed for old callers | Where |', '|---|---|---|---|---|');
+    for (const item of report.items.slice(0, 25)) lines.push(`| ${LEVEL[item.severity]} | \`${item.rule}\` | ${ICON[item.kind]} | ${cell(item.title)} | ${cell(item.scope)} |`);
+    if (report.items.length > 25) lines.push(`| | | | …and ${report.items.length - 25} more | |`);
     lines.push('');
   }
   if (report.attention.length) {
     lines.push(`<details><summary>${report.attention.length} thing${report.attention.length === 1 ? '' : 's'} worth a look</summary>`, '');
-    for (const note of report.attention.slice(0, 30)) lines.push(`- ${note.blocking ? '🔴 ' : ''}${note.message}`);
+    for (const note of report.attention.slice(0, 30)) lines.push(`- ${LEVEL[note.severity]} \`${note.rule}\`: ${note.message}`);
     lines.push('', '</details>', '');
   }
   lines.push(`Checked ${report.counts.endpoints} endpoint${report.counts.endpoints === 1 ? '' : 's'}; proof on ${proof.samples} generated sample${proof.samples === 1 ? '' : 's'} ${proof.ok ? 'passed' : 'did not pass'}.`);

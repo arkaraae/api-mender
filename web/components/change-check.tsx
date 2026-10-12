@@ -10,15 +10,17 @@ import { proveWithSchemas, rulesFromOpenApi } from '@/lib/mender/openapi.js';
 import { changelog } from '@/lib/mender/rules.js';
 import { fixConsumer } from '@/lib/mender/codefix.js';
 import { pathsOf, summarize, touches } from '@/lib/mender/report.js';
+import { generateClient } from '@/lib/mender/sdk.js';
 import { quotesOpenApi } from '@/lib/quotes-testbed';
 
 type Spec = { paths?: Record<string, unknown>; info?: { title?: string; version?: string } };
 type Rule = Record<string, unknown>;
 type Found = { rules: Rule[]; notes: { code: string; message: string }[]; operations: { status: string }[] };
 type Proof = { ok: boolean; samples: number; checks: { endpoint: string; failures: { path: string; message: string }[] }[] };
-type Item = { kind: 'bridged' | 'lost' | 'gone'; title: string; scope: string; fields: string[] };
-type Note = { code: string; message: string; blocking: boolean };
-type Report = { verdict: 'safe' | 'bridged' | 'breaks'; headline: string; detail: string; items: Item[]; attention: Note[]; counts: { endpoints: number; changes: number; toCheck: number } };
+type Severity = 'error' | 'warning' | 'info';
+type Item = { kind: 'bridged' | 'lost' | 'gone'; severity: Severity; rule: string; title: string; scope: string; fields: string[] };
+type Note = { code: string; message: string; blocking: boolean; severity: Severity; rule: string };
+type Report = { verdict: 'safe' | 'bridged' | 'breaks'; headline: string; detail: string; items: Item[]; attention: Note[]; counts: { endpoints: number; changes: number; toCheck: number; error: number; warning: number; info: number } };
 type Result = { found: Found; proof: Proof | null; report: Report; before: Spec; after: Spec };
 type Source = { url: string; text: string; paste: boolean };
 type Phase = 'idle' | 'reading' | 'comparing' | 'proving' | 'done';
@@ -139,6 +141,7 @@ export default function ChangeCheck() {
   const [door, setDoor] = useState<'call' | 'run'>('call');
   const [code, setCode] = useState(EXAMPLES[0].code);
   const [codeCheck, setCodeCheck] = useState<CodeCheck | null>(null);
+  const [mock, setMock] = useState<{ base?: string; example?: string; error?: string; busy?: boolean } | null>(null);
 
   function choose(id: string) {
     const picked = EXAMPLES.find((entry) => entry.id === id);
@@ -154,6 +157,7 @@ export default function ChangeCheck() {
 
   async function run(oldSource: Source = before, newSource: Source = after) {
     setProblem('');
+    setMock(null);
     setResult(null);
     setCodeCheck(null);
     setShowAll(false);
@@ -192,6 +196,30 @@ export default function ChangeCheck() {
     // Runs once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A test server for the new version: answers like that version would, before it exists.
+  async function startMock() {
+    if (!result) return;
+    setMock({ busy: true });
+    const response = await fetch('/api/mender/mock', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result.after) });
+    const body = (await response.json().catch(() => ({}))) as { base?: string; error?: string };
+    if (!response.ok || !body.base) { setMock({ error: body.error || 'The test server could not be created.' }); return; }
+    const [path, item] = Object.entries(result.after.paths ?? {})[0] ?? ['/', {}];
+    const method = ['get', 'post', 'put', 'patch', 'delete'].find((m) => (item as Record<string, unknown>)?.[m]) ?? 'get';
+    const address = `${body.base}${path.replace(/\{[^}]+\}/g, 'example')}`;
+    setMock({ base: body.base, example: method === 'get' ? `curl ${address}` : `curl -X ${method.toUpperCase()} ${address} -H 'content-type: application/json' -d '{}'` });
+  }
+
+  // A TypeScript client for the new version, generated in the browser and saved as a file.
+  function downloadClient() {
+    if (!result) return;
+    const name = (result.after.info?.title ?? 'api').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'api';
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([generateClient(result.after)], { type: 'text/plain' }));
+    link.download = `${name}-client.ts`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
 
   function watchIt() {
     window.location.href = `/watch?url=${encodeURIComponent(new URL(after.url.trim(), window.location.href).href)}`;
@@ -259,7 +287,10 @@ export default function ChangeCheck() {
 
           <section className="check-stats" aria-label="Summary">
             <div><strong>{report.counts.endpoints}</strong><span>endpoints compared</span></div>
-            <div><strong>{report.counts.changes}</strong><span>changes that affect old callers</span></div>
+            <div>
+              <strong className="check-levels"><span className="level-error">{report.counts.error}</span> · <span className="level-warning">{report.counts.warning}</span> · <span className="level-info">{report.counts.info}</span></strong>
+              <span>errors · warnings · info</span>
+            </div>
             <div><strong>{result.proof ? (result.proof.ok ? 'Yes' : 'No') : '…'}</strong><span>{result.proof ? `proof on ${result.proof.samples} samples` : 'proving'}</span></div>
           </section>
 
@@ -271,6 +302,7 @@ export default function ChangeCheck() {
                   <li key={`${item.title}-${index}`} className={`change-${item.kind}`}>
                     <span className="change-badge">{KIND_LABEL[item.kind]}</span>
                     <div>
+                      <p className="change-rule"><span className={`severity severity-${item.severity}`}>{item.severity}</span><code>{item.rule}</code></p>
                       <p className="change-title">{item.title}</p>
                       {item.scope && <p className="change-scope">{item.scope}</p>}
                       {item.fields.length > 1 && <details><summary>Show the fields</summary><p className="change-fields">{item.fields.join(', ')}</p></details>}
@@ -286,7 +318,7 @@ export default function ChangeCheck() {
             <details className="check-card check-attention">
               <summary>{report.attention.length} thing{report.attention.length === 1 ? '' : 's'} worth a look{report.attention.some((note) => note.blocking) ? ', including changes nothing can translate' : ''}</summary>
               <ul>
-                {report.attention.map((note, index) => <li key={index} className={note.blocking ? 'blocking' : ''}>{note.message}</li>)}
+                {report.attention.map((note, index) => <li key={index} className={note.blocking ? 'blocking' : ''}><span className={`severity severity-${note.severity}`}>{note.severity}</span> <code className="note-rule">{note.rule}</code> {note.message}</li>)}
               </ul>
             </details>
           )}
@@ -301,6 +333,20 @@ export default function ChangeCheck() {
             {door === 'call' && (
               <div className="check-door">
                 <p className="check-hint">Paste the code that calls this API. Mender points to every line the change touches and rewrites what it can safely change by itself.</p>
+                <p className="check-hint">Starting fresh? <button type="button" className="check-link" onClick={downloadClient}>Download a TypeScript client for the new version</button>: one typed function per endpoint.</p>
+                <div className="check-mock">
+                  <p className="check-hint">Build against the new version before it ships: <button type="button" className="check-link" disabled={mock?.busy} onClick={() => void startMock()}>{mock?.busy ? 'Creating…' : 'create a test server'}</button>. It answers every endpoint with sample data and rejects requests that don't match, like the real one would. It lasts 30 days.</p>
+                  {mock?.error && <p className="check-problem" role="alert">{mock.error}</p>}
+                  {mock?.base && (
+                    <>
+                      <div className="check-block-head"><span>Test server</span><button type="button" className="check-link" onClick={(event) => copy(mock.base ?? '', event.currentTarget)}>Copy</button></div>
+                      <pre>{mock.base}</pre>
+                      <div className="check-block-head"><span>Try it</span><button type="button" className="check-link" onClick={(event) => copy(mock.example ?? '', event.currentTarget)}>Copy</button></div>
+                      <pre>{mock.example}</pre>
+                    </>
+                  )}
+                </div>
+
                 {!after.paste && after.url.trim() && !after.url.includes('/api/mender/watch/') && (
                   <p className="check-hint">Want to know when it changes again? <button type="button" className="check-link" onClick={watchIt}>Watch this API</button> and Mender checks it every day.</p>
                 )}
@@ -336,6 +382,7 @@ export default function ChangeCheck() {
                 <pre className="check-scroll">{rulesText}</pre>
                 <div className="check-block-head"><span>A changelog your customers can read</span><button type="button" className="check-link" onClick={(event) => copy(changes, event.currentTarget)}>Copy</button></div>
                 <pre className="check-scroll">{changes}</pre>
+                <p className="check-hint">Give your customers a head start: <button type="button" className="check-link" onClick={downloadClient}>download a TypeScript client for the new version</button>, one typed function per endpoint. It is a starting point, not a full SDK.</p>
                 <p className="check-hint">See it working on a real API: <a href="/mender">our own Quote APIs run behind the Mender gateway</a>.</p>
               </div>
             )}

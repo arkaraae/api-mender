@@ -10,7 +10,7 @@ type Api = {
   check?: { request: { method: string; path: string; body: unknown }; direct: Probe; throughMender: Probe; keptWorking: boolean };
 };
 type Caller = { api: string; caller: string; version: string; endpoint: string; outcome: string; calls: number; lastAt: string };
-type Status = { apis: Api[]; oldVersionCalls: Caller[] };
+type Status = { apis: Api[]; oldVersionCalls: Caller[]; callsSaved?: boolean };
 
 const css = `
 .mender-page{max-width:1040px;margin:0 auto;padding:40px 20px 72px;color:var(--text,#13283b);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -129,7 +129,7 @@ export default function MenderPage() {
         <section className="card">
           <div className="head"><h2>Who still calls an old version</h2><span className="tag">{status.oldVersionCalls.length} caller{status.oldVersionCalls.length === 1 ? '' : 's'}</span></div>
           {status.oldVersionCalls.length === 0
-            ? <p className="muted">No old-version calls have come through the gateway since this server started.</p>
+            ? <p className="muted">{status.callsSaved ? 'No old-version calls have come through the gateway yet.' : 'No old-version calls have come through the gateway since this server started.'}</p>
             : (
               <div className="scroll">
                 <table>
@@ -140,7 +140,7 @@ export default function MenderPage() {
                 </table>
               </div>
             )}
-          <p className="muted">Counts are kept in memory on this server. Callers name themselves with an <code>x-consumer</code> header.</p>
+          <p className="muted">{status.callsSaved ? 'Every call through the gateway is saved, so this list keeps growing until callers have moved.' : 'Counts are kept in memory on this server.'} Callers name themselves with an <code>x-consumer</code> header.</p>
         </section>
       )}
     </main>

@@ -2,8 +2,9 @@
 //
 // The gateway calls the site's own route handlers directly instead of going back out over the
 // network, so it works the same on Cloudflare Workers, in `vinext dev`, and in preview builds.
+import { env, waitUntil } from 'cloudflare:workers';
 import { NextRequest } from 'next/server';
-import { registerApi, serveInProcess } from '@/lib/mender/gateway.js';
+import { registerApi, serveInProcess, setCallLog } from '@/lib/mender/gateway.js';
 import { quotesOpenApi } from '@/lib/quotes-testbed';
 import { GET as managedContract } from '@/app/api/managed/openapi.json/route';
 import { OPTIONS as managedOptions, POST as managedQuotes } from '@/app/api/managed/quotes/route';
@@ -60,4 +61,20 @@ serveInProcess({
   '/api/testbed/quotes': byMethod({ POST: testbedQuotes }),
 });
 
-export { apiNames, check, describe, explain, handle, oldVersionCalls, titleOf } from '@/lib/mender/gateway.js';
+// Old-version calls are saved in D1 when this deployment has it (wrangler.jsonc, env "apimender").
+type CallEntry = { api: string; caller: string; version: string; endpoint: string; outcome: string; lastAt: string };
+const database = env.MENDER_DB;
+if (database) {
+  setCallLog({
+    record: (entry: CallEntry) => database
+      .prepare('INSERT INTO old_version_calls (api, caller, version, endpoint, outcome, calls, first_at, last_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6) ON CONFLICT (api, caller, version, endpoint, outcome) DO UPDATE SET calls = calls + 1, last_at = excluded.last_at')
+      .bind(entry.api, entry.caller, entry.version, entry.endpoint, entry.outcome, entry.lastAt)
+      .run(),
+    list: async () => (await database
+      .prepare('SELECT api, caller, version, endpoint, outcome, calls, first_at AS firstAt, last_at AS lastAt FROM old_version_calls ORDER BY last_at DESC LIMIT 200')
+      .all()).results,
+    defer: waitUntil,
+  });
+}
+
+export { apiNames, callers, callsSaved, check, describe, explain, handle, titleOf } from '@/lib/mender/gateway.js';

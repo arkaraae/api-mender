@@ -1,7 +1,7 @@
 // What Mender knows about each published API: its versions, the rules between them, whether
 // those rules are proven, and who still calls an old version. Add ?check=1 to also send one real
 // old-style request, directly and through the gateway.
-import { apiNames, check, describe, oldVersionCalls, titleOf } from '@/lib/mender-site';
+import { apiNames, callers, callsSaved, check, describe, titleOf } from '@/lib/mender-site';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -14,5 +14,5 @@ export async function GET(request: Request) {
       return { name, title: titleOf(name), error: error instanceof Error ? error.message : String(error) };
     }
   }));
-  return Response.json({ apis, oldVersionCalls: oldVersionCalls() }, { headers: { 'cache-control': 'no-store' } });
+  return Response.json({ apis, oldVersionCalls: await callers(), callsSaved: callsSaved() }, { headers: { 'cache-control': 'no-store' } });
 }
