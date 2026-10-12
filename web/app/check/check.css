@@ -1,0 +1,74 @@
+/* /check and /mender: one column, one main button per step, green for safe, red for breaks. */
+.check-page{max-width:1080px;margin:0 auto;padding:0 24px 80px;display:grid;gap:22px}
+.check-hero{text-align:center;margin:56px auto 18px;max-width:760px}
+.check-hero h1{font-size:clamp(38px,5vw,64px);line-height:1.05;letter-spacing:-3px;font-weight:650;margin:0 0 18px}
+.check-hero .hero-subtitle{margin-bottom:0}
+.check-card{background:#fff;border:1px solid #dcdcdc;border-radius:18px;padding:26px;display:grid;gap:16px}
+.check-card h2{font-size:22px;letter-spacing:-.6px;margin:0;display:flex;align-items:center;gap:12px}
+.check-card-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
+.check-step{width:30px;height:30px;border-radius:50%;background:#171717;color:#fff;display:inline-grid;place-items:center;font-size:14px;flex:none}
+.check-examples{display:flex;flex-wrap:wrap;gap:8px}
+.check-chip{border:1px solid #cfcfcf;background:#fff;border-radius:99px;padding:8px 14px;font-size:13px;cursor:pointer;color:#333}
+.check-chip.selected{border-color:#171717;background:#171717;color:#fff}
+.check-hint{color:#666;font-size:14px;line-height:1.5;margin:0}
+.check-hint a{text-decoration:underline}
+.check-sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.check-source{border:1px solid #e3e3e3;border-radius:14px;padding:16px;display:grid;gap:8px;background:#fafafa}
+.check-source-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.check-source h3{margin:0;font-size:17px}
+.check-source input,.check-source textarea,.check-code{width:100%;border:1px solid #bdbdbd;border-radius:10px;background:#fff;padding:11px 12px;font:13px/1.5 ui-monospace,Menlo,monospace;color:#222}
+.check-source textarea{min-height:150px;resize:vertical}
+.check-code{min-height:190px;resize:vertical}
+.check-link{border:0;background:none;padding:0;color:#0f6f74;font-size:13px;font-weight:700;cursor:pointer;text-decoration:underline;white-space:nowrap}
+.check-actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px}
+.check-phase{color:#555;font-size:14px}
+.check-problem{margin:0;padding:12px 14px;border-radius:10px;background:#fdecea;color:#8f1d16;font-size:14px}
+.check-verdict{display:flex;gap:18px;align-items:flex-start;border-radius:18px;padding:24px 26px;border:1px solid}
+.check-verdict h2{font-size:clamp(24px,3vw,32px);letter-spacing:-1.2px;margin:0 0 6px;line-height:1.15}
+.check-verdict p{margin:0;font-size:16px;line-height:1.5}
+.check-verdict-mark{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:24px;font-weight:800;flex:none;color:#fff}
+.verdict-safe{background:#ecf8f1;border-color:#9fd4b5;color:#164b2c}.verdict-safe .check-verdict-mark{background:#1f8a4c}
+.verdict-bridged{background:#e9f7f7;border-color:#8fcfcf;color:#0d4547}.verdict-bridged .check-verdict-mark{background:#0f7f84}
+.verdict-breaks{background:#fdf0ee;border-color:#ebb3ab;color:#6e1a12}.verdict-breaks .check-verdict-mark{background:#c0392b}
+.check-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.check-stats div{background:#fff;border:1px solid #e1e1e1;border-radius:14px;padding:16px 18px;display:grid;gap:4px}
+.check-stats strong{font-size:30px;letter-spacing:-1px;line-height:1}
+.check-stats span{font-size:13px;color:#666}
+.check-changes,.check-touched,.check-diff,.check-attention ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.check-changes li{display:grid;grid-template-columns:170px minmax(0,1fr);gap:14px;align-items:start;padding:12px 14px;border-radius:12px;border:1px solid #e6e6e6}
+.change-badge{font-size:12px;font-weight:700;border-radius:99px;padding:5px 10px;text-align:center}
+.change-bridged .change-badge{background:#dff3f3;color:#0b5c60}
+.change-lost .change-badge,.change-gone .change-badge{background:#fbe2de;color:#922b1f}
+.change-title{margin:0;font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.change-scope{margin:3px 0 0;font-size:13px;color:#777;overflow-wrap:anywhere}
+.change-fields{font:12px/1.6 ui-monospace,Menlo,monospace;color:#555;margin:6px 0 0;overflow-wrap:anywhere}
+.check-changes details summary{font-size:13px;color:#0f6f74;cursor:pointer;margin-top:4px}
+.check-attention summary{font-size:16px;font-weight:700;cursor:pointer}
+.check-attention li{font-size:14px;line-height:1.5;color:#444;padding-left:14px;border-left:3px solid #e2c27c;overflow-wrap:anywhere}
+.check-attention li.blocking{border-left-color:#c0392b;color:#6e1a12}
+.check-doors{display:inline-flex;border:1px solid #cfcfcf;border-radius:99px;padding:4px;gap:4px;justify-self:start}
+.check-doors button{border:0;background:none;border-radius:99px;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;color:#444}
+.check-doors button.selected{background:#171717;color:#fff}
+.check-door{display:grid;gap:14px}
+.check-ok{margin:0;font-size:15px;color:#1f6b3e;font-weight:700}
+.check-touched li{font-size:14px;line-height:1.5;padding:10px 12px;border-radius:10px;background:#fbefed;overflow-wrap:anywhere}
+.check-touched li.change-bridged{background:#e6f5f5}
+.check-touched code{font-weight:700}
+.check-diff li{display:grid;gap:4px;font:13px/1.5 ui-monospace,Menlo,monospace}
+.diff-line{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#777}
+.check-diff del{background:#fde8e6;color:#8f1d16;text-decoration:none;padding:4px 8px;border-radius:6px;overflow-wrap:anywhere}
+.check-diff ins{background:#e3f6ea;color:#14532d;text-decoration:none;padding:4px 8px;border-radius:6px;overflow-wrap:anywhere}
+.check-block-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:14px;font-weight:700}
+.check-page pre{margin:0;background:#f6f7f8;border:1px solid #e3e3e3;border-radius:12px;padding:14px;font:12.5px/1.55 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto}
+.check-code-result{display:grid;gap:12px}
+.marketing-nav nav a[aria-current=page]{font-weight:700;text-decoration:underline}
+@media(max-width:760px){
+  .check-page{padding:0 16px 60px}
+  .check-hero{margin-top:36px}
+  .check-hero h1{letter-spacing:-1.8px}
+  .check-card{padding:18px}
+  .check-sources,.check-stats{grid-template-columns:minmax(0,1fr)}
+  .check-changes li{grid-template-columns:minmax(0,1fr);gap:8px}
+  .change-badge{justify-self:start}
+  .check-verdict{padding:18px}
+}

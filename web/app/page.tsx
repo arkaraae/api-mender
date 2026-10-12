@@ -7,7 +7,7 @@ export default function Home() {
     <AuthCallbackRedirect />
     <header className="marketing-nav">
       <a className="site-brand" href="/" aria-label="API Mender home"><BrandLogo /></a>
-      <nav aria-label="Main navigation"><a href="#product">Product</a><a href="#how-it-works">How it works</a><a href="#coverage">Coverage</a></nav>
+      <nav aria-label="Main navigation"><a href="/check">Check a change</a><a href="#product">Product</a><a href="#how-it-works">How it works</a><a href="#coverage">Coverage</a></nav>
       <div className="marketing-nav-actions"><a className="nav-text-link" href="/demo">View demo</a><a className="nav-text-link" href="/live">Log in</a><a className="pill-button pill-dark nav-cta" href="/live">Get started <span aria-hidden="true">↗</span></a></div>
     </header>
     <section className="marketing-hero" aria-labelledby="hero-title">

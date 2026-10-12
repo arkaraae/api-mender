@@ -95,10 +95,11 @@ export const codefix = [
       { op: 'scale', old: 'amount', new: 'total.amount_cents', factor: 100, in: 'request' },
       { op: 'add', new: 'region', in: 'request' },
       { op: 'rename', old: 'name', new: 'full_name', in: 'response' },
+      { op: 'remove', old: 'hub_url', in: 'response' },
     ];
     const result = fix(TEAM_CLIENT, rules);
     assert(result.changes.length === 1, 'the plain rename should still be applied');
-    for (const fragment of ['amount is now total.amount_cents, multiplied by 100', 'Send the new field region', 'The answer changed: name is now full_name']) {
+    for (const fragment of ['amount is now total.amount_cents, multiplied by 100', 'Send the new field region', 'The answer changed: name is now full_name', 'The answer changed: hub_url is no longer returned']) {
       assert(result.needsDecision.includes(fragment), `missing "${fragment}" in: ${result.needsDecision}`);
     }
   }],

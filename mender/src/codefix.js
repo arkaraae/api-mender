@@ -110,6 +110,7 @@ function describe(rule) {
   if (rule.op === 'values') return `${rule.new} uses new values (${Object.entries(rule.map).map(([a, b]) => `${a} → ${b}`).join(', ')})`;
   if (rule.op === 'type') return `${rule.old} (${rule.oldType}) is now ${rule.new} (${rule.newType})`;
   if (rule.op === 'case') return `${rule.old} is now ${rule.new} in ${rule.newCase} case`;
+  if (rule.op === 'remove') return `${rule.old} is no longer ${rule.in === 'request' ? 'accepted' : 'returned'}`;
   return `${rule.old} is now ${rule.new}`;
 }
 
