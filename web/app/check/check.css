@@ -81,3 +81,19 @@
 .watch-versions li div{display:grid;gap:3px}
 .watch-versions li span{font-size:13px;color:#666}
 .watch-versions .pill-button{min-height:40px;padding:0 18px}
+.pricing-plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.pricing-plan{border:1px solid #d6d6d6;border-radius:20px;padding:28px;display:grid;gap:14px;align-content:start;background:#fff}
+.pricing-plan-dark{background:#171717;color:#fff;border-color:#171717}
+.pricing-plan-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pricing-plan h2{margin:0;font-size:24px;letter-spacing:-.6px}
+.pricing-note{font-size:12px;font-weight:700;border-radius:99px;padding:5px 10px;background:#e2f5ec;color:#147651}
+.pricing-price{margin:0}
+.pricing-price strong{font-size:48px;letter-spacing:-2px;line-height:1}
+.pricing-price span{font-size:14px;color:inherit;opacity:.7}
+.pricing-who{margin:0;font-weight:700}
+.pricing-plan ul{margin:0;padding-left:20px;display:grid;gap:8px;font-size:15px;line-height:1.45}
+.pricing-plan .pill-button{justify-self:start;margin-top:6px}
+.pricing-questions{margin:0;display:grid;gap:16px}
+.pricing-questions dt{font-weight:700;margin-bottom:4px}
+.pricing-questions dd{margin:0;color:#555;line-height:1.5}
+@media(max-width:760px){.pricing-plans{grid-template-columns:minmax(0,1fr)}.pricing-plan{padding:22px}}

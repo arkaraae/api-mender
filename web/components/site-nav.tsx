@@ -4,6 +4,7 @@ const LINKS = [
   { href: '/check', label: 'Check a change' },
   { href: '/watch', label: 'Watch an API' },
   { href: '/mender', label: 'Gateway' },
+  { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'Demo' },
 ];
 
