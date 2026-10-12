@@ -32,3 +32,18 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 - `/pricing` lists the plans. `.github/actions/mender-check/` is the free GitHub check: it comments the same plain-words report on pull requests that change an API description (see its README); `tests/github-check.test.mjs` runs it against a throwaway repository.
 - The engine lives in `mender/src/` at the repository root and is copied into `lib/mender/` by `node mender/tools/sync-web.mjs`. `npm test` fails if the copy is out of date and runs every engine suite. `lib/mender/gateway.js` and `lib/mender/report.js` belong to this app; `lib/mender-site.ts` registers the site's APIs with the gateway.
 - `npm run dev` caps the Workers compatibility date at what the installed runtime supports (see `vite.config.ts`); builds and deploys keep the date in `wrangler.jsonc`.
+
+## Publishing to apimender.com
+
+apimender.com is served from its own Cloudflare account, as the Worker `apimender-site`, using the `apimender` environment in `wrangler.jsonc` (its account, the apimender.com and www.apimender.com custom domains, the `MENDER_WATCH` KV namespace and the hourly cron). The default environment stays as it was for the team's Workers Builds, without the watch list.
+
+Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces`.
+
+Each release, from `web/`:
+
+```bash
+CLOUDFLARE_ENV=apimender npm run build
+npx wrangler deploy --config dist/server/wrangler.json
+```
+
+For local development with the watch list, run `CLOUDFLARE_ENV=apimender npm run dev`. Sign-up emails from `/live` need `https://apimender.com/live` in the Supabase Auth redirect URLs.

@@ -10,12 +10,29 @@
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
-  // Watched API descriptions and their kept versions (lib/mender/watch.js).
-  "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "mender-watch-local" }],
-  // Every hour, check the watched descriptions that were not checked for a day.
-  "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC"
+  },
+  "env": {
+    // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
+    // It replaces the pass-through Worker that served apimender.com until now, keeping its domains.
+    "apimender": {
+      "name": "apimender-site",
+      "account_id": "54294ccf89ff59f1769bb8a0fafcda98",
+      "routes": [
+        { "pattern": "apimender.com", "custom_domain": true },
+        { "pattern": "www.apimender.com", "custom_domain": true }
+      ],
+      // Watched API descriptions and their kept versions (lib/mender/watch.js).
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "mender-watch-local" }],
+      // Every hour, check the watched descriptions that were not checked for a day.
+      "triggers": { "crons": ["17 * * * *"] },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "SITE_ORIGIN": "https://apimender.com"
+      }
+    }
   }
 }

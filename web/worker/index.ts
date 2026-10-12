@@ -8,6 +8,6 @@ export default {
     return handler.fetch(request, env, ctx);
   },
   async scheduled(_controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runDue(env.MENDER_WATCH, { origin: env.SITE_ORIGIN ?? 'https://apimender.com' }));
+    if (env.MENDER_WATCH) ctx.waitUntil(runDue(env.MENDER_WATCH, { origin: env.SITE_ORIGIN ?? 'https://apimender.com' }));
   },
 };
