@@ -4,12 +4,16 @@
   "account_id": "7612d5858e401cec8307c5e25c486494",
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "vinext/server/fetch-handler",
+  "main": "./worker/index.ts",
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
     "binding": "ASSETS"
   },
+  // Watched API descriptions and their kept versions (lib/mender/watch.js).
+  "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "mender-watch-local" }],
+  // Every hour, check the watched descriptions that were not checked for a day.
+  "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC"

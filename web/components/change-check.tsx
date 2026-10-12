@@ -4,7 +4,7 @@
 // whether old callers can be kept working, and the fix for a caller's code. Nothing is uploaded;
 // descriptions on other sites are read through /api/mender/fetch only when the browser can't.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import yaml from 'js-yaml';
 import { proveWithSchemas, rulesFromOpenApi } from '@/lib/mender/openapi.js';
 import { changelog } from '@/lib/mender/rules.js';
@@ -152,14 +152,14 @@ export default function ChangeCheck() {
     setProblem('');
   }
 
-  async function run() {
+  async function run(oldSource: Source = before, newSource: Source = after) {
     setProblem('');
     setResult(null);
     setCodeCheck(null);
     setShowAll(false);
     try {
       setPhase('reading');
-      const [oldSpec, newSpec] = await Promise.all([read('Before', before), read('After', after)]);
+      const [oldSpec, newSpec] = await Promise.all([read('Before', oldSource), read('After', newSource)]);
       setPhase('comparing');
       await pause();
       const found = rulesFromOpenApi(oldSpec, newSpec) as Found;
@@ -173,6 +173,28 @@ export default function ChangeCheck() {
       setProblem(error instanceof Error ? error.message : String(error));
       setPhase('idle');
     }
+  }
+
+  // /check?before=…&after=… opens with those two addresses and checks them right away
+  // (the watch page links here for each change it saw).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const first = params.get('before');
+    const second = params.get('after');
+    if (!first || !second) return;
+    const oldSource = { url: first, text: '', paste: false };
+    const newSource = { url: second, text: '', paste: false };
+    setExample('own');
+    setBefore(oldSource);
+    setAfter(newSource);
+    setCode('');
+    void run(oldSource, newSource);
+    // Runs once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function watchIt() {
+    window.location.href = `/watch?url=${encodeURIComponent(new URL(after.url.trim(), window.location.href).href)}`;
   }
 
   function checkCode() {
@@ -214,7 +236,7 @@ export default function ChangeCheck() {
           <SourceBox label="After" hint="The new version." value={after} onChange={setAfter} />
         </div>
         <div className="check-actions">
-          <button type="button" className="pill-button pill-dark" disabled={busy} onClick={() => void run()}>{busy ? 'Checking…' : 'Check the change'}</button>
+          <button type="button" className="pill-button pill-dark" disabled={busy} onClick={() => void run(before, after)}>{busy ? 'Checking…' : 'Check the change'}</button>
           <span className="check-phase" aria-live="polite">
             {phase === 'reading' && 'Reading both versions…'}
             {phase === 'comparing' && 'Comparing every endpoint…'}
@@ -279,6 +301,9 @@ export default function ChangeCheck() {
             {door === 'call' && (
               <div className="check-door">
                 <p className="check-hint">Paste the code that calls this API. Mender points to every line the change touches and rewrites what it can safely change by itself.</p>
+                {!after.paste && after.url.trim() && !after.url.includes('/api/mender/watch/') && (
+                  <p className="check-hint">Want to know when it changes again? <button type="button" className="check-link" onClick={watchIt}>Watch this API</button> and Mender checks it every day.</p>
+                )}
                 <textarea aria-label="Your code" className="check-code" spellCheck={false} value={code} onChange={(event) => { setCode(event.target.value); setCodeCheck(null); }} placeholder="Paste JavaScript or TypeScript that calls the API" />
                 <div className="check-actions"><button type="button" className="pill-button pill-dark" disabled={!code.trim()} onClick={checkCode}>Check my code</button></div>
                 {codeCheck && (

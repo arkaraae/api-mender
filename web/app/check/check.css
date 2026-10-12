@@ -72,3 +72,12 @@
   .change-badge{justify-self:start}
   .check-verdict{padding:18px}
 }
+.check-page-top{padding-top:32px}
+.check-field{display:grid;gap:6px;font-size:14px;font-weight:700;color:#333}
+.check-field input{width:100%;border:1px solid #bdbdbd;border-radius:10px;background:#fff;padding:11px 12px;font:13px/1.5 ui-monospace,Menlo,monospace;color:#222;font-weight:400}
+.watch-url{font-family:ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.watch-versions{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.watch-versions li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid #e3e3e3;border-radius:12px}
+.watch-versions li div{display:grid;gap:3px}
+.watch-versions li span{font-size:13px;color:#666}
+.watch-versions .pill-button{min-height:40px;padding:0 18px}
