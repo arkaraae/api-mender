@@ -75,10 +75,18 @@ export function publicView(watch) {
 }
 
 // createWatch(kv, { url, webhook }) → the new watch, with its first copy stored.
-export async function createWatch(kv, input, { now = Date.now(), fetcher = fetch } = {}) {
+// beforeStoring() runs once the address is known to serve a description, and may throw to refuse it.
+/**
+ * @param {any} kv
+ * @param {any} input
+ * @param {{ now?: number, fetcher?: typeof fetch, beforeStoring?: () => Promise<void> }} [options]
+ */
+export async function createWatch(kv, input, options = {}) {
+  const { now = Date.now(), fetcher = fetch, beforeStoring } = options;
   const url = publicHttps(input?.url, 'API description');
   const webhook = input?.webhook ? publicHttps(input.webhook, 'webhook') : null;
   const got = await download(url.href, null, fetcher);
+  if (beforeStoring) await beforeStoring();
   const id = newId();
   const watch = {
     id,
@@ -101,6 +109,15 @@ export async function createWatch(kv, input, { now = Date.now(), fetcher = fetch
 
 export async function readWatch(kv, id) {
   return validId(id) ? kv.get(`watch:${id}`, 'json') : null;
+}
+
+// Stops a watch: nothing more is checked or sent, and every kept copy is removed.
+export async function deleteWatch(kv, id) {
+  const watch = await readWatch(kv, id);
+  if (!watch) return false;
+  for (const { n } of watch.versions) await kv.delete(`snap:${id}:${n}`);
+  await kv.delete(`watch:${id}`);
+  return true;
 }
 
 export async function readSnapshot(kv, id, n) {

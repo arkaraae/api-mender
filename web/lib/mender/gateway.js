@@ -112,6 +112,10 @@ export const forget = () => cache.clear();
 
 // ---------- who still calls an old version ----------
 
+// Callers name themselves with an X-Consumer header, and the names are shown on the public
+// /mender page, so only short plain names are kept; anything else is saved as "unnamed".
+export const callerName = (raw) => (!raw ? 'anonymous' : /^[A-Za-z0-9][A-Za-z0-9._@-]{0,47}$/.test(raw) ? raw : 'unnamed');
+
 // Counted in memory, and also saved through a call log when the site gives one:
 // { record(entry) → Promise, list() → Promise<entries>, defer?(promise) }.
 const calls = new Map();
@@ -197,7 +201,7 @@ export async function handle(request, version, segments) {
     latest: api.latest,
     adapters: api.steps.map((step) => compileRules({ from: step.from, to: step.to, rules: step.rules })),
     version: () => pinned,
-    identify: (incoming) => incoming.headers.get('x-consumer') || 'anonymous',
+    identify: (incoming) => callerName(incoming.headers.get('x-consumer')),
     onCall: (event) => { did = event.outcome.replaceAll('_', '-'); count(name, event); },
   });
   return answerWith(await gateway(target), did);

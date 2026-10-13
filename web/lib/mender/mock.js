@@ -3,14 +3,18 @@
 // from the schema, and turns away requests that don't match the description with the problems
 // listed. Callers can build against a new version before it exists.
 //
-// Descriptions are kept for 30 days in anything with the Workers KV methods.
+// Descriptions are kept for 14 days in anything with the Workers KV methods, once per distinct
+// description: a test server is a pointer to it, so the same example used by many people is
+// stored once.
 
 import yaml from 'js-yaml';
 import { operationsOf, sampleOf, validate } from './openapi.js';
 import { newId } from './watch.js';
 
 const MAX_BYTES = 15 * 1024 * 1024;
-const KEEP_SECONDS = 30 * 24 * 60 * 60;
+const DAY_SECONDS = 24 * 60 * 60;
+const KEEP_SECONDS = 14 * DAY_SECONDS;
+const SPEC_KEY = /^spec:[0-9a-f]{64}$/;
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
@@ -39,27 +43,50 @@ function routesOf(spec) {
     .sort((a, b) => a.params - b.params);
 }
 
+// Parsed descriptions, by storage key, so a busy test server isn't read and parsed on every call.
 const parsed = new Map();
 
-function load(id, text) {
-  const hit = parsed.get(id);
-  if (hit) return hit;
+function load(key, text) {
   const spec = parseDescription(text);
   const value = { spec, routes: routesOf(spec) };
   if (parsed.size >= 8) parsed.delete(parsed.keys().next().value);
-  parsed.set(id, value);
+  parsed.set(key, value);
   return value;
 }
 
-// createMock(kv, text) → { id, title, version, endpoints }
-export async function createMock(kv, text) {
-  if (new TextEncoder().encode(String(text ?? '')).byteLength > MAX_BYTES) throw new Error('The description is larger than 15 MB.');
-  const spec = parseDescription(text);
+async function sha256(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// createMock(kv, text, { beforeStoring }) → { id, title, version, endpoints }.
+// beforeStoring({ newBytes }) runs once the description is known to be good, and may throw to
+// refuse it; newBytes is 0 when the same description is already stored.
+/**
+ * @param {any} kv
+ * @param {string} text
+ * @param {{ now?: number, beforeStoring?: (cost: { newBytes: number }) => Promise<void> }} [options]
+ */
+export async function createMock(kv, text, options = {}) {
+  const { beforeStoring, now = Date.now() } = options;
+  const source = String(text ?? '');
+  const bytes = new TextEncoder().encode(source);
+  if (bytes.byteLength > MAX_BYTES) throw new Error('The description is larger than 15 MB.');
+  const spec = parseDescription(source);
   const endpoints = operationsOf(spec).size;
   if (!endpoints) throw new Error('The description has no endpoints.');
+  const key = `spec:${await sha256(bytes)}`;
+  // Listing shows a key's metadata without downloading the description.
+  const stored = (await kv.list({ prefix: key, limit: 1 })).keys.find((entry) => entry.name === key);
+  if (beforeStoring) await beforeStoring({ newBytes: stored ? 0 : bytes.byteLength });
+  // The description outlives every test server pointing at it: it is stored again (same key,
+  // no more room) when the copy is more than a day old.
+  if (!stored || now - (stored.metadata?.storedAt ?? 0) > DAY_SECONDS * 1000) {
+    await kv.put(key, source, { expirationTtl: KEEP_SECONDS + DAY_SECONDS, metadata: { storedAt: now } });
+  }
   const id = newId();
   const label = { title: spec.info?.title ?? null, version: spec.info?.version ?? null };
-  await kv.put(`mock:${id}`, String(text), { expirationTtl: KEEP_SECONDS, metadata: label });
+  await kv.put(`mock:${id}`, key, { expirationTtl: KEEP_SECONDS, metadata: label });
   return { id, ...label, endpoints };
 }
 
@@ -76,11 +103,18 @@ function exampleOf(spec, op) {
 // answerMock(kv, id, request, path) → the test server's answer for `path` (the part after /mock/<id>).
 export async function answerMock(kv, id, request, path) {
   if (!/^[A-Za-z0-9_-]{16,32}$/.test(String(id))) return answer(404, { error: 'There is no test server at this address.' });
-  const text = await kv.get(`mock:${id}`, 'text');
-  if (text === null) return answer(404, { error: 'This test server has expired (they last 30 days) or never existed.' });
+  const expired = () => answer(404, { error: 'This test server has expired (they last 14 days) or never existed.' });
+  const pointer = await kv.get(`mock:${id}`, 'text');
+  if (pointer === null) return expired();
   if (request.method === 'OPTIONS') return answer(204);
-  let loaded;
-  try { loaded = load(id, text); } catch (error) { return answer(500, { error: `The stored description can't be read: ${error.message}` }); }
+  // Test servers made before descriptions were shared hold the description itself.
+  const key = SPEC_KEY.test(pointer) ? pointer : `mock:${id}`;
+  let loaded = parsed.get(key);
+  if (!loaded) {
+    const text = key === pointer ? await kv.get(key, 'text') : pointer;
+    if (text === null) return expired();
+    try { loaded = load(key, text); } catch (error) { return answer(500, { error: `The stored description can't be read: ${error.message}` }); }
+  }
   const { spec, routes } = loaded;
   const route = routes.find((r) => r.op.method === request.method && r.pattern.test(path));
   if (!route) {

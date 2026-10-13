@@ -1,7 +1,7 @@
 # API Mender: where things stand
 
 Read this first when picking the project up again, in a new Claude Code session or as a new
-teammate. Last updated 2026-10-12.
+teammate. Last updated 2026-10-13.
 
 ## What is live
 
@@ -11,9 +11,9 @@ https://apimender.com runs from the `web/` app on Kane's Cloudflare account (Wor
 | Page | What it does |
 | --- | --- |
 | `/check` | Compare two API versions: verdict, every change with an error/warning/info level, the lines a caller's code touches and the fix, a TypeScript client, and a test server for the new version. |
-| `/watch` | Watch an API description; checked every hour for ones not checked in a day; Slack or Discord alerts. |
+| `/watch` | Watch an API description; checked every hour for ones not checked in a day; Slack or Discord alerts; "Stop watching" removes it. |
 | `/mender` | The gateway: old callers keep working (`/mender/v1/api/...`), with every old-version call saved. |
-| `/pricing` | Free for developers who call APIs; $19 per API per month for API companies (free in beta). |
+| `/pricing` | Free; Pro $28.98 per API per month (free in beta); Enterprise with a "Contact sales" form. |
 | `/`, `/demo`, `/live` | The team's pages (arkaraae, Jingyi). |
 
 The GitHub check (`.github/actions/mender-check`) comments the same report on pull requests.
@@ -49,7 +49,25 @@ Roll back: `npx wrangler versions list --env apimender`, then
 
 Cloudflare resources (account 54294ccf…): KV `MENDER_WATCH` (743c7ff4…), D1 `apimender`
 (54c9bfd1…, apply new files in `web/migrations/` with
-`npx wrangler d1 migrations apply apimender --remote --env apimender`), hourly cron.
+`npx wrangler d1 migrations apply apimender --remote --env apimender` before publishing), hourly cron.
+
+Edge cases against any copy of the site (about 70 checks, creates one watch and two test servers):
+
+```bash
+cd web && node scripts/edge-cases.mjs https://apimender.com
+```
+
+Daily limits (`web/lib/mender/limits.js`) keep watches and test servers inside the free plan's
+1,000 storage saves a day: per visitor and site-wide, counted in D1, reset at midnight UTC.
+
+"Contact sales" requests are saved in D1. Read them:
+
+```bash
+cd web && npx wrangler d1 execute apimender --remote --env apimender --command "SELECT * FROM sales_requests ORDER BY id DESC"
+```
+
+To also get them in Slack or Discord: `npx wrangler secret put SALES_WEBHOOK --env apimender`
+and paste the channel's incoming-webhook address.
 
 ## Waiting on people
 
@@ -61,6 +79,9 @@ Cloudflare resources (account 54294ccf…): KV `MENDER_WATCH` (743c7ff4…), D1 
 
 ## Next, if there is time
 
+- Redesign (3D hero, motion, cursor-follow): plan agreed with Kane on 2026-10-13, not built yet.
+- Callers on `/mender` name themselves (X-Consumer header). Names are limited to short plain
+  text, but anyone can still type any plain name. Real caller identity needs API keys.
 - "Which of my apps are affected?": use REA (github.com/morluto/rea) on apps the user owns to
   list the endpoints a shipped app calls, and match them with the changes. Never on other
   companies' software: REA's own rules forbid it.

@@ -81,13 +81,13 @@
 .watch-versions li div{display:grid;gap:3px}
 .watch-versions li span{font-size:13px;color:#666}
 .watch-versions .pill-button{min-height:40px;padding:0 18px}
-.pricing-plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.pricing-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
 .pricing-plan{border:1px solid #d6d6d6;border-radius:20px;padding:28px;display:grid;gap:14px;align-content:start;background:#fff}
 .pricing-plan-dark{background:#171717;color:#fff;border-color:#171717}
 .pricing-plan-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pricing-plan h2{margin:0;font-size:24px;letter-spacing:-.6px}
 .pricing-note{font-size:12px;font-weight:700;border-radius:99px;padding:5px 10px;background:#e2f5ec;color:#147651}
-.pricing-price{margin:0}
+.pricing-price{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
 .pricing-price strong{font-size:48px;letter-spacing:-2px;line-height:1}
 .pricing-price span{font-size:14px;color:inherit;opacity:.7}
 .pricing-who{margin:0;font-weight:700}
@@ -96,7 +96,17 @@
 .pricing-questions{margin:0;display:grid;gap:16px}
 .pricing-questions dt{font-weight:700;margin-bottom:4px}
 .pricing-questions dd{margin:0;color:#555;line-height:1.5}
-@media(max-width:760px){.pricing-plans{grid-template-columns:minmax(0,1fr)}.pricing-plan{padding:22px}}
+.pricing-plan .pricing-price strong{white-space:nowrap}
+.sales-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.sales-wide{grid-column:1/-1}
+.sales-form select,.sales-form textarea{width:100%;border:1px solid #bdbdbd;border-radius:10px;background:#fff;padding:11px 12px;font-size:14px;line-height:1.5;font-family:inherit;color:#222;font-weight:400}
+.sales-form textarea{resize:vertical;min-height:100px}
+.sales-optional{font-weight:400;color:#777}
+.sales-trap{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.sales-sent{margin:0;padding:14px 16px;border-radius:10px;background:#e2f5ec;color:#147651;font-weight:700}
+.watch-stop{margin-left:auto;color:#8f1d16}
+@media(max-width:900px){.pricing-plans{grid-template-columns:minmax(0,1fr)}.pricing-plan{padding:22px}}
+@media(max-width:760px){.sales-form{grid-template-columns:minmax(0,1fr)}}
 .change-rule{margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .change-rule code,.note-rule{font:12px/1.4 ui-monospace,Menlo,monospace;color:#555}
 .severity{font:700 11px/1 Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:.06em;border-radius:5px;padding:4px 6px}

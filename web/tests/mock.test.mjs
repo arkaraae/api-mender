@@ -6,10 +6,16 @@ import { answerMock, createMock } from '../lib/mender/mock.js';
 
 function memoryKv() {
   const values = new Map();
+  const metadata = new Map();
   return {
     values,
+    puts: 0,
     async get(key) { return values.has(key) ? values.get(key) : null; },
-    async put(key, value) { values.set(key, value); },
+    async put(key, value, options = {}) { this.puts += 1; values.set(key, value); metadata.set(key, options.metadata); },
+    async list({ prefix = '', limit = 1000 } = {}) {
+      const keys = [...values.keys()].filter((key) => key.startsWith(prefix)).sort().slice(0, limit).map((name) => ({ name, metadata: metadata.get(name) }));
+      return { keys, list_complete: true };
+    },
   };
 }
 
@@ -88,4 +94,28 @@ test('YAML descriptions work, and things that are not descriptions are refused',
   assert.deepEqual(await (await ask(kv, id, 'GET', '/pets')).json(), ['sample-text']);
   await assert.rejects(createMock(kv, '<html>hello</html>'));
   await assert.rejects(createMock(kv, '{"openapi":"3.0.3","paths":{}}'), /no endpoints/);
+});
+
+test('the same description is stored once however many test servers use it, and refusals store nothing', async () => {
+  const kv = memoryKv();
+  const text = JSON.stringify(quotes);
+  const seen = [];
+  const first = await createMock(kv, text, { beforeStoring: async (cost) => { seen.push(cost.newBytes); } });
+  const second = await createMock(kv, text, { beforeStoring: async (cost) => { seen.push(cost.newBytes); } });
+  assert.deepEqual(seen, [new TextEncoder().encode(text).byteLength, 0]);
+  assert.equal([...kv.values.keys()].filter((key) => key.startsWith('spec:')).length, 1);
+  assert.equal(kv.puts, 3, 'one copy of the description and one pointer per test server');
+  for (const { id } of [first, second]) assert.equal((await ask(kv, id, 'POST', '/quotes', { accountId: 'acct_1', amountCents: 2500 })).status, 201);
+  // A day later the shared copy is stored again so it outlives the newest test server.
+  await createMock(kv, text, { now: Date.now() + 2 * 24 * 60 * 60 * 1000 });
+  assert.equal(kv.puts, 5);
+  const before = kv.values.size;
+  await assert.rejects(createMock(kv, text.replace('Quote API', 'Other API'), { beforeStoring: async () => { throw new Error('over the limit'); } }), /over the limit/);
+  assert.equal(kv.values.size, before);
+});
+
+test('test servers made before descriptions were shared still answer', async () => {
+  const kv = memoryKv();
+  await kv.put('mock:LEGACYLEGACYLEGACY', JSON.stringify(quotes));
+  assert.equal((await ask(kv, 'LEGACYLEGACYLEGACY', 'GET', '/quotes/q_1')).status, 200);
 });

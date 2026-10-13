@@ -335,7 +335,7 @@ export default function ChangeCheck() {
                 <p className="check-hint">Paste the code that calls this API. Mender points to every line the change touches and rewrites what it can safely change by itself.</p>
                 <p className="check-hint">Starting fresh? <button type="button" className="check-link" onClick={downloadClient}>Download a TypeScript client for the new version</button>: one typed function per endpoint.</p>
                 <div className="check-mock">
-                  <p className="check-hint">Build against the new version before it ships: <button type="button" className="check-link" disabled={mock?.busy} onClick={() => void startMock()}>{mock?.busy ? 'Creating…' : 'create a test server'}</button>. It answers every endpoint with sample data and rejects requests that don't match, like the real one would. It lasts 30 days.</p>
+                  <p className="check-hint">Build against the new version before it ships: <button type="button" className="check-link" disabled={mock?.busy} onClick={() => void startMock()}>{mock?.busy ? 'Creating…' : 'create a test server'}</button>. It answers every endpoint with sample data and rejects requests that don't match, like the real one would. It lasts 14 days.</p>
                   {mock?.error && <p className="check-problem" role="alert">{mock.error}</p>}
                   {mock?.base && (
                     <>

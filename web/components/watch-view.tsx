@@ -14,6 +14,7 @@ export default function WatchView({ id }: { id: string }) {
   const [problem, setProblem] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [stopped, setStopped] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/mender/watch/${id}`, { cache: 'no-store' });
@@ -37,6 +38,15 @@ export default function WatchView({ id }: { id: string }) {
     setBusy(false);
   }
 
+  async function stopWatching() {
+    if (!window.confirm('Stop watching this API? Nothing more will be checked or sent, and the kept copies are deleted.')) return;
+    setBusy(true);
+    const response = await fetch(`/api/mender/watch/${id}`, { method: 'DELETE' });
+    if (response.ok || response.status === 404) setStopped(true);
+    else setMessage(((await response.json()) as { error?: string }).error || 'The watch could not be stopped.');
+    setBusy(false);
+  }
+
   function copyLink(button: HTMLButtonElement) {
     void navigator.clipboard.writeText(window.location.href).then(() => {
       button.textContent = 'Copied';
@@ -44,6 +54,7 @@ export default function WatchView({ id }: { id: string }) {
     });
   }
 
+  if (stopped) return <section className="check-card"><h2>Stopped</h2><p className="check-hint">Mender no longer checks this API or sends messages about it, and the kept copies are deleted. <a href="/watch">Watch an API</a></p></section>;
   if (problem) return <section className="check-card"><p className="check-problem" role="alert">{problem}</p><p className="check-hint"><a href="/watch">Watch an API</a></p></section>;
   if (!watch) return <section className="check-card"><p className="check-hint">Loading…</p></section>;
 
@@ -75,6 +86,7 @@ export default function WatchView({ id }: { id: string }) {
         <div className="check-actions">
           <button type="button" className="pill-button pill-outline" disabled={busy} onClick={() => void checkNow()}>{busy ? 'Checking…' : 'Check now'}</button>
           {message && <span className="check-phase" aria-live="polite">{message}</span>}
+          <button type="button" className="check-link watch-stop" disabled={busy} onClick={() => void stopWatching()}>Stop watching</button>
         </div>
       </section>
 

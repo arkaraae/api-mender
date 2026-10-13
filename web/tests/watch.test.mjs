@@ -2,7 +2,7 @@
 // the Workers KV methods and a pretend API host that can change its description.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkWatch, createWatch, publicView, readSnapshot, readWatch, runDue } from '../lib/mender/watch.js';
+import { checkWatch, createWatch, deleteWatch, publicView, readSnapshot, readWatch, runDue } from '../lib/mender/watch.js';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -156,4 +156,19 @@ test('links that are not a watch read as missing, without touching storage', asy
   assert.equal(await readWatch(kv, '../../etc'), null);
   assert.equal(await readSnapshot(kv, 'abcdefghijklmnopqrstuv', 'x'), null);
   assert.equal(await checkWatch(kv, 'abcdefghijklmnopqrstuv'), null);
+});
+
+test('stopping a watch removes it and every kept copy; a refused watch stores nothing', async () => {
+  const kv = memoryKv();
+  const host = apiHost();
+  const watch = await createWatch(kv, { url: URL_ }, { fetcher: host.fetch });
+  host.version = 2;
+  await checkWatch(kv, watch.id, { now: Date.now() + DAY, fetcher: host.fetch });
+  assert.equal(kv.values.size, 3);
+  assert.equal(await deleteWatch(kv, watch.id), true);
+  assert.equal(kv.values.size, 0);
+  assert.equal(await deleteWatch(kv, watch.id), false);
+  assert.equal(await deleteWatch(kv, '../../etc'), false);
+  await assert.rejects(createWatch(kv, { url: URL_ }, { fetcher: host.fetch, beforeStoring: async () => { throw new Error('over the limit'); } }), /over the limit/);
+  assert.equal(kv.values.size, 0);
 });

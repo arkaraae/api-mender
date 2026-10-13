@@ -1,5 +1,6 @@
 // POST → checks the watched description now instead of waiting for the daily check.
-import { noWatchStore, watchStore } from '@/lib/watch-store';
+import { noWatchStore, siteDatabase, watchStore } from '@/lib/watch-store';
+import { spend } from '@/lib/mender/limits.js';
 import { CHECK_AGAIN_AFTER, checkWatch, publicView, readWatch } from '@/lib/mender/watch.js';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -10,6 +11,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!watch) return Response.json({ error: 'There is no watch at this link.' }, { status: 404 });
   const wait = CHECK_AGAIN_AFTER - (Date.now() - watch.lastCheckedAt);
   if (wait > 0) return Response.json({ error: `Checked a moment ago. Try again in ${Math.ceil(wait / 1000)} seconds.` }, { status: 429 });
+  const refused = await spend(siteDatabase(), request, 'check');
+  if (refused) return refused;
   const result = await checkWatch(kv, id, { origin: new URL(request.url).origin });
   return Response.json({ changed: result?.changed ?? false, watch: result ? publicView(result.watch) : null }, { headers: { 'cache-control': 'no-store' } });
 }

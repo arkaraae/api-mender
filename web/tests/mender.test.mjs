@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { makeManaged } from '../../mender/tests/managed.fixture.js';
-import { callers, callsSaved, check, describe, forget, handle, oldVersionCalls, registerApi, serveInProcess, setCallLog } from '../lib/mender/gateway.js';
+import { callerName, callers, callsSaved, check, describe, forget, handle, oldVersionCalls, registerApi, serveInProcess, setCallLog } from '../lib/mender/gateway.js';
 import { rulesFromOpenApi, proveWithSchemas } from '../lib/mender/openapi.js';
 import { pathsOf, summarize, touches } from '../lib/mender/report.js';
 
@@ -90,6 +90,13 @@ test('with a call log, every old-version call is saved, and saving never holds u
   } finally {
     setCallLog(null);
   }
+});
+
+test('caller names shown on the public page are short plain names, or "unnamed"', () => {
+  assert.equal(callerName(null), 'anonymous');
+  assert.equal(callerName('billing-service'), 'billing-service');
+  assert.equal(callerName('team@example.com'), 'team@example.com');
+  for (const odd of ['<script>alert(1)</script>', 'two words', 'x'.repeat(49), '-starts-with-dash', 'émoji😀']) assert.equal(callerName(odd), 'unnamed');
 });
 
 test('the status check sends one real request both ways', async () => {
