@@ -19,7 +19,8 @@ export type SceneControls = { fire(shot: Shot): void; refresh(): void; dispose()
 export type SceneElements = { host: HTMLElement; canvas: HTMLCanvasElement; tip: HTMLElement; labels: { app: HTMLElement; ring: HTMLElement; api: HTMLElement } };
 export type SceneHooks = { mender(): boolean; toggle(): void; still: boolean };
 
-const COLOR = { thread: 0xe9a23b, threadOff: 0x51628e, old: 0x6b80b8, pass: 0x2fb57c, fail: 0xe5534b, app: 0xa9badc, api: 0xf2f4fa, lamp: 0x5b6a90 };
+// White thread and ring on the black page; green for calls that work, red for ones that break.
+const COLOR = { thread: 0xf2f4f8, threadOff: 0x3a3f48, old: 0x262a33, pass: 0x35e08f, fail: 0xff5f57, app: 0x3a404c, api: 0xf2f3f5, lamp: 0x3a3f48 };
 const OLD_JSON = '{"customerId":"acct_1"}';
 const NEW_JSON = '{"accountId":"acct_1"}';
 const OLD_FACE = '{ customerId }';
@@ -75,7 +76,7 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-  scene.add(new THREE.HemisphereLight(0xe6ecff, 0x141d3a, 1.7));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x0a0b0d, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 2.1);
   sun.position.set(3, 6, 9);
   scene.add(sun);
@@ -130,7 +131,7 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
   let lampGlow = 0;
 
   // Mender's ring.
-  const ringMaterial = new THREE.MeshStandardMaterial({ color: COLOR.thread, metalness: 0.45, roughness: 0.3, emissive: COLOR.thread, emissiveIntensity: 0.12, transparent: true });
+  const ringMaterial = new THREE.MeshStandardMaterial({ color: COLOR.thread, metalness: 0.2, roughness: 0.35, emissive: COLOR.thread, emissiveIntensity: 0.25, transparent: true });
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.11, 24, 96), ringMaterial);
   ring.position.copy(ringPoint);
   ring.rotation.y = Math.PI / 2 - 0.6;
@@ -144,7 +145,7 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
 
   // Requests.
   const oldFace = textTexture(THREE, OLD_FACE, { size: 64 });
-  const newFace = textTexture(THREE, NEW_FACE, { size: 64 });
+  const newFace = textTexture(THREE, NEW_FACE, { size: 64, color: '#06130c' });
   const bodyShape = new RoundedBoxGeometry(1.86, 0.62, 0.14, 3, 0.07);
   const faceShape = new THREE.PlaneGeometry(1.74, 0.46);
   const packets: Packet[] = Array.from({ length: 10 }, () => {
@@ -162,7 +163,7 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
   const badgeTextures = new Map<string, Three.CanvasTexture>();
   const badgeTexture = (status: number) => {
     const key = String(status);
-    if (!badgeTextures.has(key)) badgeTextures.set(key, textTexture(THREE, key, { width: 300, height: 130, size: 64, fill: status < 400 ? '#2fb57c' : '#e5534b' }));
+    if (!badgeTextures.has(key)) badgeTextures.set(key, textTexture(THREE, key, { width: 300, height: 130, size: 64, color: status < 400 ? '#06130c' : '#ffffff', fill: status < 400 ? '#35e08f' : '#ff5f57' }));
     return badgeTextures.get(key)!;
   };
   const badges: Badge[] = [];
@@ -230,6 +231,8 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
   function onMove(event: PointerEvent) {
     tilt.x = (event.clientX / window.innerWidth) * 2 - 1;
     tilt.y = (event.clientY / window.innerHeight) * 2 - 1;
+    el.host.style.setProperty('--lean-x', tilt.x.toFixed(3));
+    el.host.style.setProperty('--lean-y', tilt.y.toFixed(3));
     const box = el.canvas.getBoundingClientRect();
     const inside = event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
     pointer.set(inside ? ((event.clientX - box.left) / box.width) * 2 - 1 : 2, inside ? -((event.clientY - box.top) / box.height) * 2 + 1 : 2);
@@ -319,7 +322,7 @@ export async function buildScene(THREE: ThreeModule, RoundedBoxGeometry: Rounded
     ring.rotation.y = Math.PI / 2 - 0.6 + Math.sin(elapsed * 0.8) * 0.12;
     ring.scale.setScalar(1 + ringPulse * 0.12);
     ringMaterial.opacity = 0.25 + ringOn * 0.75;
-    ringMaterial.emissiveIntensity = 0.12 + ringPulse * 0.9;
+    ringMaterial.emissiveIntensity = 0.25 + ringPulse * 1.2;
     stitchMaterial.color.copy(offColor).lerp(onColor, ringOn);
 
     shift = (shift + dt * STITCHES * SPEED * 0.5) % STITCHES;

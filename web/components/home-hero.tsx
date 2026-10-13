@@ -62,7 +62,7 @@ export default function HomeHero() {
             <span className="switch-knob" aria-hidden="true" />
             <span className="switch-text">Mender is {mender ? 'on' : 'off'}</span>
           </button>
-          <p>Switch it off, or click the gold ring, to see what old callers get without it.</p>
+          <p>Switch it off, or click the white ring, to see what old callers get without it.</p>
         </div>
         <div className="home-call" aria-live="polite">
           <div className="home-call-head">

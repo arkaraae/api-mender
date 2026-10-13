@@ -67,6 +67,8 @@ export default function GatewayScene({ mender, shot, onToggle }: Props) {
 
   return (
     <div className="scene" ref={host}>
+      <span className="aurora aurora-a" aria-hidden="true" />
+      <span className="aurora aurora-b" aria-hidden="true" />
       <canvas ref={canvas} role="img" aria-label={`Requests from an app on version 1 travel to API version 2. Mender is ${mender ? 'on: it renames customerId to accountId and the API accepts them' : 'off: the API refuses them with 422'}.`} />
       <span className="scene-label" ref={appLabel} aria-hidden="true">Your app, on version 1</span>
       <span className={`scene-label scene-label-mender ${mender ? '' : 'is-off'}`} ref={ringLabel} aria-hidden="true">{mender ? 'Mender' : 'Mender is off'}</span>

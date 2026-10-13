@@ -31,8 +31,8 @@ export default function Home() {
   return (
     <main className="marketing-page home">
       <AuthCallbackRedirect />
-      <div className="home-denim">
-        <SiteNav tone="denim" />
+      <div className="home-dark">
+        <SiteNav tone="dark" />
         <HomeHero />
       </div>
 

@@ -8,10 +8,10 @@ const LINKS = [
   { href: '/demo', label: 'Demo' },
 ];
 
-// The top bar of the public pages; "denim" for the homepage's dark top.
-export default function SiteNav({ current, tone = 'light' }: { current?: string; tone?: 'light' | 'denim' }) {
+// The top bar of the public pages; "dark" for the homepage's black top.
+export default function SiteNav({ current, tone = 'light' }: { current?: string; tone?: 'light' | 'dark' }) {
   return (
-    <header className={`marketing-nav ${tone === 'denim' ? 'marketing-nav-denim' : ''}`}>
+    <header className={`marketing-nav ${tone === 'dark' ? 'marketing-nav-dark' : ''}`}>
       <a className="site-brand" href="/" aria-label="API Mender home"><BrandLogo /></a>
       <nav aria-label="Main navigation">
         {LINKS.map((link) => <a key={link.href} href={link.href} aria-current={current === link.href ? 'page' : undefined}>{link.label}</a>)}
