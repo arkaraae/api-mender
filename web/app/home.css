@@ -30,12 +30,20 @@
 /* ---------- the gateway film and the X-ray lens ---------- */
 /* The film sits in a rounded glass frame, not a spotlight: a panel, edge to edge within the hero. */
 .scene{position:relative;height:clamp(320px,36vw,520px);margin:16px 0 0;isolation:isolate;overflow:hidden;border-radius:24px;border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 30px 80px rgba(0,0,0,.5);background:#0d0f13}
-.scene-film{position:absolute;inset:0;z-index:0;width:100%;height:100%;object-fit:cover;filter:brightness(.95) saturate(1.05)}
+.scene-film{position:absolute;inset:0;z-index:0;width:100%;height:100%;object-fit:cover;filter:brightness(.92) saturate(1.05);transition:filter .6s}
+/* The film looks the same with Mender on or off: only what comes out of the machine differs. */
+.flow{position:absolute;inset:0;z-index:1;width:100%;height:100%;pointer-events:none}
+.scene-stamp{position:absolute;z-index:3;right:20px;top:20px;display:flex;align-items:baseline;gap:10px;padding:10px 16px;border-radius:12px;background:rgba(10,12,16,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.2);transition:border-color .4s}
+.scene-stamp strong{font:700 40px/1 var(--m-mono);letter-spacing:-.04em}
+.scene-stamp span{font:500 13px/1 var(--m-mono);letter-spacing:.08em;text-transform:uppercase}
+.scene-stamp.is-pass{color:var(--m-pass)}
+.scene-stamp.is-fail{color:var(--m-fail);border-color:rgba(255,95,87,.5)}
+.scene-label-api.is-off{color:#ffb3ad}
 .scene-label{position:absolute;z-index:3;pointer-events:none;white-space:nowrap;font:600 13px/1 var(--m-font);color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);padding:8px 12px;border-radius:99px}
 .scene-label-app{left:12%;bottom:14%}
-.scene-label-mender{left:50%;top:10%;transform:translateX(-50%)}
+.scene-label-mender{left:50%;top:10%;transform:translateX(-50%);max-width:calc(100% - 32px)}
 .scene-label-mender.is-off{color:#ffb3ad}
-.scene-label-api{right:10%;top:16%}
+.scene-label-api{right:10%;top:24%}
 .scene-hint{position:absolute;z-index:3;left:50%;bottom:16px;transform:translateX(-50%);margin:0;font-size:13px;color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.18);padding:7px 12px;border-radius:99px;white-space:nowrap}
 /* The lens: a liquid-glass window that follows the pointer and shows the code behind that spot. */
 .lens{position:absolute;left:0;top:0;z-index:4;pointer-events:none;opacity:0;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.45);will-change:transform,opacity}
@@ -53,6 +61,7 @@
 .xray .is-fail{color:var(--m-fail)}
 /* Without a pointer, the details sit under the film. */
 .xray-static{display:none}
+@media (prefers-reduced-motion:reduce){.flow{display:none}}
 @media (hover:none),(max-width:759px),(prefers-reduced-motion:reduce){
   .lens,.scene-hint{display:none}
   .scene{height:auto}

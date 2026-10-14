@@ -78,7 +78,7 @@ export default function HomeHero() {
           <p>Move your pointer over the machine to see the code behind each part. Then send a real call.</p>
         </div>
 
-        <GatewayScene mender={mender} />
+        <GatewayScene mender={mender} answer={answer} />
 
         <div className="home-console glass">
           <div className="home-switch">
