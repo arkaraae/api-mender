@@ -50,7 +50,7 @@
 .check-doors button{border:0;background:none;border-radius:99px;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;color:#444}
 .check-doors button.selected{background:#171717;color:#fff}
 .check-door{display:grid;gap:14px}
-.check-ok{margin:0;font-size:15px;color:#1f6b3e;font-weight:700}
+.check-summary{margin:0;font-size:15px;color:#1f6b3e;font-weight:700}
 .check-touched li{font-size:14px;line-height:1.5;padding:10px 12px;border-radius:10px;background:#fbefed;overflow-wrap:anywhere}
 .check-touched li.change-bridged{background:#e6f5f5}
 .check-touched code{font-weight:700}

@@ -355,11 +355,11 @@ export default function ChangeCheck() {
                 {codeCheck && (
                   <div className="check-code-result">
                     {codeCheck.touched.length === 0 && codeCheck.changes.length === 0
-                      ? <p className="check-ok">This code does not use anything that changed.</p>
+                      ? <p className="check-summary">This code does not use anything that changed.</p>
                       : <ul className="check-touched">{codeCheck.touched.map((hit) => <li key={hit.name} className={`change-${hit.kind}`}>Your code uses <code>{hit.name}</code>: {hit.title}</li>)}</ul>}
                     {codeCheck.changes.length > 0 && (
                       <>
-                        <p className="check-ok">{codeCheck.summary}</p>
+                        <p className="check-summary">{codeCheck.summary}</p>
                         <ul className="check-diff">{codeCheck.changes.map((change) => <li key={change.line}><span className="diff-line">Line {change.line}</span><del>{change.before}</del><ins>{change.after}</ins></li>)}</ul>
                         <div className="check-block-head"><span>Fixed code</span><button type="button" className="check-link" onClick={(event) => copy(codeCheck.after, event.currentTarget)}>Copy</button></div>
                         <pre>{codeCheck.after}</pre>
@@ -374,7 +374,7 @@ export default function ChangeCheck() {
             {door === 'run' && (
               <div className="check-door">
                 {report.verdict === 'safe'
-                  ? <p className="check-ok">Nothing to do: callers of the old version keep working.</p>
+                  ? <p className="check-summary">Nothing to do: callers of the old version keep working.</p>
                   : <p className="check-hint">{report.verdict === 'bridged'
                     ? 'Ship the new version and keep old callers working: Mender translates their calls with the rules below, and every translated call is counted per caller so you know who still has to move.'
                     : 'Mender can bridge the changes marked in green. The ones in red remove things old callers may use, so tell those callers before you ship.'}</p>}
