@@ -1,53 +1,82 @@
-// Requests riding the rail in the gateway film: small chips travel into the machine and out
-// again. With Mender on, each comes out changed (green, with a 200). With Mender off, each comes
-// out exactly as it went in and gets a 422: nothing changed, still broken. Every chip carries a
-// different change, the kinds of rules Mender's engine handles: rename, scale, move.
-// Drawn as an SVG over the film with the same crop, so the rail lines up at any size. The
-// animation is SVG's own (no script) and restarts when the switch is flipped.
+'use client';
 
-const PATH = 'M -80 575 C 160 560, 240 470, 330 440 C 420 410, 470 470, 540 440 C 610 410, 650 395, 700 360 C 740 330, 770 240, 800 150';
-const DUR = 4.4;
-const CHIPS = [
-  { delay: 0, before: '{ customerId }', after: '{ accountId }' },
-  { delay: 1.1, before: '{ amount: 12.5 }', after: '{ amount_cents: 1250 }' },
-  { delay: 2.2, before: '{ zip }', after: '{ postalCode }' },
-  { delay: 3.3, before: '{ user.name }', after: '{ name }' },
+// Request labels pinned to the real coins in the gateway film. The coins were tracked frame by
+// frame (lib/coin-tracks.json); on every animation frame the label for each coin is placed at
+// that coin's position for the film's current time, so the labels ride the coins and stay with
+// them even when the film stalls. When a coin reaches the machine: with Mender on the label
+// turns green with what came out of it and a 200; with Mender off it stays exactly as it went
+// in and gets a red 422. Every coin carries a different change, the kinds of rules Mender's
+// engine handles: rename, scale, move.
+import { useEffect, useRef } from 'react';
+import tracks from '@/lib/coin-tracks.json';
+
+const CHANGES = [
+  { before: '{ customerId }', after: '{ accountId }' },
+  { before: '{ amount: 12.5 }', after: '{ amount_cents: 1250 }' },
+  { before: '{ zip }', after: '{ postalCode }' },
+  { before: '{ user.name }', after: '{ name }' },
+  { before: '{ created }', after: '{ createdAt }' },
+  { before: '{ price }', after: '{ unitPrice }' },
+  { before: '{ phone }', after: '{ phoneNumber }' },
 ];
-const MONO = 'JetBrains Mono, Menlo, monospace';
+const FILM_RATIO = 16 / 9;
+const HOLD = 1.1; // seconds the answer stays at the machine after the coin goes in
 
 export default function GatewayFlow({ mender }: { mender: boolean }) {
+  const root = useRef<HTMLDivElement>(null);
+  const latest = useRef(mender);
+  latest.current = mender;
+
+  useEffect(() => {
+    const el = root.current;
+    const wrap = el?.parentElement;
+    const video = wrap?.querySelector('video');
+    if (!el || !wrap || !video || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const chips = [...el.querySelectorAll<HTMLElement>('.coin-chip')];
+    let frame = 0;
+    const tick = () => {
+      // Where the film's picture sits inside its box (object-fit: cover crops one side).
+      const boxW = wrap.clientWidth, boxH = wrap.clientHeight;
+      const scale = Math.max(boxW / FILM_RATIO, boxH);
+      const filmW = scale * FILM_RATIO, filmH = scale;
+      const offX = (boxW - filmW) / 2, offY = (boxH - filmH) / 2;
+      const t = video.currentTime;
+      const on = latest.current;
+      tracks.tracks.forEach((track, i) => {
+        const chip = chips[i];
+        if (!chip) return;
+        const k = t * tracks.fps - track.start;
+        const last = track.points.length - 1;
+        let state: 'hidden' | 'riding' | 'done' = 'hidden';
+        let point = track.points[0];
+        if (k >= 0 && k <= last) { state = 'riding'; point = track.points[Math.min(last, Math.round(k))]; }
+        else if (k > last && k <= last + HOLD * tracks.fps) { state = 'done'; point = track.points[last]; }
+        if (state === 'hidden') { chip.style.opacity = '0'; chip.dataset.state = 'hidden'; return; }
+        chip.style.opacity = '1';
+        chip.style.transform = `translate(${(offX + point[0] * filmW).toFixed(1)}px, ${(offY + point[1] * filmH - 54).toFixed(1)}px)`;
+        chip.dataset.state = state === 'done' ? (on ? 'pass' : 'fail') : 'riding';
+      });
+      frame = requestAnimationFrame(tick);
+    };
+    const seen = new IntersectionObserver(([entry]) => {
+      cancelAnimationFrame(frame);
+      if (entry.isIntersecting) frame = requestAnimationFrame(tick);
+    });
+    seen.observe(wrap);
+    return () => { seen.disconnect(); cancelAnimationFrame(frame); };
+  }, []);
+
   return (
-    <svg key={mender ? 'on' : 'off'} className="flow" viewBox="0 0 1000 562" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      {CHIPS.map(({ delay, before, after }) => {
-        const timing = { dur: `${DUR}s`, begin: `${delay}s`, repeatCount: 'indefinite' as const };
+    <div className="flow" ref={root} aria-hidden="true">
+      {tracks.tracks.map((track, i) => {
+        const change = CHANGES[i % CHANGES.length];
         return (
-          <g key={before} opacity="0">
-            <animateMotion {...timing} path={PATH} calcMode="spline" keyTimes="0;1" keySplines="0.3 0 0.7 1" />
-            <animate {...timing} attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.9;0.97;1" />
-            <g transform="translate(-92 -16)">
-              <rect width="184" height="32" rx="7" fill="#1c1f26" stroke="rgba(255,255,255,.35)">
-                {mender && <animate {...timing} attributeName="fill" values="#1c1f26;#1c1f26;#35e08f;#35e08f" keyTimes="0;0.58;0.62;1" />}
-              </rect>
-              {/* What went in. With Mender on it swaps for what comes out at the machine. */}
-              <text x="92" y="21" textAnchor="middle" fontFamily={MONO} fontSize="13" fontWeight="500" fill="#ffffff">
-                {before}
-                {mender && <animate {...timing} attributeName="opacity" values="1;1;0;0" keyTimes="0;0.58;0.6;1" />}
-              </text>
-              {mender && (
-                <text x="92" y="21" textAnchor="middle" fontFamily={MONO} fontSize="13" fontWeight="500" fill="#06130c" opacity="0">
-                  {after}
-                  <animate {...timing} attributeName="opacity" values="0;0;1;1" keyTimes="0;0.6;0.62;1" />
-                </text>
-              )}
-              {/* The API's answer, after the machine. */}
-              <text x="92" y="50" textAnchor="middle" fontFamily={MONO} fontSize="12" fontWeight="700" fill={mender ? '#35e08f' : '#ff5f57'} opacity="0">
-                {mender ? '200' : '422 · unchanged'}
-                <animate {...timing} attributeName="opacity" values="0;0;1;1" keyTimes="0;0.64;0.68;1" />
-              </text>
-            </g>
-          </g>
+          <div key={track.start} className="coin-chip" data-state="hidden">
+            <span className="coin-chip-body"><b className="coin-before">{change.before}</b><b className="coin-after">{mender ? change.after : change.before}</b></span>
+            <span className="coin-chip-answer">{mender ? '200' : '422 · unchanged'}</span>
+          </div>
         );
       })}
-    </svg>
+    </div>
   );
 }
