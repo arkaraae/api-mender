@@ -1,7 +1,7 @@
 # API Mender: where things stand
 
 Read this first when picking the project up again, in a new Claude Code session or as a new
-teammate. Last updated 2026-10-13.
+teammate. Last updated 2026-10-14.
 
 ## What is live
 
@@ -14,7 +14,8 @@ https://apimender.com runs from the `web/` app on Kane's Cloudflare account (Wor
 | `/watch` | Watch an API description; checked every hour for ones not checked in a day; Slack or Discord alerts; "Stop watching" removes it. |
 | `/mender` | The gateway: old callers keep working (`/mender/v1/api/...`), with every old-version call saved. |
 | `/pricing` | Free; Pro $28.98 per API per month (free in beta); Enterprise with a "Contact sales" form. |
-| `/`, `/demo`, `/live` | The team's pages (arkaraae, Jingyi). |
+| `/` | The homepage: "APIs change. Nothing breaks.", the chain-of-requests film, two cards with live numbers, the machine film with the X-ray lens (code behind the pointer), the switch and a real call to the Quotes API. The mascot's eyes follow the pointer. |
+| `/demo`, `/live` | The team's pages (arkaraae, Jingyi). |
 
 The GitHub check (`.github/actions/mender-check`) comments the same report on pull requests.
 
@@ -79,7 +80,12 @@ and paste the channel's incoming-webhook address.
 
 ## Next, if there is time
 
-- Redesign (3D hero, motion, cursor-follow): plan agreed with Kane on 2026-10-13, not built yet.
+- A review copy of the site runs as a separate Worker, `apimender-preview`
+  (https://apimender-preview.kane-h8u.workers.dev, same KV and D1, no custom domain, no cron). Refresh it
+  with `npx wrangler deploy --config dist/server/wrangler.preview.json` after a build (the file is
+  written from `dist/server/wrangler.json` by dropping routes and triggers and setting `workers_dev`).
+- The launch kit (slides text, 30-second video, QR code) lives outside the repository, in Kane's
+  session folder; the video still shows the earlier 3D homepage.
 - Callers on `/mender` name themselves (X-Consumer header). Names are limited to short plain
   text, but anyone can still type any plain name. Real caller identity needs API keys.
 - "Which of my apps are affected?": use REA (github.com/morluto/rea) on apps the user owns to
