@@ -85,7 +85,7 @@
   .hero-menu-button{display:block}
   .hero-body{padding:32px 24px 64px}
   .hero h1{font-size:clamp(3.4rem,17vw,5.5rem)}
-  .hero-lead{margin-top:32px;font-size:14px}
+  .hero-lead{margin-top:28px;font-size:15px}
   .hero-side{margin-top:64px;width:100%}
   .hero-mascot{left:auto;right:-8px;top:-104px}
   .hero-card-large{min-width:0}

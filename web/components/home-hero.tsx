@@ -75,7 +75,7 @@ export default function HomeHero() {
         <div className="home-gateway-head">
           <span className="home-kicker">LIVE GATEWAY</span>
           <h2 id="gateway-title">Old requests go in. Version-two requests come out.</h2>
-          <p>Move your pointer over the machine to see the code behind each part. Then send a real call.</p>
+          <p>See the code behind each part of the machine, then send a real call and watch the answer.</p>
         </div>
 
         <GatewayScene mender={mender} answer={answer} />

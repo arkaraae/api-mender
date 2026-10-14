@@ -14,6 +14,7 @@ export default function GatewayScene({ mender, answer }: { mender: boolean; answ
   const timed = answer && answer.throughMender === mender ? answer : null;
   return (
     <div className={`scene ${mender ? 'is-on' : 'is-off'}`}>
+      <div className="scene-film-wrap">
       <SceneFilm />
       <GatewayFlow mender={mender} />
       <span className="scene-label scene-label-app">Your app, on version 1</span>
@@ -21,8 +22,9 @@ export default function GatewayScene({ mender, answer }: { mender: boolean; answ
       <span className={`scene-label scene-label-api ${mender ? '' : 'is-off'}`}>{mender ? 'API version 2: accepting' : 'API version 2: refusing old calls'}</span>
       <div className={`scene-stamp ${mender ? 'is-pass' : 'is-fail'}`} aria-live="polite"><strong>{timed ? timed.status : mender ? '200' : '422'}</strong><span>{mender ? 'Translated' : 'Refused'}{timed ? ` · ${timed.ms} ms` : ''}</span></div>
       <XrayLens mender={mender} />
-      <div className="xray-static"><XrayCode mender={mender} /></div>
       <p className="scene-hint">Move your pointer over the machine to see the code behind it.</p>
+      </div>
+      <div className="xray-static"><XrayCode mender={mender} /></div>
     </div>
   );
 }
