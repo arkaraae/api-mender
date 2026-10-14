@@ -55,10 +55,10 @@ export default function HomeHero() {
         <div className="hero-body">
           <div className="hero-copy">
             <h1 id="home-title">
-              <span className="hero-anim hero-reveal" style={{ animationDelay: '.2s' }}>Ship the</span>
-              <span className="hero-anim hero-reveal" style={{ animationDelay: '.38s' }}><span className="line-mask">breaking</span> change.</span>
+              <span className="hero-anim hero-reveal" style={{ animationDelay: '.2s' }}>APIs change.</span>
+              <span className="hero-anim hero-reveal" style={{ animationDelay: '.38s' }}>Nothing <span className="line-mask">breaks.</span></span>
             </h1>
-            <p className="hero-lead hero-anim hero-fade" style={{ animationDelay: '.65s' }}>Keep every old caller working. Mender reads both versions of your API, proves how each old request maps to the new one, and translates old calls on the way in.</p>
+            <p className="hero-lead hero-anim hero-fade" style={{ animationDelay: '.65s' }}>Mender checks the change, fixes the code that calls the API, and keeps old apps working through its gateway. No AI runs on your traffic.</p>
             <div className="hero-actions hero-anim hero-fade" style={{ animationDelay: '.8s' }}>
               <a className="hero-button" href="/check">CHECK A CHANGE</a>
               <a className="hero-link" href="#gateway">See the gateway ↓</a>
