@@ -4,7 +4,7 @@
 // call to the live Quotes API (version 2) sent from this page, with or without Mender.
 import { useState } from 'react';
 import GatewayScene from '@/components/gateway-scene';
-import type { Shot } from '@/lib/gateway-scene';
+import Mascot from '@/components/mascot';
 
 type Answer = { status: number; ms: number; throughMender: boolean; detail: string };
 
@@ -12,7 +12,6 @@ const OLD_REQUEST = { customerId: 'acct_fixture_1', amountCents: 2500 };
 
 export default function HomeHero() {
   const [mender, setMender] = useState(true);
-  const [shot, setShot] = useState<Shot | null>(null);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState('');
@@ -36,7 +35,6 @@ export default function HomeHero() {
           ? `The API refused it: version 2 requires ${(body.required ?? ['accountId']).filter((field) => !(field in OLD_REQUEST)).join(' and ') || 'other fields'}, and this request still sends customerId.`
           : `The API answered: ${body.error ?? response.statusText}.`;
       setAnswer({ status: response.status, ms, throughMender, detail });
-      setShot({ id: Date.now(), status: response.status, ms, throughMender });
     } catch {
       setProblem('The call did not go through. Check your connection and try again.');
     }
@@ -52,17 +50,18 @@ export default function HomeHero() {
           <a className="home-button home-button-thread" href="/check">Check a change</a>
           <a className="home-button home-button-quiet" href="/mender">See the gateway</a>
         </div>
+        <Mascot className="hero-mascot" size={168} label="Mender, the mascot, following your pointer with its eyes" />
       </div>
 
-      <GatewayScene mender={mender} shot={shot} onToggle={() => setMender((on) => !on)} />
+      <GatewayScene mender={mender} />
 
-      <div className="home-console">
+      <div className="home-console glass">
         <div className="home-switch">
           <button type="button" role="switch" aria-checked={mender} className="switch" onClick={() => setMender((on) => !on)}>
             <span className="switch-knob" aria-hidden="true" />
             <span className="switch-text">Mender is {mender ? 'on' : 'off'}</span>
           </button>
-          <p>Switch it off, or click the white ring, to see what old callers get without it.</p>
+          <p>Switch it off to see what old callers get without it.</p>
         </div>
         <div className="home-call" aria-live="polite">
           <div className="home-call-head">

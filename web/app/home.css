@@ -4,18 +4,29 @@
 .home{background:var(--m-black);color:#fff}
 
 /* ---------- the dark top ---------- */
-.home-dark{color:#fff;background:var(--m-black)}
+.home-dark{position:relative;isolation:isolate;color:#fff;background:var(--m-black)}
+.home-dark>.marketing-nav,.home-dark>.home-hero{position:relative;z-index:1}
+
+
 .marketing-nav-dark nav a,.marketing-nav-dark .nav-text-link{color:var(--m-grey)}
 .marketing-nav-dark nav a:hover,.marketing-nav-dark .nav-text-link:hover{color:#fff}
-.marketing-nav-dark .brand-logo img{filter:invert(1);mix-blend-mode:screen}
+.marketing-nav-dark .mascot{filter:invert(1);mix-blend-mode:screen}
+.marketing-nav-dark .site-brand,.home-footer .site-brand{color:#fff}
 .marketing-nav-dark .pill-dark{background:#fff;border-color:#fff;color:var(--m-ink)}
 .marketing-nav-dark .pill-dark:hover{background:#e9ecf2}
 
 .home-hero{max-width:1320px;margin:0 auto;padding:0 40px 56px}
-.home-hero-copy{max-width:1120px;padding-top:28px}
+.home-hero-copy{position:relative;max-width:1120px;padding-top:28px}
+/* The big mascot watches the pointer from the right of the hero text. */
+.hero-mascot{position:absolute;right:24px;bottom:-6px;filter:invert(1);mix-blend-mode:screen}
+@media (max-width:1040px){.hero-mascot{display:none}}
 .home-hero h1{font-size:clamp(40px,4.7vw,70px);line-height:1.02;letter-spacing:-.035em;font-weight:600;margin:0 0 20px;max-width:17em;text-wrap:balance}
 .home-hero-copy>p{font-size:clamp(17px,1.4vw,19px);line-height:1.55;color:var(--m-grey);max-width:64ch;margin:0 0 26px}
 .home-actions{display:flex;flex-wrap:wrap;gap:12px}
+
+/* ---------- liquid glass panels ---------- */
+.glass{background:rgba(255,255,255,.055);backdrop-filter:blur(20px) saturate(1.45);-webkit-backdrop-filter:blur(20px) saturate(1.45);border:1px solid rgba(255,255,255,.14);border-radius:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.05),0 24px 60px rgba(0,0,0,.35)}
+@media (prefers-reduced-transparency:reduce){.glass,.scene-label,.scene-tip,.switch{backdrop-filter:none;-webkit-backdrop-filter:none;background:#14171d}}
 
 /* ---------- buttons ---------- */
 .home-button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border-radius:10px;font:600 15px/1 var(--m-font);white-space:nowrap;cursor:pointer;border:1px solid transparent;transition:background-color .15s,border-color .15s,color .15s}
@@ -28,34 +39,45 @@
 .home-button-ink:hover{border-color:#fff}
 .home a:focus-visible,.home button:focus-visible{outline:3px solid var(--m-accent);outline-offset:3px}
 
-/* ---------- the 3D gateway and the light behind it ---------- */
-.scene{position:relative;height:clamp(320px,33vw,460px);margin:4px -40px 0;isolation:isolate;overflow:hidden}
-.scene canvas{position:relative;z-index:1;display:block;width:100%;height:100%;touch-action:pan-y}
-.aurora{position:absolute;pointer-events:none;border-radius:50%;transform:translate(calc(var(--lean-x,0) * 48px),calc(var(--lean-y,0) * 28px));transition:transform .6s cubic-bezier(.2,.7,.2,1);will-change:transform}
-.aurora::before{content:"";position:absolute;inset:0;border-radius:inherit;filter:blur(70px);opacity:.8;animation:aurora-drift 16s ease-in-out infinite alternate}
-.aurora-a{left:8%;top:-10%;width:48%;height:120%}
-.aurora-a::before{background:radial-gradient(closest-side,var(--m-glow-1),transparent 72%)}
-.aurora-b{left:48%;top:-20%;width:44%;height:130%}
-.aurora-b::before{background:radial-gradient(closest-side,var(--m-glow-2),transparent 72%);animation-delay:-8s;animation-duration:19s}
-@keyframes aurora-drift{from{transform:translate(-6%,4%) scale(1)}to{transform:translate(8%,-6%) scale(1.15)}}
-@media (prefers-reduced-motion:reduce){.aurora::before{animation:none}.aurora{transition:none}}
-.scene-label{position:absolute;top:0;left:0;z-index:2;pointer-events:none;white-space:nowrap;font:600 13px/1 var(--m-font);color:var(--m-grey);background:rgba(5,6,7,.72);padding:7px 11px;border-radius:99px}
-.scene-label-mender{color:#fff}
-.scene-label-mender.is-off{color:var(--m-grey)}
-.scene-tip{position:absolute;top:0;left:0;z-index:3;width:300px;pointer-events:none;background:#fff;color:var(--m-ink);border-radius:10px;padding:12px 14px;box-shadow:0 14px 34px rgba(0,0,0,.5);display:grid;gap:6px}
-.scene-tip[hidden]{display:none}
-.scene-tip strong{font:600 14px/1.3 var(--m-font)}
-.scene-tip span{font:400 11.5px/1.55 var(--m-mono);color:var(--m-muted);overflow-wrap:anywhere}
-.scene-flat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:15px;color:var(--m-grey)}
-.scene-flat code{position:relative;z-index:1;font:500 14px var(--m-mono);color:#fff;background:rgba(255,255,255,.08);padding:8px 12px;border-radius:8px}
-.scene-flat strong{position:relative;z-index:1;color:#fff}
-
+/* ---------- the gateway film and the X-ray lens ---------- */
+/* The film sits in a rounded glass frame, not a spotlight: a panel, edge to edge within the hero. */
+.scene{position:relative;height:clamp(320px,36vw,520px);margin:16px 0 0;isolation:isolate;overflow:hidden;border-radius:24px;border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 30px 80px rgba(0,0,0,.5);background:#0d0f13}
+.scene-film{position:absolute;inset:0;z-index:0;width:100%;height:100%;object-fit:cover;filter:brightness(.95) saturate(1.05)}
+.scene-label{position:absolute;z-index:3;pointer-events:none;white-space:nowrap;font:600 13px/1 var(--m-font);color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);padding:8px 12px;border-radius:99px}
+.scene-label-app{left:12%;bottom:14%}
+.scene-label-mender{left:50%;top:10%;transform:translateX(-50%)}
+.scene-label-mender.is-off{color:#ffb3ad}
+.scene-label-api{right:10%;top:16%}
+.scene-hint{position:absolute;z-index:3;left:50%;bottom:16px;transform:translateX(-50%);margin:0;font-size:13px;color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.18);padding:7px 12px;border-radius:99px;white-space:nowrap}
+/* The lens: a liquid-glass window that follows the pointer and shows the code behind that spot. */
+.lens{position:absolute;left:0;top:0;z-index:4;pointer-events:none;opacity:0;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.45);will-change:transform,opacity}
+/* Inside the lens, only the part under the pointer; the three blocks sit on top of each other. */
+.lens .xray{position:absolute;inset:0;display:block;padding:0}
+.lens .xray-col{position:absolute;inset:0;padding:18px 22px;opacity:0;transition:opacity .25s}
+.lens[data-zone="app"] .xray-col:nth-child(1),.lens[data-zone="mender"] .xray-col:nth-child(2),.lens[data-zone="api"] .xray-col:nth-child(3){opacity:1}
+.xray{display:grid;grid-template-columns:26% 30% 30%;justify-content:space-between;align-content:center;padding:0 5%;gap:0 2%;background:rgba(7,8,10,.97);color:#fff;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px}
+.xray-col{display:grid;gap:10px;align-content:center;min-width:0}
+.xray-kicker{font:600 12px/1 var(--m-font);letter-spacing:.02em;color:var(--m-glow-2)}
+.xray-kicker.is-off{color:var(--m-fail)}
+.xray pre{margin:0;font:500 13px/1.6 var(--m-mono);color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
+.xray b{font-weight:500}
+.xray .is-pass{color:var(--m-pass)}
+.xray .is-fail{color:var(--m-fail)}
+/* Without a pointer, the details sit under the film. */
+.xray-static{display:none}
+@media (hover:none),(max-width:759px),(prefers-reduced-motion:reduce){
+  .lens,.scene-hint{display:none}
+  .scene{height:auto}
+  .scene-film{position:relative;display:block;height:clamp(220px,52vw,420px);mask-image:none;-webkit-mask-image:none}
+  .xray-static{display:block}
+  .xray-static .xray{grid-template-columns:minmax(0,1fr);gap:18px;padding:20px 16px;background-image:none}
+}
 /* ---------- switch and real call ---------- */
-.home-console{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:24px 48px;padding-top:28px;border-top:1px solid var(--m-black-line)}
+.home-console{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:24px 48px;padding:26px 30px;margin-top:8px}
 .home-switch p,.home-call-head p{margin:10px 0 0;font-size:14px;line-height:1.5;color:var(--m-grey)}
 .home-call-head p{margin:0}
 .home-console code{font:500 11.5px var(--m-mono);color:#fff}
-.switch{display:inline-flex;align-items:center;gap:12px;background:none;border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:5px 18px 5px 5px;color:#fff;font:600 15px/1 var(--m-font);cursor:pointer}
+.switch{display:inline-flex;align-items:center;gap:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.22);border-radius:99px;padding:5px 18px 5px 5px;color:#fff;font:600 15px/1 var(--m-font);cursor:pointer}
 .switch-knob{position:relative;width:46px;height:28px;border-radius:99px;background:#3a3f48;transition:background-color .2s}
 .switch-knob::after{content:"";position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
 .switch[aria-checked="true"] .switch-knob{background:var(--m-pass)}
@@ -105,7 +127,7 @@
 .door-run .door-price{color:var(--m-pass)}
 
 .home-footer{color:var(--m-grey);border-top:1px solid var(--m-black-line)}
-.home-footer .brand-logo img{filter:invert(1);mix-blend-mode:screen}
+.home-footer .mascot{filter:invert(1);mix-blend-mode:screen}
 .home-footer nav{display:flex;flex-wrap:wrap;gap:20px}
 
 @media (max-width:900px){
@@ -117,7 +139,7 @@
 @media (max-width:760px){
   .home-hero{padding:0 16px 40px}
   .home-hero-copy{padding-top:16px}
-  .scene{height:250px;margin:0 -16px}
+  .scene{height:auto;margin:12px 0 0;border-radius:18px}
   .home-call-head{flex-direction:column;align-items:flex-start;gap:12px}
   .home-answer strong{font-size:36px}
   .home-seam{padding:64px 16px}
