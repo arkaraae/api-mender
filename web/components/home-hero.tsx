@@ -8,6 +8,7 @@ import GatewayScene from '@/components/gateway-scene';
 import HeroCards from '@/components/hero-cards';
 import HeroNav from '@/components/hero-nav';
 import Mascot from '@/components/mascot';
+import XrayLens from '@/components/xray-lens';
 
 type Answer = { status: number; ms: number; throughMender: boolean; detail: string };
 
@@ -48,6 +49,8 @@ export default function HomeHero() {
     <>
       <section className="hero" aria-labelledby="home-title">
         <video className="hero-film" autoPlay muted loop playsInline poster="/hero-bg.jpg" src="/hero-bg.mp4" aria-hidden="true" />
+        {/* Over the chain of requests, the same X-ray lens as on the machine below; never over the text or the cards. */}
+        <XrayLens mender={mender} ignore=".hero-copy, .hero-side, .hero-nav, .hero-menu" />
         <HeroNav />
         <div className="hero-body">
           <div className="hero-copy">
