@@ -4,8 +4,8 @@
    accent. Green means a call that works, red one that breaks. The team's workspace pages
    (/demo, /live) keep their own styles. */
 :root{
-  --m-font:"Familjen Grotesk",Arial,Helvetica,sans-serif;
-  --m-mono:"Martian Mono",ui-monospace,Menlo,monospace;
+  --m-font:"DM Sans",Arial,Helvetica,sans-serif;
+  --m-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
   --m-black:#050607;
   --m-black-surface:#101216;
   --m-black-line:#23262c;
@@ -15,8 +15,10 @@
   --m-muted:#5f6672;
   --m-paper:#f6f7f9;
   --m-line:#e1e4ea;
-  --m-accent:#1d7cff;
-  --m-accent-deep:#0f5fd1;
+  --m-accent:#a6439e;
+  --m-accent-hover:#b854b0;
+  --m-accent-deep:#8a3384;
+  --m-accent-light:#d98fd3;
   --m-glow-1:#1d7cff;
   --m-glow-2:#17c9a2;
   --m-pass:#35e08f;
@@ -39,11 +41,11 @@
 .check-hero h1{letter-spacing:-.035em;font-weight:600}
 .check-card,.pricing-plan{border-color:var(--m-line)}
 .check-link{color:var(--m-ink);text-decoration-color:var(--m-accent);text-decoration-thickness:2px;text-underline-offset:3px}
-/* Blue means Mender did something: a change it can translate. */
-.verdict-bridged{background:#e9f2ff;border-color:#a9c9f7;color:#0d3b78}
+/* Purple means Mender did something: a change it can translate. */
+.verdict-bridged{background:#f7eaf6;border-color:#dcb0d8;color:#5a1f55}
 .verdict-bridged .check-verdict-mark{background:var(--m-accent-deep)}
 .pricing-plan-dark{position:relative;background:var(--m-black);border-color:var(--m-black);color:#fff;overflow:hidden}
-.pricing-plan-dark::before{content:"";position:absolute;left:-20%;top:-60%;width:140%;height:90%;background:radial-gradient(closest-side,rgba(29,124,255,.55),transparent 70%),radial-gradient(closest-side at 70% 60%,rgba(23,201,162,.45),transparent 70%);filter:blur(40px);pointer-events:none}
+.pricing-plan-dark::before{content:"";position:absolute;left:-20%;top:-60%;width:140%;height:90%;background:radial-gradient(closest-side,rgba(166,67,158,.6),transparent 70%),radial-gradient(closest-side at 70% 60%,rgba(94,106,210,.5),transparent 70%);filter:blur(40px);pointer-events:none}
 .pricing-plan-dark>*{position:relative}
 .pricing-plan-dark .pill-outline{background:#fff;border-color:#fff;color:var(--m-ink)}
 .pricing-plan-dark .pill-outline:hover{background:#e9ecf2}

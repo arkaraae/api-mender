@@ -1,5 +1,5 @@
 .brand-logo{display:inline-flex;align-items:center;gap:8px;flex:none;vertical-align:middle;color:inherit}
-.brand-word{font-family:"Familjen Grotesk",Arial,Helvetica,sans-serif;font-size:27px;font-weight:700;letter-spacing:-.045em;line-height:1}
+.brand-word{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1;text-transform:uppercase}
 /* The mascot: the character from the logo image, cropped, with eyes drawn on top (components/mascot.tsx). */
 .mascot{display:inline-block;position:relative;overflow:hidden;flex:none;vertical-align:middle;user-select:none}
 .mascot img{position:absolute;display:block;width:359%;height:auto;max-width:none;left:-40.5%;top:-8.3%;pointer-events:none}

@@ -1,28 +1,16 @@
-/* The homepage: a black page, white type, and one colorful thing: the field of blue and teal
-   light behind the 3D gateway. Colors come from app/public.css. */
+/* The homepage below its opening (app/hero.css): the live gateway, how it works, the two doors
+   and the footer. Black page, white type; colors come from app/public.css. */
 
 .home{background:var(--m-black);color:#fff}
 
 /* ---------- the dark top ---------- */
 .home-dark{position:relative;isolation:isolate;color:#fff;background:var(--m-black)}
-.home-dark>.marketing-nav,.home-dark>.home-hero{position:relative;z-index:1}
-
-
 .marketing-nav-dark nav a,.marketing-nav-dark .nav-text-link{color:var(--m-grey)}
 .marketing-nav-dark nav a:hover,.marketing-nav-dark .nav-text-link:hover{color:#fff}
 .marketing-nav-dark .mascot{filter:invert(1);mix-blend-mode:screen}
 .marketing-nav-dark .site-brand,.home-footer .site-brand{color:#fff}
 .marketing-nav-dark .pill-dark{background:#fff;border-color:#fff;color:var(--m-ink)}
 .marketing-nav-dark .pill-dark:hover{background:#e9ecf2}
-
-.home-hero{max-width:1320px;margin:0 auto;padding:0 40px 56px}
-.home-hero-copy{position:relative;max-width:1120px;padding-top:28px}
-/* The big mascot watches the pointer from the right of the hero text. */
-.hero-mascot{position:absolute;right:24px;bottom:-6px;filter:invert(1);mix-blend-mode:screen}
-@media (max-width:1040px){.hero-mascot{display:none}}
-.home-hero h1{font-size:clamp(40px,4.7vw,70px);line-height:1.02;letter-spacing:-.035em;font-weight:600;margin:0 0 20px;max-width:17em;text-wrap:balance}
-.home-hero-copy>p{font-size:clamp(17px,1.4vw,19px);line-height:1.55;color:var(--m-grey);max-width:64ch;margin:0 0 26px}
-.home-actions{display:flex;flex-wrap:wrap;gap:12px}
 
 /* ---------- liquid glass panels ---------- */
 .glass{background:rgba(255,255,255,.055);backdrop-filter:blur(20px) saturate(1.45);-webkit-backdrop-filter:blur(20px) saturate(1.45);border:1px solid rgba(255,255,255,.14);border-radius:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.05),0 24px 60px rgba(0,0,0,.35)}
@@ -57,7 +45,7 @@
 .lens[data-zone="app"] .xray-col:nth-child(1),.lens[data-zone="mender"] .xray-col:nth-child(2),.lens[data-zone="api"] .xray-col:nth-child(3){opacity:1}
 .xray{display:grid;grid-template-columns:26% 30% 30%;justify-content:space-between;align-content:center;padding:0 5%;gap:0 2%;background:rgba(7,8,10,.97);color:#fff;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px}
 .xray-col{display:grid;gap:10px;align-content:center;min-width:0}
-.xray-kicker{font:600 12px/1 var(--m-font);letter-spacing:.02em;color:var(--m-glow-2)}
+.xray-kicker{font:500 12px/1 var(--m-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--m-accent-light)}
 .xray-kicker.is-off{color:var(--m-fail)}
 .xray pre{margin:0;font:500 13px/1.6 var(--m-mono);color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
 .xray b{font-weight:500}
@@ -97,14 +85,14 @@
 .home-seam h2,.door h2{font-size:clamp(30px,3.4vw,46px);line-height:1.05;letter-spacing:-.03em;font-weight:600;margin:0 0 16px;text-wrap:balance}
 .home-seam-intro p{font-size:18px;line-height:1.55;color:var(--m-grey);margin:0;max-width:40ch}
 .seam-wrap{position:relative}
-.seam-thread{position:absolute;left:11px;top:8px;bottom:8px;width:3px;border-radius:2px;background:linear-gradient(to bottom,var(--m-glow-1),var(--m-glow-2));transform-origin:top}
+.seam-thread{position:absolute;left:11px;top:8px;bottom:8px;width:3px;border-radius:2px;background:linear-gradient(to bottom,var(--m-accent),#5e6ad2);transform-origin:top}
 .seam{list-style:none;margin:0;padding:0 0 0 48px;display:grid;gap:48px}
 .seam li{position:relative}
 .seam li::before{content:"";position:absolute;left:-40px;top:6px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px var(--m-black),0 0 0 6px rgba(255,255,255,.25)}
 .seam h3{font-size:22px;letter-spacing:-.015em;font-weight:600;margin:0 0 8px}
 .seam p{font-size:17px;line-height:1.6;color:var(--m-grey);margin:0 0 14px;max-width:56ch}
 .seam code{display:inline-block;white-space:pre-wrap;font:500 12.5px/1.5 var(--m-mono);background:var(--m-black-surface);border:1px solid var(--m-black-line);color:#fff;padding:8px 12px;border-radius:8px;overflow-wrap:anywhere}
-.seam a{color:#fff;font-weight:600;text-decoration:underline;text-decoration-color:var(--m-glow-2);text-decoration-thickness:2px;text-underline-offset:4px}
+.seam a{color:#fff;font-weight:600;text-decoration:underline;text-decoration-color:var(--m-accent-light);text-decoration-thickness:2px;text-underline-offset:4px}
 @supports (animation-timeline:view()){
   @media (prefers-reduced-motion:no-preference){
     .seam-thread{animation:seam-draw linear both;animation-timeline:view();animation-range:entry 0% cover 60%}
@@ -120,7 +108,7 @@
 .door-call{background:var(--m-black-surface);border:1px solid var(--m-black-line);color:#fff}
 .door-call p{color:var(--m-grey)}
 .door-run{position:relative;overflow:hidden;color:#fff;background:var(--m-black-surface);border:1px solid var(--m-black-line);isolation:isolate}
-.door-run::before{content:"";position:absolute;left:-10%;top:-70%;width:120%;height:100%;z-index:-1;background:radial-gradient(closest-side,rgba(29,124,255,.5),transparent 70%),radial-gradient(closest-side at 75% 70%,rgba(23,201,162,.45),transparent 70%);filter:blur(44px);pointer-events:none}
+.door-run::before{content:"";position:absolute;left:-10%;top:-70%;width:120%;height:100%;z-index:-1;background:radial-gradient(closest-side,rgba(166,67,158,.55),transparent 70%),radial-gradient(closest-side at 75% 70%,rgba(94,106,210,.5),transparent 70%);filter:blur(44px);pointer-events:none}
 .door-run p{color:var(--m-grey)}
 .door h2{margin:0}
 .door .door-price{font-weight:600;font-size:19px;color:inherit}
@@ -137,9 +125,7 @@
   .home-console{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:760px){
-  .home-hero{padding:0 16px 40px}
-  .home-hero-copy{padding-top:16px}
-  .scene{height:auto;margin:12px 0 0;border-radius:18px}
+      .scene{height:auto;margin:12px 0 0;border-radius:18px}
   .home-call-head{flex-direction:column;align-items:flex-start;gap:12px}
   .home-answer strong{font-size:36px}
   .home-seam{padding:64px 16px}

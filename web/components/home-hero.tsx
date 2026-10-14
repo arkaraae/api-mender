@@ -1,9 +1,12 @@
 'use client';
 
-// The top of the homepage: what Mender does, the 3D gateway, a switch for Mender, and a real
+// The homepage: a full-screen opening over the film of a chain of requests, then the live
+// gateway: the team's film of the machine with the X-ray lens, a switch for Mender, and a real
 // call to the live Quotes API (version 2) sent from this page, with or without Mender.
 import { useState } from 'react';
 import GatewayScene from '@/components/gateway-scene';
+import HeroCards from '@/components/hero-cards';
+import HeroNav from '@/components/hero-nav';
 import Mascot from '@/components/mascot';
 
 type Answer = { status: number; ms: number; throughMender: boolean; detail: string };
@@ -42,41 +45,61 @@ export default function HomeHero() {
   }
 
   return (
-    <section className="home-hero" aria-labelledby="home-title">
-      <div className="home-hero-copy">
-        <h1 id="home-title">Ship the breaking change. Keep every old caller working.</h1>
-        <p>API Mender reads both versions of your API, proves how each old request maps to the new one, and translates old calls on the way in. Your customers upgrade when they are ready.</p>
-        <div className="home-actions">
-          <a className="home-button home-button-thread" href="/check">Check a change</a>
-          <a className="home-button home-button-quiet" href="/mender">See the gateway</a>
-        </div>
-        <Mascot className="hero-mascot" size={168} label="Mender, the mascot, following your pointer with its eyes" />
-      </div>
-
-      <GatewayScene mender={mender} />
-
-      <div className="home-console glass">
-        <div className="home-switch">
-          <button type="button" role="switch" aria-checked={mender} className="switch" onClick={() => setMender((on) => !on)}>
-            <span className="switch-knob" aria-hidden="true" />
-            <span className="switch-text">Mender is {mender ? 'on' : 'off'}</span>
-          </button>
-          <p>Switch it off to see what old callers get without it.</p>
-        </div>
-        <div className="home-call" aria-live="polite">
-          <div className="home-call-head">
-            <button type="button" className="home-button home-button-thread" disabled={sending} onClick={() => void sendRealCall()}>{sending ? 'Sending…' : 'Send a real call'}</button>
-            <p>An old-style request, <code>{'{"customerId": …}'}</code>, from this page to the live Quotes API version 2, {mender ? 'through Mender' : 'straight to the API'}.</p>
-          </div>
-          {problem && <p className="home-call-problem">{problem}</p>}
-          {answer && !problem && (
-            <div className={`home-answer ${answer.status < 400 ? 'is-pass' : 'is-fail'}`}>
-              <strong>{answer.status}</strong>
-              <p><span>{answer.throughMender ? 'Through Mender' : 'Straight to the API'}, in {answer.ms} ms.</span> {answer.detail}</p>
+    <>
+      <section className="hero" aria-labelledby="home-title">
+        <video className="hero-film" autoPlay muted loop playsInline poster="/hero-bg.jpg" src="/hero-bg.mp4" aria-hidden="true" />
+        <HeroNav />
+        <div className="hero-body">
+          <div className="hero-copy">
+            <h1 id="home-title">
+              <span className="hero-anim hero-reveal" style={{ animationDelay: '.2s' }}>Ship the</span>
+              <span className="hero-anim hero-reveal" style={{ animationDelay: '.38s' }}><span className="line-mask">breaking</span> change.</span>
+            </h1>
+            <p className="hero-lead hero-anim hero-fade" style={{ animationDelay: '.65s' }}>Keep every old caller working. Mender reads both versions of your API, proves how each old request maps to the new one, and translates old calls on the way in.</p>
+            <div className="hero-actions hero-anim hero-fade" style={{ animationDelay: '.8s' }}>
+              <a className="hero-button" href="/check">CHECK A CHANGE</a>
+              <a className="hero-link" href="#gateway">See the gateway ↓</a>
             </div>
-          )}
+          </div>
+          <div className="hero-side hero-anim hero-fade" style={{ animationDelay: '.95s' }}>
+            <Mascot className="hero-mascot" size={120} label="Mender, the mascot, following your pointer with its eyes" />
+            <HeroCards />
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <section className="home-gateway" id="gateway" aria-labelledby="gateway-title">
+        <div className="home-gateway-head">
+          <span className="home-kicker">LIVE GATEWAY</span>
+          <h2 id="gateway-title">Old requests go in. Version-two requests come out.</h2>
+          <p>Move your pointer over the machine to see the code behind each part. Then send a real call.</p>
+        </div>
+
+        <GatewayScene mender={mender} />
+
+        <div className="home-console glass">
+          <div className="home-switch">
+            <button type="button" role="switch" aria-checked={mender} className="switch" onClick={() => setMender((on) => !on)}>
+              <span className="switch-knob" aria-hidden="true" />
+              <span className="switch-text">Mender is {mender ? 'on' : 'off'}</span>
+            </button>
+            <p>Switch it off to see what old callers get without it.</p>
+          </div>
+          <div className="home-call" aria-live="polite">
+            <div className="home-call-head">
+              <button type="button" className="hero-button" disabled={sending} onClick={() => void sendRealCall()}>{sending ? 'SENDING…' : 'SEND A REAL CALL'}</button>
+              <p>An old-style request, <code>{'{"customerId": …}'}</code>, from this page to the live Quotes API version 2, {mender ? 'through Mender' : 'straight to the API'}.</p>
+            </div>
+            {problem && <p className="home-call-problem">{problem}</p>}
+            {answer && !problem && (
+              <div className={`home-answer ${answer.status < 400 ? 'is-pass' : 'is-fail'}`}>
+                <strong>{answer.status}</strong>
+                <p><span>{answer.throughMender ? 'Through Mender' : 'Straight to the API'}, in {answer.ms} ms.</span> {answer.detail}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

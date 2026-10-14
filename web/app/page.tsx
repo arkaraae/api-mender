@@ -1,8 +1,8 @@
 import AuthCallbackRedirect from '@/components/auth-callback-redirect';
 import BrandLogo from '@/components/brand-logo';
 import HomeHero from '@/components/home-hero';
-import SiteNav from '@/components/site-nav';
 import './home.css';
+import './hero.css';
 
 const STEPS = [
   {
@@ -32,7 +32,6 @@ export default function Home() {
     <main className="marketing-page home">
       <AuthCallbackRedirect />
       <div className="home-dark">
-        <SiteNav tone="dark" />
         <HomeHero />
       </div>
 
