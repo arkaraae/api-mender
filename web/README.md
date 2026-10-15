@@ -38,6 +38,10 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 
 apimender.com is served from its own Cloudflare account, as the Worker `apimender-site`, using the `apimender` environment in `wrangler.jsonc` (its account, the apimender.com and www.apimender.com custom domains, the `MENDER_WATCH` KV namespace and the hourly cron). The default environment stays as it was for the team's Workers Builds, without the watch list.
 
+After the site branch is merged into `main`, `.github/workflows/web-check.yml` will run typecheck, tests, and a build for each web change. A passing push to `main` then builds for the `apimender` environment and deploys `apimender-site`. The Cloudflare account owner must add `CLOUDFLARE_ACCOUNT_ID` and a narrowly scoped `CLOUDFLARE_API_TOKEN` as GitHub Actions repository secrets before that first push. Scope the token to the apimender.com Cloudflare account and the Worker deployment permissions described in [Cloudflare's GitHub Actions guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/). The workflow verifies the generated Worker name, account, and domain before deploying. Do not put the token in source or a Wrangler file.
+
+Cloudflare D1 migrations are not applied by this deployment workflow. Apply and verify any new migration separately before merging code that depends on it. If Cloudflare Workers Builds is also connected to this Worker, disable its production build trigger so the two systems do not race to deploy different commits.
+
 Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces` (done for apimender.com: `743c7ff4…`).
 
 Each release, from `web/`:
