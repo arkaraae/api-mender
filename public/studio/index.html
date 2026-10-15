@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mender Studio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one workbench column. A stitched thread runs down the left edge and ties the five
+     stages of making an adapter together; each stitch turns solid when its stage is healthy. */
+  :root {
+    --paper: #F3F5FA;
+    --surface: #FFFFFF;
+    --sunken: #ECEFF6;
+    --ink: #151A2D;
+    --muted: #586079;
+    --line: #D6DBE7;
+    --thread: #2C45CF;
+    --thread-soft: #E3E7FC;
+    --on-thread: #FFFFFF;
+    --ok: #13744A;
+    --ok-soft: #E1F2E8;
+    --bad: #B0261E;
+    --bad-soft: #FBE9E7;
+    --warn: #8A5300;
+    --warn-soft: #FCF0D8;
+    --display: 'Familjen Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
+      --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
+      --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0D1019; --surface: #151927; --sunken: #10131E; --ink: #E6E9F3; --muted: #9AA2BA;
+    --line: #2A3045; --thread: #8B9CFF; --thread-soft: #1D2346; --on-thread: #0D1330;
+    --ok: #5BCB8F; --ok-soft: #10281C; --bad: #FF8B7E; --bad-soft: #341619; --warn: #F0B452; --warn-soft: #31240D;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.6 var(--body); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  a { color: var(--thread); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--thread); outline-offset: 2px; }
+
+  .masthead { display: grid; gap: 18px; padding-bottom: 40px; }
+  .brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .wordmark { font: 700 26px/1 var(--display); letter-spacing: -0.01em; text-decoration: underline dashed var(--thread); text-decoration-thickness: 2px; text-underline-offset: 7px; }
+  .tag { font: 500 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--thread); background: var(--thread-soft); padding: 6px 9px; border-radius: 999px; }
+  .masthead h1 { font-size: clamp(34px, 5.2vw, 56px); line-height: 1.03; letter-spacing: -0.02em; font-weight: 700; max-width: 17ch; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 64ch; }
+  .fine { font-size: 13px; color: var(--muted); }
+
+  .btn { border: 1px solid transparent; border-radius: 8px; padding: 9px 15px; font-weight: 600; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-primary { background: var(--thread); color: var(--on-thread); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .step { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; padding-bottom: 52px; }
+  .step::before { content: ''; position: absolute; left: 17px; top: 40px; bottom: 4px; border-left: 2px dashed var(--line); }
+  .step:last-child::before { display: none; }
+  .step[data-state="done"]::before { border-left: 2px solid var(--thread); }
+  .knot { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 600 15px/1 var(--mono); background: var(--surface); border: 2px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
+  .step[data-state="done"] .knot { background: var(--thread); border-color: var(--thread); color: var(--on-thread); }
+  .step[data-state="broken"] .knot { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .step-body { display: grid; gap: 16px; min-width: 0; }
+  .step h2 { font-size: clamp(22px, 2.6vw, 28px); line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; padding-top: 3px; }
+  .step .lead { color: var(--muted); max-width: 68ch; }
+
+  .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .field { display: grid; gap: 6px; min-width: 0; }
+  .label { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  input[type="text"], input[type="date"], input[type="url"], select, textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; min-width: 0;
+  }
+  textarea { font: 400 13px/1.55 var(--mono); resize: vertical; tab-size: 2; }
+  textarea.tall { min-height: 300px; }
+  textarea.mid { min-height: 170px; }
+  textarea.short { min-height: 76px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--thread); outline: none; box-shadow: 0 0 0 3px var(--thread-soft); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-head .label { color: var(--ink); }
+  pre.out { margin: 0; padding: 12px 14px; background: var(--sunken); font: 400 13px/1.55 var(--mono); overflow: auto; max-height: 340px; white-space: pre; }
+  .chip { font: 500 12px/1 var(--mono); padding: 5px 8px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.thread { background: var(--thread-soft); color: var(--thread); }
+
+  .callout { border-left: 3px solid var(--thread); background: var(--thread-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 15px; }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .error-text { color: var(--bad); font-size: 14px; }
+
+  .rules { list-style: none; margin: 0; padding: 0; }
+  .rules li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .rules li:last-child { border-bottom: 0; }
+  .rules code { font: 400 13px/1.5 var(--mono); background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
+  .rules .chip { justify-self: start; }
+  .notes { list-style: none; margin: 0; padding: 0; }
+  .notes li { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 14px; overflow-wrap: anywhere; }
+  .notes li:last-child { border-bottom: 0; }
+  details > summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 14px; }
+  details[open] > summary { border-bottom: 1px solid var(--line); }
+  .details-body { padding: 12px 14px; display: grid; gap: 10px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--sunken); }
+  td code { font: 400 13px/1.5 var(--mono); overflow-wrap: anywhere; }
+
+  .headers dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); }
+  .headers dt, .headers dd { margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--line); font: 400 13px/1.5 var(--mono); }
+  .headers dt { color: var(--muted); }
+  .headers dd { overflow-wrap: anywhere; }
+  .headers dl > :nth-last-child(-n+2) { border-bottom: 0; }
+
+  .footer { border-top: 1px solid var(--line); padding-top: 24px; display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 760px) {
+    .wrap { padding-block: 28px 56px; }
+    .pair, .trio { grid-template-columns: minmax(0, 1fr); }
+    .step { grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; }
+    .knot { width: 28px; height: 28px; font-size: 13px; }
+    .step::before { left: 13px; top: 32px; }
+    .rules li { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand"><span class="wordmark">mender</span><span class="tag">Studio</span><a class="fine" href="walkthrough.html" id="walkthrough-link">New here? Watch the 5-step walkthrough →</a></div>
+    <h1>Make your breaking change safe to ship.</h1>
+    <p class="lede">Point Mender at the old and new version of your API. It calls both, finds what changed, writes the adapter that keeps customers on the old version working, proves it, and gives you the rules to deploy.</p>
+    <p class="fine">It opens connected to the Parcel sandbox, a small test API. Swap in your own URLs to try it on your API, or paste records by hand. Your data only goes to the URLs you enter, and to Claude if you use "Write with AI".</p>
+  </header>
+
+  <ol class="steps">
+    <li class="step" id="step-1" data-state="done">
+      <div class="knot" aria-hidden="true">1</div>
+      <div class="step-body">
+        <h2>Call your API, old and new</h2>
+        <p class="lead">Mender requests the same records from both versions. Use <code>{path}</code> in each URL where the record path goes, and add any headers your API needs, such as a version header or a test key.</p>
+        <div class="trio">
+          <label class="field"><span class="label">Old version</span><input type="text" id="old-version" value="2026-03-01"></label>
+          <label class="field"><span class="label">New version</span><input type="text" id="new-version" value="2026-09-01"></label>
+          <label class="field"><span class="label">Old version shuts off</span><input type="date" id="sunset" value="2027-03-01"></label>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Call the API</span><span class="chip" id="call-status">Not called yet</span></div>
+          <div class="details-body">
+            <div class="pair">
+              <label class="field"><span class="label">Old version URL</span><input type="text" id="old-url" spellcheck="false"></label>
+              <label class="field"><span class="label">New version URL</span><input type="text" id="new-url" spellcheck="false"></label>
+            </div>
+            <div class="pair">
+              <label class="field"><span class="label">Old version headers, one per line</span><textarea class="short" id="old-headers" spellcheck="false" placeholder="Authorization: Bearer sk_test_..."></textarea></label>
+              <label class="field"><span class="label">New version headers, one per line</span><textarea class="short" id="new-headers" spellcheck="false" placeholder="Api-Version: 2026-09-01"></textarea></label>
+            </div>
+            <label class="field"><span class="label">Record paths to request, one per line (GET)</span><textarea class="short" id="paths" spellcheck="false"></textarea></label>
+            <label class="field"><span class="label">Ignore fields that change on every call, comma separated</span><input type="text" id="ignore" spellcheck="false" placeholder="place_id, timestamp, meta.request_id"></label>
+            <div class="row"><button class="btn btn-primary" id="call-api" type="button">Call both versions</button></div>
+            <div class="table-wrap" id="call-log-wrap" hidden>
+              <table>
+                <thead><tr><th>Path</th><th>Old version</th><th>New version</th></tr></thead>
+                <tbody id="call-log"></tbody>
+              </table>
+            </div>
+            <p class="error-text" id="call-error" role="alert" hidden></p>
+          </div>
+        </div>
+        <details class="panel" id="specs-panel">
+          <summary>Or compare two API descriptions (OpenAPI or Swagger, JSON or YAML)</summary>
+          <div class="details-body">
+            <p class="fine">Paste the description of the old version and of the new one. Mender reads what changed between them, then proves the rules with samples it generates from the descriptions themselves.</p>
+            <div class="pair">
+              <label class="field"><span class="label">Old version: address of the description</span><input type="text" id="spec-old-url" spellcheck="false" placeholder="/api/managed/openapi.json?version=1"></label>
+              <label class="field"><span class="label">New version: address of the description</span><input type="text" id="spec-new-url" spellcheck="false" placeholder="/api/managed/openapi.json"></label>
+            </div>
+            <div class="row"><button class="btn btn-ghost" id="fetch-specs" type="button">Fetch both descriptions</button><span class="fine">or paste them below</span></div>
+            <div class="pair">
+              <label class="field"><span class="label">Old version description</span><textarea class="mid" id="spec-old" spellcheck="false"></textarea></label>
+              <label class="field"><span class="label">New version description</span><textarea class="mid" id="spec-new" spellcheck="false"></textarea></label>
+            </div>
+            <p class="error-text" id="spec-error" role="alert" hidden></p>
+            <div class="row">
+              <button class="btn btn-primary" id="find-specs" type="button">Find rules from descriptions</button>
+              <button class="btn btn-ghost" id="load-quotes" type="button">Load the Quotes API example</button>
+            </div>
+          </div>
+        </details>
+        <p class="fine">The answers land below as "before" and "after" records. You can also paste records there by hand.</p>
+        <div class="pair">
+          <label class="field"><span class="label">Before · old version (JSON)</span><textarea class="tall" id="before" spellcheck="false"></textarea></label>
+          <label class="field"><span class="label">After · new version (JSON)</span><textarea class="tall" id="after" spellcheck="false"></textarea></label>
+        </div>
+        <div class="pair">
+          <label class="field"><span class="label">Removed endpoints, one per line</span><textarea class="short" id="removed" spellcheck="false" placeholder="GET /orders/{id}/label"></textarea></label>
+          <div class="field">
+            <label class="field"><span class="label">Migration guide link</span><input type="url" id="guide" placeholder="https://docs.example.com/migrate"></label>
+            <label class="field"><span class="label">Notes for the AI (optional)</span><input type="text" id="notes" placeholder="Anything the examples can't show"></label>
+          </div>
+        </div>
+        <p class="error-text" id="input-error" role="alert" hidden></p>
+        <div class="row">
+          <button class="btn btn-ghost" id="load-example" type="button">Load Parcel example</button>
+          <button class="btn btn-ghost" id="clear" type="button">Clear</button>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-2" data-state="ready">
+      <div class="knot" aria-hidden="true">2</div>
+      <div class="step-body">
+        <h2>Mender writes the adapter</h2>
+        <p class="lead">The adapter is a short list of rules: what was renamed, rescaled or reformatted, and what can't be saved. Mender runs the rules forward on requests from old customers and backward on the answers they get.</p>
+        <div class="row">
+          <button class="btn btn-primary" id="find" type="button">Find rules from examples</button>
+          <button class="btn btn-ghost" id="ai-write" type="button" hidden>Write with AI</button>
+          <span class="chip" id="rules-source">No rules yet</span>
+        </div>
+        <p class="fine" id="ai-status" aria-live="polite"></p>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Adapter rules</span><span class="chip" id="rules-count">0 rules</span></div>
+          <ul class="rules" id="rules-list"><li><span></span><span class="fine">Find rules to fill this in.</span></li></ul>
+          <details id="rules-editor">
+            <summary>Edit the rules as JSON</summary>
+            <div class="details-body">
+              <textarea class="mid" id="rules-json" spellcheck="false" aria-label="Adapter rules as JSON"></textarea>
+              <p class="error-text" id="rules-error" role="alert" hidden></p>
+              <div class="row"><button class="btn btn-ghost" id="apply-json" type="button">Use these rules</button></div>
+            </div>
+          </details>
+        </div>
+        <div class="panel" id="notes-panel" hidden>
+          <div class="panel-head"><span class="label">What Mender could not settle</span><span class="chip warn" id="notes-count"></span></div>
+          <ul class="notes" id="notes-list"></ul>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-3" data-state="ready">
+      <div class="knot" aria-hidden="true">3</div>
+      <div class="step-body">
+        <h2>Proof on your examples</h2>
+        <p class="lead">Every example runs through the rules both ways. Old → new must give exactly your "after" record, and new → old must give back exactly your "before" record. Any difference blocks the adapter.</p>
+        <p class="callout" id="verdict">Proof runs as soon as there are rules.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Example</th><th>Old → new</th><th>New → old</th><th>Differences</th></tr></thead>
+            <tbody id="proof-rows"></tbody>
+          </table>
+        </div>
+        <div class="row"><button class="btn btn-ghost" id="ai-fix" type="button" hidden>Fix with AI</button></div>
+        <div id="spec-proof" hidden>
+          <p class="callout" id="spec-verdict"></p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Endpoint</th><th>Samples</th><th>Result</th><th>What failed</th></tr></thead>
+              <tbody id="spec-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-4" data-state="ready">
+      <div class="knot" aria-hidden="true">4</div>
+      <div class="step-body">
+        <h2>Try it with your own data</h2>
+        <p class="lead">Edit either box and see what the adapter does, live. This is the same code Mender runs on every request.</p>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">Your new API answers</span><span class="chip" id="down-status">new version</span></div>
+            <textarea class="mid" id="try-down" spellcheck="false" aria-label="An answer from your new API" style="border:0;border-radius:0"></textarea>
+            <div class="panel-head" style="border-top:1px solid var(--line)"><span class="label">Old customers receive</span></div>
+            <pre class="out" id="try-down-out"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="label">An old customer sends</span><span class="chip" id="up-status">old version</span></div>
+            <textarea class="mid" id="try-up" spellcheck="false" aria-label="A request from an old customer" style="border:0;border-radius:0"></textarea>
+            <div class="panel-head" style="border-top:1px solid var(--line)"><span class="label">Your new API receives</span></div>
+            <pre class="out" id="try-up-out"></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">Check an endpoint</span></div>
+            <div class="details-body">
+              <div class="row">
+                <select id="try-method" aria-label="Method" style="width:auto"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+                <input type="text" id="try-path" value="/orders/ord_1001/label" aria-label="Path" style="flex:1;min-width:160px">
+              </div>
+              <p id="try-endpoint-out" aria-live="polite"></p>
+            </div>
+          </div>
+          <div class="panel headers">
+            <div class="panel-head"><span class="label">Headers old customers get</span></div>
+            <div id="headers"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Send a real request, as an old customer would</span><span class="chip" id="live-status">Not sent yet</span></div>
+          <div class="details-body">
+            <p class="fine">Mender sends your request to the new API twice: once as it is, and once through the adapter. This makes real calls, so use a test endpoint.</p>
+            <div class="row">
+              <select id="live-method" aria-label="Method" style="width:auto"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+              <input type="text" id="live-url" spellcheck="false" aria-label="Address of the new API" placeholder="https://api.example.com/orders, or a path on this site such as /api/orders" style="flex:1;min-width:200px">
+              <button class="btn btn-primary" id="live-send" type="button">Send both</button>
+            </div>
+            <label class="field"><span class="label">Request body, as the old customer sends it (JSON)</span><textarea class="short" id="live-body" spellcheck="false"></textarea></label>
+            <div class="pair">
+              <div class="field"><span class="label">Sent as it is</span><pre class="out" id="live-direct">–</pre></div>
+              <div class="field"><span class="label">Sent through the adapter</span><pre class="out" id="live-mender">–</pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+
+    <li class="step" id="step-5" data-state="ready">
+      <div class="knot" aria-hidden="true">5</div>
+      <div class="step-body">
+        <h2>Ship it</h2>
+        <p class="lead">Save the rules next to your API and put Mender in front of your newest handler. Customers on the old version keep working, and every call they make is counted, so you know who still has to move before the shut-off date.</p>
+        <div class="pair">
+          <div class="panel">
+            <div class="panel-head"><span class="label">mender-rules.json</span><button class="btn btn-ghost" id="copy-rules" type="button">Copy</button></div>
+            <pre class="out" id="ship-rules"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="label">server.js</span><button class="btn btn-ghost" id="copy-code" type="button">Copy</button></div>
+            <pre class="out" id="ship-code"></pre>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Changelog for your customers</span><button class="btn btn-ghost" id="copy-log" type="button">Copy</button></div>
+          <pre class="out" id="ship-log"></pre>
+        </div>
+        <p class="fine">Get <code>mender.js</code> and <code>rules.js</code> from <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender/src">GitHub</a>. They work with any handler that takes a Request and returns a Response: Next.js route handlers, Hono, Cloudflare Workers, Bun and Deno.</p>
+      </div>
+    </li>
+  </ol>
+
+  <footer class="footer">
+    <p><strong>How the rules are found.</strong> "Find rules from examples" matches fields between your two records by value: same value under a new name, the same number times 10, 100 or 1000, the same text in different case, the same moment in a different time format, and renamed values. It runs in this page with no AI. "Write with AI" asks Claude, on your own Claude account, and appears only where that's available.</p>
+    <p>Source: <a href="https://github.com/arkaraae/api-mender/tree/mender-demo/mender">github.com/arkaraae/api-mender, mender-demo branch</a></p>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script type="module">
+  import { makeParcel, V1, V2, API } from './src/parcel.js';
+  import { verifyRules, compileRules, describeRule, checkRule, checkRules, changelog, TIME_FORMATS } from './src/rules.js';
+  import { explainRules } from './src/infer.js';
+  import { rulesFromOpenApi, proveWithSchemas } from './src/openapi.js';
+  import { withMender } from './src/mender.js';
+
+  const $ = (id) => document.getElementById(id);
+  const state = { rules: [], source: '', notes: [], specs: null, proxy: false, ai: null, busy: false };
+  const pretty = (value) => JSON.stringify(value, null, 2);
+
+  // ---------- the Parcel example ----------
+
+  async function parcelRecord(version, id) {
+    const response = await makeParcel(version)(new Request(`${API}/orders/${id}`, { headers: { 'parcel-version': version } }));
+    return response.json();
+  }
+
+  // The Parcel sandbox is a read-only copy of both versions served as plain files next to this page.
+  function sandboxBase() {
+    try { return new URL('sandbox/', document.baseURI).href; } catch { return 'sandbox/'; }
+  }
+
+  async function loadExample() {
+    $('old-version').value = V1;
+    $('new-version').value = V2;
+    $('sunset').value = '2027-03-01';
+    $('old-url').value = `${sandboxBase()}${V1}{path}`;
+    $('new-url').value = `${sandboxBase()}${V2}{path}`;
+    $('old-headers').value = '';
+    $('new-headers').value = '';
+    $('paths').value = ['/orders/ord_1001', '/orders/ord_1002', '/orders/ord_1004', '/orders/ord_1005'].join('\n');
+    $('ignore').value = '';
+    $('removed').value = 'GET /orders/{id}/label';
+    $('guide').value = 'https://docs.parcel.example/migrate/2026-09-01';
+    $('notes').value = 'Shipping labels moved to the new Labels API.';
+    $('try-up').value = pretty({ customer_name: 'Jonas Berg', amount: 19.99, currency: 'usd', items: [{ sku: 'TENT-2P', qty: 1 }] });
+    $('try-path').value = '/orders/ord_1001/label';
+    $('try-down').value = '';
+    const called = await callApi();
+    if (!called) {
+      // The sandbox couldn't be reached, so fall back to Parcel running inside this page.
+      const ids = ['ord_1001', 'ord_1004'];
+      $('before').value = pretty(await Promise.all(ids.map((id) => parcelRecord(V1, id))));
+      $('after').value = pretty(await Promise.all(ids.map((id) => parcelRecord(V2, id))));
+      findRules();
+    }
+    const after = JSON.parse($('after').value);
+    $('try-down').value = pretty({ object: 'list', data: [Array.isArray(after) ? after[0] : after], has_more: false });
+    refresh();
+  }
+
+  // ---------- calling the API ----------
+
+  function readHeaders(id) {
+    const headers = {};
+    for (const line of $(id).value.split('\n')) {
+      const at = line.indexOf(':');
+      if (at > 0) headers[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+    }
+    return headers;
+  }
+
+  async function request(template, path, headers) {
+    const url = template.includes('{path}') ? template.replace('{path}', path) : template.replace(/\/$/, '') + path;
+    const started = performance.now();
+    try {
+      const viaProxy = () => fetch(`/__proxy?url=${encodeURIComponent(new URL(url, location.href).href)}`, { headers, cache: 'no-store' });
+      const response = await fetch(url, { headers, cache: 'no-store' }).catch((error) => { if (state.proxy) return viaProxy(); throw error; });
+      const text = await response.text();
+      const ms = Math.round(performance.now() - started);
+      let body;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      // An API that answers with a list: use its first record.
+      if (Array.isArray(body) && body[0] && typeof body[0] === 'object') body = body[0];
+      return { url, ok: response.ok, status: response.status, ms, bytes: text.length, body };
+    } catch {
+      return { url, blocked: true };
+    }
+  }
+
+  const describeCall = (r) => (r.blocked ? 'Blocked by the browser' : `${r.status} · ${r.ms} ms · ${r.bytes} B${r.body === undefined ? ' · not JSON' : ''}`);
+
+  async function callApi() {
+    const paths = $('paths').value.split('\n').map((p) => p.trim()).filter(Boolean);
+    const oldUrl = $('old-url').value.trim();
+    const newUrl = $('new-url').value.trim();
+    const error = $('call-error');
+    error.hidden = true;
+    if (!oldUrl || !newUrl || !paths.length) {
+      error.textContent = 'Enter both URLs and at least one record path.';
+      error.hidden = false;
+      return false;
+    }
+    $('call-api').disabled = true;
+    $('call-status').textContent = 'Calling…';
+    $('call-status').className = 'chip thread';
+    const oldHeaders = readHeaders('old-headers');
+    const newHeaders = readHeaders('new-headers');
+    const results = [];
+    for (const path of paths) {
+      const [before, after] = await Promise.all([request(oldUrl, path, oldHeaders), request(newUrl, path, newHeaders)]);
+      results.push({ path, before, after });
+    }
+    $('call-api').disabled = false;
+
+    $('call-log').replaceChildren(...results.map(({ path, before, after }) => {
+      const tr = document.createElement('tr');
+      for (const [text, good] of [[path, null], [describeCall(before), before.ok && before.body !== undefined], [describeCall(after), after.ok && after.body !== undefined]]) {
+        const td = document.createElement('td');
+        const code = document.createElement('code');
+        code.textContent = text;
+        if (good === true) code.style.color = 'var(--ok)';
+        if (good === false) code.style.color = 'var(--bad)';
+        td.append(code);
+        tr.append(td);
+      }
+      return tr;
+    }));
+    $('call-log-wrap').hidden = false;
+
+    const usable = results.filter(({ before, after }) => before.ok && after.ok
+      && before.body && after.body && typeof before.body === 'object' && typeof after.body === 'object'
+      && !Array.isArray(before.body) && !Array.isArray(after.body));
+    const blocked = results.some(({ before, after }) => before.blocked || after.blocked);
+    if (blocked) {
+      error.textContent = 'The browser couldn’t reach one of the URLs. Your API has to allow calls from this page (CORS), and a page hosted on claude.ai can only call the Parcel sandbox. To call any API, run Mender Studio from its dev server: python3 mender/tools/serve.py';
+      error.hidden = false;
+    } else if (usable.length < results.length) {
+      error.textContent = 'Some calls didn’t return a JSON record in both versions. Only the ones that did are used below.';
+      error.hidden = false;
+    }
+    if (!usable.length) {
+      $('call-status').textContent = 'No usable answers';
+      $('call-status').className = 'chip bad';
+      return false;
+    }
+    $('call-status').textContent = `${usable.length * 2} calls answered`;
+    $('call-status').className = 'chip ok';
+    $('before').value = pretty(usable.map((r) => r.before.body));
+    $('after').value = pretty(usable.map((r) => r.after.body));
+    findRules();
+    return true;
+  }
+
+  // ---------- reading the inputs ----------
+
+  function readPairs() {
+    const parse = (id, name) => {
+      const text = $(id).value.trim();
+      if (!text) throw new Error(`Paste a JSON record into "${name}".`);
+      try { return JSON.parse(text); } catch (error) { throw new Error(`"${name}" isn't valid JSON: ${error.message}`); }
+    };
+    const before = parse('before', 'Before');
+    const after = parse('after', 'After');
+    const list = (v) => (Array.isArray(v) ? v : [v]);
+    const olds = list(before);
+    const news = list(after);
+    if (olds.length !== news.length) throw new Error(`"Before" has ${olds.length} records and "After" has ${news.length}. Put the same records in the same order on both sides.`);
+    if (![...olds, ...news].every((r) => r && typeof r === 'object' && !Array.isArray(r))) throw new Error('Each record must be a JSON object, like { "id": 1 }.');
+    const ignored = ignoredFields();
+    return olds.map((old, i) => ({ old: withoutFields(old, ignored), new: withoutFields(news[i], ignored) }));
+  }
+
+  // Fields such as ids and timestamps change on every call, so they say nothing about the version change.
+  function ignoredFields() {
+    return $('ignore').value.split(',').map((f) => f.trim()).filter(Boolean);
+  }
+
+  function withoutFields(record, fields) {
+    const copy = structuredClone(record);
+    for (const field of fields) {
+      const keys = field.split('.');
+      let node = copy;
+      for (const key of keys.slice(0, -1)) node = node?.[key];
+      if (node && typeof node === 'object') delete node[keys.at(-1)];
+    }
+    return copy;
+  }
+
+  function endpointRules() {
+    const guide = $('guide').value.trim() || undefined;
+    return $('removed').value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [method, path] = line.split(/\s+/);
+      return path ? { op: 'endpoint_removed', method: method.toUpperCase(), path, guide } : null;
+    }).filter(Boolean);
+  }
+
+  function showInputError(message) {
+    $('input-error').textContent = message ?? '';
+    $('input-error').hidden = !message;
+    $('step-1').dataset.state = message ? 'broken' : 'done';
+  }
+
+  // ---------- rules ----------
+
+  function setRules(rules, source, notes = []) {
+    state.rules = rules;
+    state.source = source;
+    state.notes = notes;
+    $('notes-panel').hidden = notes.length === 0;
+    $('notes-count').textContent = `${notes.length} to check`;
+    const line = (note) => {
+      const li = document.createElement('li');
+      li.textContent = note.message;
+      return li;
+    };
+    // A long list opens with its first 30 lines.
+    const lines = notes.slice(0, 30).map(line);
+    if (notes.length > lines.length) {
+      const more = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-ghost';
+      button.textContent = `Show all ${notes.length}`;
+      button.addEventListener('click', () => $('notes-list').replaceChildren(...notes.map(line)));
+      more.append(button);
+      lines.push(more);
+    }
+    $('notes-list').replaceChildren(...lines);
+    $('rules-source').textContent = source;
+    $('rules-source').className = `chip ${source ? 'thread' : ''}`;
+    $('rules-count').textContent = `${rules.length} rule${rules.length === 1 ? '' : 's'}`;
+    $('rules-json').value = pretty(rules);
+    $('rules-error').hidden = true;
+    const list = $('rules-list');
+    if (!rules.length) {
+      list.innerHTML = '<li><span></span><span class="fine">No differences found between your records.</span></li>';
+    } else {
+      list.replaceChildren(...rules.map((rule) => {
+        const li = document.createElement('li');
+        const chip = document.createElement('span');
+        const warn = rule.op === 'add' || rule.op === 'remove';
+        chip.className = `chip ${rule.op === 'endpoint_removed' ? 'bad' : warn ? 'warn' : 'thread'}`;
+        chip.textContent = rule.op.replace('_', ' ');
+        const text = document.createElement('span');
+        // describeRule marks field names with backticks; render them as code safely.
+        for (const [i, part] of describeRule(rule).split('`').entries()) {
+          if (i % 2) { const c = document.createElement('code'); c.textContent = part; text.append(c); } else text.append(part);
+        }
+        li.append(chip, text);
+        return li;
+      }));
+    }
+    $('step-2').dataset.state = rules.length ? 'done' : 'ready';
+    refresh();
+  }
+
+  function findRules() {
+    let pairs;
+    try { pairs = readPairs(); } catch (error) { showInputError(error.message); return; }
+    showInputError(null);
+    state.specs = null;
+    const found = explainRules(pairs);
+    setRules([...found.rules, ...endpointRules()], 'Found from examples, no AI', found.notes);
+  }
+
+  // ---------- rules from two API descriptions ----------
+
+  function parseSpec(id, name) {
+    const text = $(id).value.trim();
+    if (!text) throw new Error(`Paste the ${name} version's description.`);
+    try { return JSON.parse(text); } catch { /* not JSON: try YAML */ }
+    if (!window.jsyaml) throw new Error(`The ${name} description isn't valid JSON, and the YAML reader could not be loaded.`);
+    let spec;
+    try { spec = window.jsyaml.load(text); } catch (error) { throw new Error(`The ${name} description isn't valid JSON or YAML: ${error.message.split('\n')[0]}`); }
+    if (!spec || typeof spec !== 'object') throw new Error(`The ${name} description isn't an API description.`);
+    return spec;
+  }
+
+  function findFromSpecs() {
+    const error = $('spec-error');
+    error.hidden = true;
+    let before;
+    let after;
+    try { before = parseSpec('spec-old', 'old'); after = parseSpec('spec-new', 'new'); } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+      return;
+    }
+    if (!before.paths || !after.paths) {
+      error.textContent = 'Both descriptions need a "paths" section listing the endpoints.';
+      error.hidden = false;
+      return;
+    }
+    const found = rulesFromOpenApi(before, after);
+    state.specs = { before, after };
+    setRules(found.rules, 'Read from the two descriptions, no AI', found.notes);
+  }
+
+  // Reads the two descriptions from their addresses: a path on this site, or any address the
+  // browser (or the dev server's proxy) can reach.
+  async function fetchSpecs() {
+    const error = $('spec-error');
+    error.hidden = true;
+    const read = async (id, name) => {
+      const address = $(id).value.trim();
+      if (!address) throw new Error(`Enter the address of the ${name} version's description.`);
+      const url = new URL(address, location.href).href;
+      const response = await fetch(url, { cache: 'no-store' }).catch((problem) => {
+        if (state.proxy) return fetch(`/__proxy?url=${encodeURIComponent(url)}`, { cache: 'no-store' });
+        throw problem;
+      }).catch(() => { throw new Error(`The browser could not reach ${address}.`); });
+      if (!response.ok) throw new Error(`${address} answered ${response.status}.`);
+      return response.text();
+    };
+    $('fetch-specs').disabled = true;
+    try {
+      const [before, after] = await Promise.all([read('spec-old-url', 'old'), read('spec-new-url', 'new')]);
+      $('spec-old').value = before;
+      $('spec-new').value = after;
+      findFromSpecs();
+    } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+    } finally {
+      $('fetch-specs').disabled = false;
+    }
+  }
+
+  async function loadQuotes() {
+    const [before, after] = await Promise.all(['openapi-v1.json', 'openapi-v2.json'].map((file) => fetch(`sandbox/quotes/${file}`).then((r) => r.text())));
+    $('spec-old').value = before;
+    $('spec-new').value = after;
+    $('specs-panel').open = true;
+    $('old-version').value = '1';
+    $('new-version').value = '2';
+    $('removed').value = '';
+    $('guide').value = '';
+    $('ignore').value = '';
+    // The change is in what callers send, so the example records are two requests.
+    $('before').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    $('after').value = pretty({ accountId: 'acct_fixture_1', amountCents: 2500 });
+    $('try-up').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    $('try-down').value = pretty({ id: 'quote_test_1', identity: 'acct_fixture_1', amountCents: 2500, contractVersion: 2 });
+    $('try-method').value = 'POST';
+    $('try-path').value = '/api/testbed/quotes';
+    $('live-method').value = 'POST';
+    $('live-url').value = 'https://api-mender.aom31905.chatgpt.site/api/testbed/quotes';
+    $('live-body').value = pretty({ customerId: 'acct_fixture_1', amountCents: 2500 });
+    showInputError(null);
+    findFromSpecs();
+  }
+
+  function applyJson() {
+    try {
+      const rules = JSON.parse($('rules-json').value);
+      if (!Array.isArray(rules)) throw new Error('The rules must be a JSON list: [ { "op": "rename", ... } ].');
+      const problem = checkRules(rules);
+      if (problem) throw new Error(problem);
+      setRules(rules, 'Edited by hand', state.notes);
+    } catch (error) {
+      $('rules-error').textContent = error.message;
+      $('rules-error').hidden = false;
+    }
+  }
+
+  // ---------- proof, try-it and ship ----------
+
+  function adapter() {
+    return compileRules({ from: $('old-version').value.trim(), to: $('new-version').value.trim(), rules: state.rules });
+  }
+
+  function refresh() {
+    renderProof();
+    renderSpecProof();
+    renderTry();
+    renderShip();
+  }
+
+  // Samples generated from one description must fit the other after translation.
+  function renderSpecProof() {
+    $('spec-proof').hidden = !state.specs;
+    if (!state.specs) return;
+    let proof;
+    try { proof = proveWithSchemas(state.specs.before, state.specs.after, state.rules); } catch (error) {
+      $('spec-verdict').className = 'callout bad';
+      $('spec-verdict').textContent = `The rules couldn't run: ${error.message}`;
+      $('spec-rows').replaceChildren();
+      return;
+    }
+    const failing = proof.checks.filter((c) => c.failures.length);
+    $('spec-verdict').className = proof.ok ? 'callout ok' : 'callout bad';
+    $('spec-verdict').textContent = proof.ok
+      ? `Description proof passed: ${proof.samples} generated sample${proof.samples === 1 ? '' : 's'} across ${proof.checks.length} endpoint${proof.checks.length === 1 ? '' : 's'} fit the other version after translation. This checks structure; confirm meaning with a real record or a real call.`
+      : `Description proof failed on ${failing.length} of ${proof.checks.length} endpoints. The rules leave requests or answers that the other version would reject.`;
+    const shown = [...failing, ...proof.checks.filter((c) => !c.failures.length)].slice(0, 40);
+    $('spec-rows').replaceChildren(...shown.map((check) => {
+      const tr = document.createElement('tr');
+      const result = check.status === 'removed' ? 'removed: old callers get 410' : check.failures.length ? '✕ failed' : '✓ passed';
+      const detail = check.failures.slice(0, 3).map((f) => `${f.where}: ${f.path} ${f.message}`).join(' · ');
+      [check.endpoint, String(check.samples), result, detail || 'None'].forEach((text, i) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 2) td.style.color = check.failures.length ? 'var(--bad)' : check.status === 'removed' ? 'var(--warn)' : 'var(--ok)';
+        tr.append(td);
+      });
+      return tr;
+    }));
+    if (state.specs && $('step-3').dataset.state !== 'broken') $('step-3').dataset.state = proof.ok ? 'done' : 'broken';
+  }
+
+  let lastProof = [];
+  function renderProof() {
+    const rows = $('proof-rows');
+    const verdict = $('verdict');
+    let pairs;
+    try { pairs = readPairs(); } catch (error) {
+      const empty = !$('before').value.trim() && !$('after').value.trim();
+      verdict.className = empty ? 'callout' : 'callout warn';
+      verdict.textContent = empty ? 'No example records to check. Paste a before and after record in step 1 to prove the rules on real data.' : `Fix the examples in step 1 to run the proof. ${error.message}`;
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'ready';
+      return;
+    }
+    if (!state.rules.length) {
+      verdict.className = 'callout';
+      verdict.textContent = 'Proof runs as soon as there are rules.';
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'ready';
+      return;
+    }
+    let results;
+    try { results = verifyRules(state.rules, pairs); } catch (error) {
+      verdict.className = 'callout bad';
+      verdict.textContent = `The rules couldn't run: ${error.message}`;
+      rows.replaceChildren();
+      $('step-3').dataset.state = 'broken';
+      return;
+    }
+    lastProof = results;
+    const failing = results.filter((r) => r.upDiffs.length || r.downDiffs.length);
+    const lost = [...new Set(results.flatMap((r) => r.lost))];
+    rows.replaceChildren(...results.map((r) => {
+      const tr = document.createElement('tr');
+      const cells = [`#${r.index + 1}`, r.upDiffs.length ? `✕ ${r.upDiffs.length} off` : '✓ matches', r.downDiffs.length ? `✕ ${r.downDiffs.length} off` : '✓ matches'];
+      cells.forEach((text, i) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i && text.startsWith('✓')) td.style.color = 'var(--ok)';
+        if (i && text.startsWith('✕')) td.style.color = 'var(--bad)';
+        tr.append(td);
+      });
+      const td = document.createElement('td');
+      const diffs = [...r.upDiffs.map((d) => ({ ...d, way: 'old → new' })), ...r.downDiffs.map((d) => ({ ...d, way: 'new → old' }))];
+      if (!diffs.length) td.textContent = r.lost.length ? `Old customers stop getting ${r.lost.join(', ')}` : 'None';
+      for (const d of diffs.slice(0, 4)) {
+        const line = document.createElement('code');
+        line.style.display = 'block';
+        line.textContent = `${d.way} · ${d.path}: expected ${JSON.stringify(d.expected)}, got ${JSON.stringify(d.got)}`;
+        td.append(line);
+      }
+      if (diffs.length > 4) td.append(`and ${diffs.length - 4} more`);
+      tr.append(td);
+      return tr;
+    }));
+    if (failing.length) {
+      verdict.className = 'callout bad';
+      verdict.textContent = `Blocked. ${failing.length} of ${results.length} examples don't round-trip. Fix the rules in step 2${state.ai ? ', or ask the AI to fix them' : ''}.`;
+      $('step-3').dataset.state = 'broken';
+    } else {
+      const added = state.rules.filter((r) => r.op === 'add' && 'value' in r).map((r) => r.new);
+      const unfilled = [...new Set(results.flatMap((r) => r.unfilled))];
+      const notes = [];
+      if (lost.length) notes.push(`old customers will stop receiving ${lost.join(', ')}`);
+      if (added.length) notes.push(`old customers never send ${added.join(', ')}, so check the default value in step 2 before shipping`);
+      if (unfilled.length) notes.push(`${unfilled.join(', ')} has no default, so it is hidden from old customers' answers but can't be filled in on their requests`);
+      verdict.className = notes.length ? 'callout warn' : 'callout ok';
+      verdict.textContent = `Proven on ${results.length} of ${results.length} example${results.length === 1 ? '' : 's'} in both directions.${notes.length ? ` Heads up: ${notes.join('; and ')}.` : ' Safe to try and ship.'}`;
+      $('step-3').dataset.state = 'done';
+    }
+    $('ai-fix').hidden = !(state.ai && failing.length);
+  }
+
+  function renderTry() {
+    let adapt;
+    try { adapt = adapter(); } catch (error) {
+      $('try-down-out').textContent = $('try-up-out').textContent = error.message;
+      return;
+    }
+    const run = (inputId, outId, statusId, fn) => {
+      const text = $(inputId).value.trim();
+      if (!text) { $(outId).textContent = 'Paste JSON above.'; $(statusId).className = 'chip'; return; }
+      try {
+        $(outId).textContent = pretty(fn(JSON.parse(text)));
+        $(statusId).className = 'chip ok';
+      } catch (error) {
+        $(outId).textContent = `Not valid JSON yet: ${error.message}`;
+        $(statusId).className = 'chip bad';
+      }
+    };
+    run('try-down', 'try-down-out', 'down-status', (body) => adapt.downgradeResponse({ status: body?.error ? 400 : 200, body: structuredClone(body) }).body);
+    run('try-up', 'try-up-out', 'up-status', (body) => adapt.upgradeRequest({ method: 'POST', path: '/', body: structuredClone(body) }).body);
+
+    const method = $('try-method').value;
+    const path = $('try-path').value.trim() || '/';
+    const gone = adapt.untranslatable.find((u) => u.method === method && u.path.test(path));
+    const out = $('try-endpoint-out');
+    out.replaceChildren();
+    const chip = document.createElement('span');
+    chip.className = `chip ${gone ? 'bad' : 'ok'}`;
+    chip.textContent = gone ? '410 Gone' : 'Passes through the adapter';
+    out.append(chip, ' ', gone ? `${gone.reason}${gone.guide ? ` ${gone.guide}` : ''}` : `Old customers calling ${method} ${path} get translated answers.`);
+    $('step-4').dataset.state = state.rules.length ? 'done' : 'ready';
+
+    const headers = document.createElement('dl');
+    const newVersion = $('new-version').value.trim();
+    const released = Date.parse(`${newVersion}T00:00:00Z`);
+    const sunset = $('sunset').value;
+    const entries = [
+      ['Api-Version', $('old-version').value.trim()],
+      ['Deprecation', Number.isNaN(released) ? '?1' : `@${Math.floor(released / 1000)}`],
+      ['Sunset', sunset ? new Date(`${sunset}T00:00:00Z`).toUTCString() : '(set a shut-off date)'],
+      ['Link', $('guide').value.trim() ? `<${$('guide').value.trim()}>; rel="deprecation"; type="text/html"` : '(add a migration guide link)'],
+    ];
+    for (const [name, value] of entries) {
+      const dt = document.createElement('dt'); dt.textContent = name;
+      const dd = document.createElement('dd'); dd.textContent = value;
+      headers.append(dt, dd);
+    }
+    $('headers').replaceChildren(headers);
+  }
+
+  function renderShip() {
+    const spec = { from: $('old-version').value.trim(), to: $('new-version').value.trim(), rules: state.rules };
+    $('ship-rules').textContent = pretty(spec);
+    $('ship-code').textContent = `import { withMender } from './mender.js';
+import { compileRules } from './rules.js';
+import rules from './mender-rules.json' with { type: 'json' };
+
+// Put Mender in front of your newest handler.
+// Callers pinned to ${spec.from || 'the old version'} keep working.
+export default withMender(yourApiHandler, {
+  latest: '${spec.to}',
+  adapters: [compileRules(rules)],
+  versionHeader: 'Api-Version',
+  sunset: '${$('sunset').value}',
+  guide: '${$('guide').value.trim()}',
+  // Every translated call, per customer: who still has to move.
+  onCall: (call) => console.log(call.customer, call.version, call.outcome),
+});`;
+    $('ship-log').textContent = changelog(spec);
+    $('step-5').dataset.state = $('step-3').dataset.state === 'done' ? 'done' : 'ready';
+  }
+
+  // ---------- a real request, with and without the adapter ----------
+
+  // Makes the network call. From the dev server it goes through /__proxy, which is not bound
+  // by the browser's cross-site rules; anywhere else it is a plain browser call.
+  async function callOut(request) {
+    const bodyless = request.method === 'GET' || request.method === 'HEAD';
+    const headers = {};
+    for (const name of ['content-type', 'authorization', 'api-version']) if (request.headers.get(name)) headers[name] = request.headers.get(name);
+    const init = { method: request.method, headers, body: bodyless ? undefined : await request.arrayBuffer() };
+    return fetch(state.proxy ? `/__proxy?url=${encodeURIComponent(request.url)}` : request.url, init);
+  }
+
+  async function show(id, promise) {
+    try {
+      const response = await promise;
+      const text = await response.text();
+      let body = text;
+      try { body = pretty(JSON.parse(text)); } catch { /* not JSON: show as is */ }
+      $(id).textContent = `${response.status} ${response.statusText}\n${body}`.trim();
+      return response.status;
+    } catch {
+      $(id).textContent = 'The browser could not reach this address. The API has to allow calls from this page (CORS). Run Mender Studio from its dev server (python3 mender/tools/serve.py) to call any API.';
+      return 0;
+    }
+  }
+
+  async function liveSend() {
+    const address = $('live-url').value.trim();
+    const method = $('live-method').value;
+    const body = method === 'GET' || method === 'DELETE' ? undefined : $('live-body').value;
+    if (!/^(https?:\/\/|\/)/.test(address)) { $('live-direct').textContent = 'Enter the full address, starting with https://, or a path on this site, starting with /'; return; }
+    const url = new URL(address, location.href).href;
+    let adapt;
+    try { adapt = adapter(); } catch (error) { $('live-mender').textContent = error.message; return; }
+    $('live-send').disabled = true;
+    $('live-status').textContent = 'Sending…';
+    $('live-status').className = 'chip thread';
+    const build = () => new Request(url, { method, headers: body ? { 'content-type': 'application/json' } : {}, body });
+    const gateway = withMender(callOut, { latest: $('new-version').value.trim(), adapters: [adapt], defaultVersion: $('old-version').value.trim() });
+    const [direct, through] = await Promise.all([show('live-direct', callOut(build())), show('live-mender', gateway(build()))]);
+    $('live-send').disabled = false;
+    const ok = (status) => status >= 200 && status < 300;
+    $('live-status').textContent = ok(through) && !ok(direct) ? 'The adapter made it work' : ok(through) ? 'Both worked' : 'The adapter did not help';
+    $('live-status').className = `chip ${ok(through) ? 'ok' : 'bad'}`;
+  }
+
+  async function copy(id, button) {
+    const text = $(id).textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = 'Copied';
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents($(id));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      button.textContent = 'Selected, press Copy';
+    }
+    setTimeout(() => { button.textContent = 'Copy'; }, 1800);
+  }
+
+  // ---------- AI writer (only where the viewer can use Claude) ----------
+
+  const RULE_GUIDE = `Rule types (use only these; "old" and "new" are dotted field paths such as "total.amount_cents"):
+- {"op":"rename","old":P,"new":P}  same value under a new name or place
+- {"op":"scale","old":P,"new":P,"factor":100}  new = old × factor (use 0.01 for the reverse)
+- {"op":"case","old":P,"new":P,"oldCase":"lower","newCase":"upper"}
+- {"op":"values","old":P,"new":P,"map":{"oldValue":"newValue"}}  renamed values
+- {"op":"time","old":P,"new":P,"oldFormat":F,"newFormat":F}  F is one of ${TIME_FORMATS.join(', ')}; iso8601_ms has milliseconds
+- {"op":"type","old":P,"new":P,"oldType":"number","newType":"string"}  same value, different JSON type (string, number, boolean)
+- {"op":"add","new":P,"value":DEFAULT}  new field that old callers never send
+- {"op":"remove","old":P}  field the new version dropped
+- {"op":"endpoint_removed","method":"GET","path":"/orders/{id}/label","message":TEXT,"guide":URL}
+Use "items[].sku" for a field of every item in a list. Add "in":"request" or "in":"response" when a rule holds for only one of them.
+All rules read the original record and then write, so order does not matter. Unchanged fields need no rule.`;
+
+  function aiPrompt(pairs, failing) {
+    const clip = (value) => JSON.stringify(value).slice(0, 6000);
+    let prompt = `You write adapter rules for Mender, which keeps API customers on an old version working after a breaking change.
+Reply with only a JSON object: {"rules": [ ... ]}.
+
+${RULE_GUIDE}
+
+Old version ${$('old-version').value}. Records as it returns them:
+${clip(pairs.map((p) => p.old))}
+
+New version ${$('new-version').value}. The same records, in the same order:
+${clip(pairs.map((p) => p.new))}
+
+Removed endpoints: ${endpointRules().map((r) => `${r.method} ${r.path}`).join('; ') || 'none'}
+Migration guide: ${$('guide').value.trim() || 'none'}
+Provider notes: ${$('notes').value.trim() || 'none'}`;
+    if (failing) {
+      prompt += `
+
+Current rules:
+${JSON.stringify(state.rules)}
+
+These rules failed the round-trip proof:
+${JSON.stringify(failing.map((r) => ({ example: r.index + 1, oldToNew: r.upDiffs, newToOld: r.downDiffs }))).slice(0, 6000)}
+Return the complete corrected list.`;
+    }
+    return prompt;
+  }
+
+  const AI_ERRORS = {
+    rate_limited: 'Too many AI requests right now. Try again in a minute, or use "Find rules from examples".',
+    invalid_json: "Claude's answer couldn't be read as rules. Try again.",
+    refused: 'Claude declined this request. Try different examples.',
+    session_expired: 'Sign in to Claude again to use the AI writer.',
+    prompt_too_large: 'The examples are too long for one request. Use fewer or shorter records.',
+  };
+
+  async function aiWrite(fix) {
+    if (!state.ai || state.busy) return;
+    let pairs;
+    try { pairs = readPairs(); } catch (error) { showInputError(error.message); return; }
+    showInputError(null);
+    state.busy = true;
+    for (const id of ['ai-write', 'ai-fix', 'find']) $(id).disabled = true;
+    $('ai-status').textContent = 'Claude is writing the rules. This usually takes 10 to 40 seconds.';
+    try {
+      const failing = fix ? lastProof.filter((r) => r.upDiffs.length || r.downDiffs.length) : null;
+      const reply = await state.ai.json(aiPrompt(pairs, failing), { cache: false });
+      const rules = Array.isArray(reply) ? reply : reply?.rules;
+      if (!Array.isArray(rules)) throw { code: 'invalid_json' };
+      const kept = rules.filter((r) => !checkRule(r));
+      const dropped = rules.length - kept.length;
+      $('ai-status').textContent = dropped ? `Claude wrote ${rules.length} rules; ${dropped} didn't follow the format and were left out.` : '';
+      setRules(kept, fix ? 'Fixed by AI' : 'Written by AI');
+    } catch (error) {
+      const hide = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(error?.code);
+      if (hide) {
+        state.ai = null;
+        $('ai-write').hidden = true;
+        $('ai-fix').hidden = true;
+        $('ai-status').textContent = 'The AI writer isn’t available here. "Find rules from examples" works without it.';
+      } else {
+        $('ai-status').textContent = AI_ERRORS[error?.code] ?? 'Couldn’t reach Claude. Try again.';
+      }
+    } finally {
+      state.busy = false;
+      for (const id of ['ai-write', 'ai-fix', 'find']) $(id).disabled = false;
+    }
+  }
+
+  // ---------- wiring ----------
+
+  $('load-example').addEventListener('click', loadExample);
+  $('call-api').addEventListener('click', callApi);
+  $('clear').addEventListener('click', () => {
+    for (const id of ['before', 'after', 'removed', 'guide', 'notes', 'try-down', 'try-up', 'ignore', 'spec-old', 'spec-new']) $(id).value = '';
+    state.specs = null;
+    setRules([], '');
+    $('rules-source').textContent = 'No rules yet';
+    showInputError(null);
+  });
+  $('find').addEventListener('click', findRules);
+  $('apply-json').addEventListener('click', applyJson);
+  $('ai-write').addEventListener('click', () => aiWrite(false));
+  $('ai-fix').addEventListener('click', () => aiWrite(true));
+  $('copy-rules').addEventListener('click', (e) => copy('ship-rules', e.currentTarget));
+  $('copy-code').addEventListener('click', (e) => copy('ship-code', e.currentTarget));
+  $('copy-log').addEventListener('click', (e) => copy('ship-log', e.currentTarget));
+  $('find-specs').addEventListener('click', findFromSpecs);
+  $('fetch-specs').addEventListener('click', fetchSpecs);
+  $('load-quotes').addEventListener('click', loadQuotes);
+  $('live-send').addEventListener('click', liveSend);
+
+  let timer;
+  const later = (fn) => () => { clearTimeout(timer); timer = setTimeout(fn, 250); };
+  for (const id of ['before', 'after']) $(id).addEventListener('input', later(() => {
+    try { readPairs(); showInputError(null); } catch (error) { showInputError(error.message); }
+    refresh();
+  }));
+  for (const id of ['removed', 'guide']) $(id).addEventListener('input', later(() => {
+    setRules([...state.rules.filter((r) => r.op !== 'endpoint_removed'), ...endpointRules()], state.source || 'Edited by hand', state.notes);
+  }));
+  for (const id of ['try-down', 'try-up', 'try-path', 'old-version', 'new-version', 'sunset']) $(id).addEventListener('input', later(refresh));
+  $('ignore').addEventListener('input', later(findRules));
+  $('try-method').addEventListener('change', refresh);
+
+  // The dev server (tools/serve.py) can make calls the browser is not allowed to make itself.
+  state.proxy = await fetch('/__proxy?ping=1').then((r) => r.ok && r.headers.get('content-type')?.includes('json')).catch(() => false);
+  await loadExample();
+
+  // The AI writer lights up only where this viewer can use Claude.
+  const sample = await window.claude?.use?.('sample').catch(() => null);
+  if (sample) {
+    state.ai = sample;
+    $('ai-write').hidden = false;
+    $('ai-write').className = 'btn btn-primary';
+    $('find').className = 'btn btn-ghost';
+  }
+</script>
+</body>
+</html>

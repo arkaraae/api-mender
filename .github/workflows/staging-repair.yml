@@ -1,0 +1,51 @@
+name: Rehearse API repair without production
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ai-fix-provider.mjs'
+      - 'scripts/ai-fix-provider.test.mjs'
+      - 'scripts/managed-api-mender.mjs'
+      - 'testbed/managed-stage/**'
+      - '.github/workflows/staging-repair.yml'
+  workflow_dispatch:
+    inputs:
+      use_claude:
+        description: 'Spend one Claude API call on the isolated repair rehearsal'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-repair
+  cancel-in-progress: false
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check the Claude adapter without an API call
+        run: node --test scripts/ai-fix-provider.test.mjs
+      - name: Prove the local database, API, consumer, and rule-based fix
+        run: node testbed/managed-stage/rehearse.mjs
+      - name: Prove a Claude-generated fix with one API call
+        if: inputs.use_claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-6' }}
+        run: node testbed/managed-stage/rehearse.mjs --claude
+      - name: Save the report and proposed patch
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-repair-${{ github.run_id }}
+          path: artifacts/managed-api/
+          if-no-files-found: ignore

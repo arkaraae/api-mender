@@ -4,7 +4,7 @@
   "account_id": "7612d5858e401cec8307c5e25c486494",
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "vinext/server/fetch-handler",
+  "main": "./worker/index.ts",
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -13,5 +13,28 @@
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC"
+  },
+  "env": {
+    // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
+    // It replaces the pass-through Worker that served apimender.com until now, keeping its domains.
+    "apimender": {
+      "name": "apimender-site",
+      "account_id": "54294ccf89ff59f1769bb8a0fafcda98",
+      "routes": [
+        { "pattern": "apimender.com", "custom_domain": true },
+        { "pattern": "www.apimender.com", "custom_domain": true }
+      ],
+      // Watched API descriptions and their kept versions (lib/mender/watch.js).
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "743c7ff42511443f9ab0333f783c2f9a" }],
+      // Who still calls an old API version, kept across restarts (migrations/).
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "apimender", "database_id": "54c9bfd1-0ebc-45ef-8a74-843d85cff805", "migrations_dir": "migrations" }],
+      // Every hour, check the watched descriptions that were not checked for a day.
+      "triggers": { "crons": ["17 * * * *"] },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "SITE_ORIGIN": "https://apimender.com"
+      }
+    }
   }
 }
