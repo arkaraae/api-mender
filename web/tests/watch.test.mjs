@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkWatch, createWatch, deleteWatch, publicView, readSnapshot, readWatch, runDue } from '../lib/mender/watch.js';
+import { boundedBody, DescriptionTooLargeError, fetchPublicSource } from '../lib/mender/public-source.js';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -70,13 +71,41 @@ test('starting a watch keeps a first copy and labels it, and the public view hid
 test('only public https addresses of real API descriptions can be watched', async () => {
   const kv = memoryKv();
   const host = apiHost();
-  for (const url of ['http://api.example.com/openapi.json', 'https://localhost/openapi.json', 'https://10.0.0.1/openapi.json', 'not a url']) {
+  for (const url of ['http://api.example.com/openapi.json', 'https://localhost/openapi.json', 'https://10.0.0.1/openapi.json', 'https://name:pass@api.example.com/openapi.json', 'https://api.example.com:8443/openapi.json', 'not a url']) {
     await assert.rejects(createWatch(kv, { url }, { fetcher: host.fetch }));
   }
   await assert.rejects(createWatch(kv, { url: URL_, webhook: 'http://hooks.example.com/x' }, { fetcher: host.fetch }), /webhook must start with https/);
   const page = async () => new Response('<html>hello</html>');
   await assert.rejects(createWatch(kv, { url: 'https://example.com/' }, { fetcher: page }), /does not serve an OpenAPI or Swagger description/);
   assert.equal(kv.values.size, 0);
+});
+
+test('a public description may redirect to another public HTTPS host, but not to a private address', async () => {
+  const visited = [];
+  const fetcher = async (url, options) => {
+    visited.push([url, options.redirect]);
+    if (url === URL_) return Response.redirect('https://cdn.example.com/openapi.json', 302);
+    return new Response(JSON.stringify({ openapi: '3.0.3' }));
+  };
+  const { response } = await fetchPublicSource(URL_, { fetcher });
+  assert.equal(response.status, 200);
+  assert.deepEqual(visited, [[URL_, 'manual'], ['https://cdn.example.com/openapi.json', 'manual']]);
+
+  const privateRedirect = async () => Response.redirect('https://127.0.0.1/private', 302);
+  await assert.rejects(createWatch(memoryKv(), { url: URL_ }, { fetcher: privateRedirect }), /public website/);
+  const selfRedirect = async () => Response.redirect('https://apimender.com/api/mender/fetch', 302);
+  await assert.rejects(createWatch(memoryKv(), { url: URL_ }, { fetcher: selfRedirect }), /another public website/);
+});
+
+test('a description with no content-length header is still stopped at the byte limit', async () => {
+  const response = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('1234'));
+      controller.enqueue(new TextEncoder().encode('5678'));
+      controller.close();
+    },
+  }));
+  await assert.rejects(boundedBody(response, 5), DescriptionTooLargeError);
 });
 
 test('an unchanged description adds nothing, whether the host says so (304) or the bytes match', async () => {

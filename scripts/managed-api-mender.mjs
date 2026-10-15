@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, '..');
 const consumer = join(root, 'examples/quote-api-consumer');
 const sourcePath = join(consumer, 'src/client.mjs');
 const reportDir = join(root, 'artifacts/managed-api');
-const baseUrl = (process.env.MENDER_TEST_API_URL || 'https://api-mender.aom31905.chatgpt.site').replace(/\/$/, '');
+const baseUrl = (process.env.MENDER_TEST_API_URL || 'https://apimender.com').replace(/\/$/, '');
 const reportPath = join(reportDir, 'report.json');
 mkdirSync(reportDir, { recursive: true });
 

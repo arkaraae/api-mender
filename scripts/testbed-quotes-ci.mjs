@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { toOpenApi } from '../testbed/quotes-api/openapi.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const baseUrl = 'https://api-mender.aom31905.chatgpt.site';
+const baseUrl = 'https://apimender.com';
 const dataDir = join(root, 'artifacts/quotes-db');
 const baselinePath = join(root, 'artifacts/quotes-baseline.json');
 const current = JSON.parse(readFileSync(join(root, 'testbed/quotes-api/contract.json'), 'utf8'));

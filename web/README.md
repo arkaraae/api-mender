@@ -18,11 +18,11 @@ The `.env.production` file and `wrangler.jsonc` contain only the Supabase **publ
 
 ## Team publishing
 
-The Cloudflare Worker is named `api-mender` and uses this `web/` directory as its build root. Cloudflare Workers Builds should connect to `arkaraae/api-mender`, use `main` as the production branch, run `npm run build`, then `npx wrangler deploy`. Enable branch previews for pull requests. Merge a reviewed change to `main` to deploy it for everyone; no developer needs the original ChatGPT Site editor. The GitHub workflow `web-check.yml` runs typecheck and build on pull requests.
+The apimender.com Worker is named `apimender-site`. Merge a reviewed web change to `main` to run the GitHub workflow: it checks, builds, and deploys from this `web/` directory. The Cloudflare account owner supplies a scoped deployment token as Actions secrets. No developer needs the original ChatGPT Site editor. The `web-check.yml` workflow runs typecheck, tests, and build on pull requests.
 
 The Supabase project remains the database and authentication provider. Before using a new Cloudflare hostname for email signup, add `https://<cloudflare-host>/live` to Supabase Auth redirect URLs. Set the default Site URL to the Cloudflare hostname only after the new sign-in flow has been verified. Do not remove the ChatGPT Site redirect until existing links have expired.
 
-After the Cloudflare API is verified, set the GitHub Actions repository variable `MENDER_TEST_API_URL` to the Cloudflare origin so the managed Quote API monitor and consumer tests follow the new deployment. `OPENAI_API_KEY` remains an Actions repository secret and is never shipped to the web app.
+The managed Quote API monitor and consumer tests default to `https://apimender.com`. Override this with the GitHub Actions repository variable `MENDER_TEST_API_URL` only when testing another deployment. `OPENAI_API_KEY` remains an Actions repository secret and is never shipped to the web app.
 
 ## Mender in this app
 
