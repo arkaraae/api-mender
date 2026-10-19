@@ -35,7 +35,7 @@
 .hero h1>span{display:block}
 /* The striped word: broken into lines, the way an old caller sees a breaking change. */
 .line-mask{background:repeating-linear-gradient(to bottom,#fff 0,#fff 4px,transparent 4px,transparent 9px);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
-.hero-lead{margin:40px 0 0;max-width:38rem;font:400 15px/1.7 var(--m-mono);color:rgba(255,255,255,.62)}
+.hero-lead{margin:40px 0 0;max-width:38rem;font:400 15px/1.7 var(--m-mono);color:#fff}
 .hero-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:28px;margin-top:40px;align-self:flex-start}
 .hero-button{display:inline-flex;align-items:center;justify-content:center;padding:16px 32px;background:var(--m-accent);color:#fff;font:400 14px/1 var(--m-mono);text-transform:uppercase;letter-spacing:.08em;text-decoration:none;border:0;cursor:pointer;transition:background-color .2s}
 .hero-button:hover:not(:disabled){background:var(--m-accent-hover)}
