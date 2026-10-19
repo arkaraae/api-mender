@@ -11,9 +11,11 @@
 .hero-brand{display:inline-flex;align-items:center;gap:10px;font:700 18px/1 var(--m-mono);letter-spacing:-.02em;color:#fff;text-decoration:none}
 .hero-brand .mascot{filter:invert(1);mix-blend-mode:screen}
 .hero-links{display:flex;align-items:center;gap:40px;font:400 14px/1 var(--m-mono)}
-.hero-links a,.hero-login{color:rgba(255,255,255,.8);text-decoration:none;transition:color .2s}
-.hero-links a:hover,.hero-login:hover{color:#fff}
-.hero-login{font:400 14px/1 var(--m-mono)}
+.hero-links a{color:rgba(255,255,255,.8);text-decoration:none;transition:color .2s}
+.hero-links a:hover{color:#fff}
+.hero-join{font:600 13px/1 var(--m-mono);color:#fff;text-decoration:none;background:var(--m-accent);border:1px solid var(--m-accent);border-radius:8px;padding:12px 18px;white-space:nowrap;transition:background-color .2s,border-color .2s}
+.hero-join:hover{background:var(--m-accent-hover);border-color:var(--m-accent-hover)}
+.hero-join.is-menu-open{visibility:hidden}
 .hero-menu-button{display:none;position:relative;z-index:50;width:32px;height:32px;padding:4px;background:none;border:0;color:#fff;cursor:pointer}
 .hero-menu-button svg{position:absolute;inset:4px;transition:opacity .3s,transform .3s}
 .hero-menu-button .icon-x{opacity:0;transform:rotate(-90deg) scale(.75)}
@@ -26,7 +28,7 @@
 .hero-menu-content a{font:400 24px/1 var(--m-mono);color:rgba(255,255,255,.9);text-decoration:none}
 .hero-menu-content a:hover{color:#fff}
 .hero-menu-rule{width:48px;border-top:1px solid rgba(255,255,255,.2)}
-.hero-menu-login{font-size:18px!important;color:rgba(255,255,255,.7)!important}
+.hero-menu-join{font-size:18px!important;color:#fff!important;border:1px solid rgba(255,255,255,.45);padding:16px 22px}
 
 /* ---------- headline, lead, button ---------- */
 .hero-body{position:relative;z-index:10;flex:1;display:flex;align-items:flex-start;justify-content:space-between;gap:64px;padding:56px 64px 80px}
@@ -80,8 +82,9 @@
   .hero-card-small{right:0}
 }
 @media (max-width:760px){
-  .hero-nav{padding:20px 24px}
-  .hero-links,.hero-login{display:none}
+  .hero-nav{padding:20px 16px;gap:12px}
+  .hero-links{display:none}
+  .hero-join{margin-left:auto;padding:10px 12px;font-size:12px}
   .hero-menu-button{display:block}
   .hero-body{padding:32px 24px 64px}
   .hero h1{font-size:clamp(3.4rem,17vw,5.5rem)}

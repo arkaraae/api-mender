@@ -31,6 +31,7 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 - `/mender/v1/api/managed/quotes` (and `/api/testbed/…`) is the gateway: it keeps callers of an older version working by translating their calls to the newest published contract. `/mender` shows the rules, the proof, a real request sent both ways, and who still calls an old version; `/api/mender/status` gives the same as JSON.
 - `/check` also gives each change an error, warning or info level with a rule name, offers a TypeScript client for the new version (`lib/mender/sdk.js`), and can create a test server for it: `/mock/<id>/…` answers from the description's examples or generated samples and rejects requests that don't match (`lib/mender/mock.js`, kept 30 days in `MENDER_WATCH`). On apimender.com, every old-version call through the gateway is saved in the D1 database `MENDER_DB` (`migrations/`; apply with `npx wrangler d1 migrations apply apimender --remote --env apimender`).
 - `/pricing` lists the plans. `.github/actions/mender-check/` is the free GitHub check: it comments the same plain-words report on pull requests that change an API description (see its README); `tests/github-check.test.mjs` runs it against a throwaway repository.
+- The homepage's "Join us" form accepts a name and email from anyone interested in using, collaborating on, investing in, or giving feedback on API Mender. It writes to D1's `interest_contacts` table through `/api/interest`; purpose and message are optional. Repeated email addresses update one contact, keeping earlier details when the new submission leaves them blank.
 - The engine lives in `mender/src/` at the repository root and is copied into `lib/mender/` by `node mender/tools/sync-web.mjs`. `npm test` fails if the copy is out of date and runs every engine suite. `lib/mender/gateway.js` and `lib/mender/report.js` belong to this app; `lib/mender-site.ts` registers the site's APIs with the gateway.
 - `npm run dev` caps the Workers compatibility date at what the installed runtime supports (see `vite.config.ts`); builds and deploys keep the date in `wrangler.jsonc`.
 
@@ -39,6 +40,8 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 apimender.com is served from its own Cloudflare account, as the Worker `apimender-site`, using the `apimender` environment in `wrangler.jsonc` (its account, the apimender.com and www.apimender.com custom domains, the `MENDER_WATCH` KV namespace and the hourly cron). The default environment stays as it was for the team's Workers Builds, without the watch list.
 
 Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces` (done for apimender.com: `743c7ff4…`).
+
+Before the first release of the interest form, apply its D1 migration with `npx wrangler d1 migrations apply apimender --remote --env apimender`. To see submitted contacts later, use Cloudflare D1 or run `npx wrangler d1 execute apimender --remote --env apimender --command "SELECT created_at, name, email, interest, message FROM interest_contacts ORDER BY id DESC"`. For local testing, use `--local` instead of `--remote` and the `apimender` environment.
 
 Each release, from `web/`:
 
