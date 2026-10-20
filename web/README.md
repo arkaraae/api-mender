@@ -16,6 +16,8 @@ npm run dev
 
 The `.env.production` file and `wrangler.jsonc` contain only the Supabase **publishable** key and URL. They are intentionally public browser configuration. Do not add a service-role key, OpenAI key, GitHub token, or other secret to either file.
 
+The public repository scanner accepts an optional `GITHUB_READ_TOKEN` **Worker secret** to avoid GitHub's shared unauthenticated API limit. Create a fine-grained GitHub token restricted to `arkaraae/api-mender` with repository **Contents: read** (Metadata: read is included), then add it to the `apimender-site` Worker in Cloudflare **Settings → Variables and Secrets** as type **Secret**. Do not add it to GitHub Actions secrets, public environment files, or chat. The token is sent only to `api.github.com`; source files still come from the public raw host. A 403 may have another cause, so rerun the scan after deployment and read the more specific error before changing permissions.
+
 ## Team publishing
 
 The apimender.com Worker is named `apimender-site`. Merge a reviewed web change to `main` to run the GitHub workflow: it checks, builds, and deploys from this `web/` directory. The Cloudflare account owner supplies a scoped deployment token as Actions secrets. No developer needs the original ChatGPT Site editor. The `web-check.yml` workflow runs typecheck, tests, and build on pull requests.
