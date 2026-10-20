@@ -6,8 +6,15 @@ const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
 const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next)\//;
 
 async function githubJson(url: string): Promise<any> {
-  const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site' }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+  const token = process.env.GITHUB_READ_TOKEN?.trim();
+  const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 429) {
+      if (response.headers.get('x-ratelimit-remaining') === '0') throw new Error('GitHub API rate limit reached. Add a repository-scoped GITHUB_READ_TOKEN to the Cloudflare Worker.');
+      throw new Error('GitHub denied repository access. Check the repository and the GITHUB_READ_TOKEN permissions.');
+    }
+    throw new Error(`GitHub returned ${response.status}`);
+  }
   return response.json();
 }
 
@@ -42,7 +49,7 @@ export async function scanPublicRepository(fullName: string, branch: string) {
   if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
   const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`);
   if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
-  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /^(package(-lock)?\.json|[^/].*\.[cm]?[jt]sx?)$/.test(file.path) && !ignoredDirectory.test(file.path) && !file.path.split('/').some(part => part === '.' || part === '..'));
+  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /(^|\/)package(-lock)?\.json$|\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && !file.path.split('/').some(part => part === '.' || part === '..'));
   if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the public scan limit');
   const contents = new Map<string, string>();
   for (let offset = 0; offset < eligible.length; offset += 8) {
@@ -55,13 +62,18 @@ export async function scanPublicRepository(fullName: string, branch: string) {
       contents.set(file.path, new TextDecoder().decode(body));
     }));
   }
-  let sdkVersion: string | null = null;
-  for (const manifest of ['package.json', 'package-lock.json']) {
-    const body = contents.get(manifest);
-    if (!body) continue;
+  const declaredVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
+  const lockedVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
+  for (const [manifest, body] of contents) {
+    if (!/(^|\/)package(-lock)?\.json$/.test(manifest)) continue;
     try {
       const parsed = JSON.parse(body);
-      sdkVersion = manifest === 'package.json' ? parsed.dependencies?.stripe || sdkVersion : parsed.packages?.['node_modules/stripe']?.version || sdkVersion;
+      for (const dependency of Object.keys(declaredVersions)) {
+        const declared = parsed.dependencies?.[dependency] || parsed.devDependencies?.[dependency] || parsed.peerDependencies?.[dependency];
+        const locked = parsed.packages?.[`node_modules/${dependency}`]?.version;
+        if (typeof declared === 'string') declaredVersions[dependency].add(declared);
+        if (typeof locked === 'string') lockedVersions[dependency].add(locked);
+      }
     } catch { throw new Error(`Could not read ${manifest}`); }
   }
   let apiVersion: string | null = null;
@@ -71,14 +83,23 @@ export async function scanPublicRepository(fullName: string, branch: string) {
   for (const [file, source] of contents) {
     if (!/\.[cm]?[jt]sx?$/.test(file) || file.endsWith('.d.ts')) continue;
     if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) { tests.push(file); continue; }
-    if (!/stripe|paymentIntents/.test(source)) continue;
+    if (!/stripe|paymentIntents|@aws-sdk\/client-s3/.test(source)) continue;
+    const found = extractCalls(file, source);
+    if (!found.length) continue;
     files.push(file);
-    if (!apiVersion) apiVersion = source.match(/apiVersion\s*:\s*['"`]([^'"`]+)['"`]/)?.[1] || null;
-    calls.push(...extractCalls(file, source).filter(call => call.endpoint === 'POST /v1/payment_intents'));
+    if (!apiVersion && found.some(call => call.endpoint.startsWith('POST /v1/'))) apiVersion = source.match(/apiVersion\s*:\s*['"`]([^'"`]+)['"`]/)?.[1] || null;
+    calls.push(...found);
   }
+  const s3Calls = calls.filter(call => call.endpoint.startsWith('S3 '));
+  const stripeCalls = calls.filter(call => call.endpoint.startsWith('POST /v1/'));
+  const provider = s3Calls.length && stripeCalls.length ? 'aws-s3+stripe' : s3Calls.length ? 'aws-s3' : 'stripe';
+  const packageName = s3Calls.length ? '@aws-sdk/client-s3' : 'stripe';
+  const sdkVersions = lockedVersions[packageName].size ? lockedVersions[packageName] : declaredVersions[packageName];
+  const sdkVersion = sdkVersions.size === 1 ? [...sdkVersions][0] : null;
   const limitations = ['Text scan flags possible calls for review; it does not prove API impact or parse request fields', 'Fixture, example, build, and test files are excluded'];
-  if (!sdkVersion) limitations.push('Stripe SDK version not found in root manifests');
-  if (!apiVersion) limitations.push('Stripe API version not statically discoverable');
-  if (!calls.length) limitations.push('No recognizable paymentIntents.create calls found; dynamic calls may exist');
-  return { head, inventory: { provider: 'stripe', sdkVersion, apiVersion, files, calls, tests, limitations }, scannedAt: new Date().toISOString() };
+  if (sdkVersions.size > 1) limitations.push('Multiple SDK versions were found; the version at each call site requires review');
+  else if (!sdkVersion) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
+  if (stripeCalls.length && !apiVersion) limitations.push('Stripe API version not statically discoverable');
+  if (!calls.length) limitations.push('No recognizable Stripe or S3 call sites found; dynamic calls may exist');
+  return { head, inventory: { provider, sdkVersion, apiVersion, files, calls, tests, limitations }, scannedAt: new Date().toISOString() };
 }
