@@ -44,6 +44,7 @@ with user_tables as (
     and not exists (
       select 1 from user_tables t
       where pg_catalog.has_table_privilege(current_user, t.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER')
+        or pg_catalog.has_any_column_privilege(current_user, t.oid, 'SELECT, INSERT, UPDATE')
     ) as restricted_role
   from pg_catalog.pg_roles r where r.rolname = current_user
 ), columns as (

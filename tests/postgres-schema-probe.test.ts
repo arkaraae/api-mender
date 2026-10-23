@@ -48,6 +48,7 @@ test('probe rejects privileged roles, writable sessions, and row-shaped payloads
 
 test('probe never queries application rows', () => {
   assert.match(POSTGRES_METADATA_SQL, /pg_catalog\.pg_attribute/);
+  assert.match(POSTGRES_METADATA_SQL, /has_any_column_privilege/);
   assert.doesNotMatch(POSTGRES_METADATA_SQL, /select\s+\*\s+from\s+public\./i);
 });
 
