@@ -15,6 +15,18 @@
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC"
   },
   "env": {
+    // Isolated GitHub App and repository-scan validation on the owner's Workers account.
+    // Deploy with CLOUDFLARE_ENV=staging and `npm run build:staging`.
+    "staging": {
+      "name": "api-mender-staging",
+      "account_id": "7612d5858e401cec8307c5e25c486494",
+      "triggers": { "crons": ["* * * * *"] },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://xedurkvshpszwevmhkzx.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_uF7jRot-UE-GLErDy8YO0g_BeBsdtms",
+        "SITE_ORIGIN": "https://api-mender-staging.amorales8.workers.dev"
+      }
+    },
     // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
     // It replaces the pass-through Worker that served apimender.com until now, keeping its domains.
     "apimender": {
