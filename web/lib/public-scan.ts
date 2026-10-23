@@ -1,12 +1,11 @@
-type GitHubTreeEntry = { path: string; type: string; mode: string; size: number };
+type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
 type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string };
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
 const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next)\//;
 
-async function githubJson(url: string): Promise<any> {
-  const token = process.env.GITHUB_READ_TOKEN?.trim();
+async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.trim()): Promise<any> {
   const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'error', signal: AbortSignal.timeout(15000) });
   if (!response.ok) {
     if (response.status === 403 || response.status === 429) {
@@ -62,6 +61,34 @@ export async function scanPublicRepository(fullName: string, branch: string) {
       contents.set(file.path, new TextDecoder().decode(body));
     }));
   }
+  return { head, inventory: inventoryFromContents(contents), scannedAt: new Date().toISOString() };
+}
+
+// Installation scans read blobs through api.github.com with a short-lived token
+// scoped to this repository. The token is never sent to the raw content host.
+export async function scanInstallationRepository(fullName: string, head: string, token: string) {
+  if (!repositoryPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head) || !token) throw new Error('Invalid repository scan');
+  const repositoryPath = fullName.split('/').map(encodeURIComponent).join('/');
+  const commit = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/commits/${head}`, token);
+  if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
+  const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`, token);
+  if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
+  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /(^|\/)package(-lock)?\.json$|\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && /^[a-f0-9]{40}$/.test(file.sha || ''));
+  if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the scan limit');
+  const contents = new Map<string, string>();
+  for (let offset = 0; offset < eligible.length; offset += 8) {
+    await Promise.all(eligible.slice(offset, offset + 8).map(async file => {
+      const blob = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/blobs/${file.sha}`, token);
+      if (blob.encoding !== 'base64' || typeof blob.content !== 'string' || blob.size !== file.size) throw new Error('GitHub blob was incomplete');
+      const decoded = Uint8Array.from(atob(blob.content.replace(/\s/g, '')), char => char.charCodeAt(0));
+      if (decoded.byteLength !== file.size || decoded.byteLength > 300_000) throw new Error('GitHub blob exceeded its size limit');
+      contents.set(file.path, new TextDecoder('utf-8', { fatal: true }).decode(decoded));
+    }));
+  }
+  return { head, inventory: inventoryFromContents(contents), scannedAt: new Date().toISOString() };
+}
+
+function inventoryFromContents(contents: Map<string, string>) {
   const declaredVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
   const lockedVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
   for (const [manifest, body] of contents) {
@@ -101,5 +128,5 @@ export async function scanPublicRepository(fullName: string, branch: string) {
   else if (!sdkVersion) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
   if (stripeCalls.length && !apiVersion) limitations.push('Stripe API version not statically discoverable');
   if (!calls.length) limitations.push('No recognizable Stripe or S3 call sites found; dynamic calls may exist');
-  return { head, inventory: { provider, sdkVersion, apiVersion, files, calls, tests, limitations }, scannedAt: new Date().toISOString() };
+  return { provider, sdkVersion, apiVersion, files, calls, tests, limitations };
 }

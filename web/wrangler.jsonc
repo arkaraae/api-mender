@@ -29,7 +29,7 @@
       // Who still calls an old API version, kept across restarts (migrations/).
       "d1_databases": [{ "binding": "MENDER_DB", "database_name": "apimender", "database_id": "54c9bfd1-0ebc-45ef-8a74-843d85cff805", "migrations_dir": "migrations" }],
       // Every hour, check the watched descriptions that were not checked for a day.
-      "triggers": { "crons": ["17 * * * *"] },
+      "triggers": { "crons": ["* * * * *", "17 * * * *"] },
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",

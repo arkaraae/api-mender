@@ -1,5 +1,8 @@
 # API Mender web app
 
+Customer backend deployment and its remaining release gates are documented in
+[`../BACKEND.md`](../BACKEND.md).
+
 This directory is the deployable Cloudflare Workers app. It contains the public homepage, `/demo`, the Supabase-backed `/live` workspace, and the public and live API routes. The repository-root Node/SQLite prototype and GitHub Actions monitor stay separate.
 
 ## Develop and verify
