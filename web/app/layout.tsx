@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import './site.css';
+import './join-cta.css';
 import './demo.css';
 import './brand.css';
 import './public.css';

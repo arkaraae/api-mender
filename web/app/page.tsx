@@ -1,6 +1,8 @@
 import AuthCallbackRedirect from '@/components/auth-callback-redirect';
 import BrandLogo from '@/components/brand-logo';
+import FloatingJoin from '@/components/floating-join';
 import HomeHero from '@/components/home-hero';
+import JoinForm from '@/components/join-form';
 import './home.css';
 import './hero.css';
 
@@ -31,6 +33,7 @@ export default function Home() {
   return (
     <main className="marketing-page home">
       <AuthCallbackRedirect />
+      <FloatingJoin />
       <div className="home-dark">
         <HomeHero />
       </div>
@@ -70,13 +73,22 @@ export default function Home() {
         </article>
       </section>
 
+      <section className="home-join" id="join" aria-labelledby="join-title">
+        <div className="home-join-copy">
+          <span className="home-kicker">LET'S CONNECT</span>
+          <h2 id="join-title">Interested in API Mender?</h2>
+          <p>Want to try the product, collaborate, invest, share feedback, or simply follow along? Leave your name and email. We are open to every kind of conversation.</p>
+        </div>
+        <JoinForm />
+      </section>
+
       <footer className="marketing-footer home-footer">
         <span className="site-brand"><BrandLogo /></span>
         <span>Know what changed. Know what to do.</span>
         <nav aria-label="More">
           <a href="/watch">Watch an API</a>
           <a href="/demo">Team demo</a>
-          <a href="/live">Live workspace</a>
+          <a href="/#join">Join us</a>
         </nav>
       </footer>
     </main>

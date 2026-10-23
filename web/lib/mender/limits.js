@@ -16,9 +16,10 @@ export const LIMITS = {
   mock: { visitor: 10, site: 80 },
   mockBytes: { site: 60 * 1024 * 1024 },
   sales: { visitor: 3, site: 50 },
+  interest: { visitor: 5, site: 200 },
 };
 
-const NAMES = { watch: 'watches started', check: 'checks', mock: 'test servers', mockBytes: 'new descriptions in test servers', sales: 'messages to sales' };
+const NAMES = { watch: 'watches started', check: 'checks', mock: 'test servers', mockBytes: 'new descriptions in test servers', sales: 'messages to sales', interest: 'interest signups' };
 
 const dayOf = (now) => new Date(now).toISOString().slice(0, 10);
 
