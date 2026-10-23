@@ -15,7 +15,7 @@ export async function readGitHubContract(fullName: string, head: string, path: s
   const filename = path.split('/').map(encodeURIComponent).join('/');
   const response = await fetch(`https://api.github.com/repos/${repo}/contents/${filename}?ref=${head}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-contract' },
-    redirect: 'error', signal: AbortSignal.timeout(15_000),
+    redirect: 'manual', signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`GitHub contract fetch failed (${response.status})`);
   const file = await response.json() as { type?: unknown; encoding?: unknown; size?: unknown; content?: unknown };

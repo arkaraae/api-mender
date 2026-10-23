@@ -31,6 +31,7 @@ test('installation token is restricted to one repository and read-only contents'
     const token = await installationToken({ appId: '123', privateKey }, 12, 34);
     assert.equal(token, 'temporary-token');
     assert.equal(request.url, 'https://api.github.com/app/installations/12/access_tokens');
+    assert.equal(request.options.redirect, 'manual');
     assert.deepEqual(JSON.parse(request.options.body), { repository_ids: [34], permissions: { contents: 'read' } });
     assert.match(request.options.headers.Authorization, /^Bearer [^.]+\.[^.]+\.[^.]+$/);
     await installationToken({ appId: '123', privateKey }, 12, 'private-repo');
@@ -58,7 +59,7 @@ test('private scan reads only pinned GitHub blobs using its installation token',
   const source = "import { PutObjectCommand } from '@aws-sdk/client-s3';\nnew PutObjectCommand({ Bucket: 'bucket' });\n";
   const requests = [];
   globalThis.fetch = async (url, options) => {
-    requests.push({ url: String(url), auth: options?.headers?.Authorization });
+    requests.push({ url: String(url), auth: options?.headers?.Authorization, redirect: options?.redirect });
     if (String(url).endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: tree } });
     if (String(url).endsWith(`/git/trees/${tree}?recursive=1`)) return Response.json({ tree: [{ path: 'src/objects.ts', type: 'blob', mode: '100644', size: Buffer.byteLength(source), sha: blob }] });
     if (String(url).endsWith(`/git/blobs/${blob}`)) return Response.json({ encoding: 'base64', size: Buffer.byteLength(source), content: Buffer.from(source).toString('base64') });
@@ -69,5 +70,6 @@ test('private scan reads only pinned GitHub blobs using its installation token',
     assert.equal(result.head, head);
     assert.equal(result.inventory.calls[0].symbol, 'PutObjectCommand');
     assert.ok(requests.every(request => request.url.startsWith('https://api.github.com/') && request.auth === 'Bearer installation-token'));
+    assert.ok(requests.every(request => request.redirect === 'manual'));
   } finally { globalThis.fetch = originalFetch; }
 });

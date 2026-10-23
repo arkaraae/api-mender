@@ -6,7 +6,7 @@ const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
 const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next)\//;
 
 async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.trim()): Promise<any> {
-  const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
   if (!response.ok) {
     if (response.status === 403 || response.status === 429) {
       if (response.headers.get('x-ratelimit-remaining') === '0') throw new Error('GitHub API rate limit reached. Add a repository-scoped GITHUB_READ_TOKEN to the Cloudflare Worker.');
