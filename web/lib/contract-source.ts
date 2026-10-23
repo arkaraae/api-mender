@@ -31,6 +31,55 @@ export async function readGitHubContract(fullName: string, head: string, path: s
   return { document, sha256: Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('') };
 }
 
+type HttpCall = { file: string; line: number; symbol: string; endpoint: string; origin?: string };
+
+function affectedEndpoints(found: ReturnType<typeof rulesFromOpenApi>) {
+  const endpoints = new Set<string>();
+  const all = found.operations.map((operation: { endpoint: string }) => operation.endpoint);
+  for (const operation of found.operations) if (operation.status !== 'kept') endpoints.add(operation.endpoint);
+  for (const rule of found.rules) {
+    if (rule.endpoint) for (const endpoint of ([] as string[]).concat(rule.endpoint)) endpoints.add(endpoint);
+    else if (rule.op === 'endpoint_removed') endpoints.add(`${rule.method} ${rule.path}`);
+    else if (rule.op === 'endpoint_moved') endpoints.add(`${rule.method} ${rule.old}`);
+    else for (const endpoint of all) endpoints.add(endpoint);
+  }
+  for (const note of found.notes) for (const endpoint of note.endpoints || []) endpoints.add(endpoint);
+  return [...endpoints].slice(0, 100);
+}
+
+// A static call is a candidate only when its HTTPS origin and complete path
+// match a server and changed operation in the old contract. This is not proof
+// that the code ran or that the change breaks that consumer.
+export function matchContractCalls(before: { servers?: { url?: string }[] }, affected: string[], calls: HttpCall[]) {
+  const servers = (Array.isArray(before.servers) ? before.servers : []).flatMap(server => {
+    if (typeof server?.url !== 'string' || server.url.includes('{')) return [];
+    try {
+      const url = new URL(server.url);
+      return url.protocol === 'https:' && !url.username && !url.password ? [url] : [];
+    } catch { return []; }
+  });
+  const targets: { origin: string; method: string; path: RegExp }[] = [];
+  for (const server of servers) for (const endpoint of affected) {
+    const split = endpoint.indexOf(' ');
+    if (split < 1) continue;
+    const method = endpoint.slice(0, split);
+    const path = endpoint.slice(split + 1);
+    if (!path.startsWith('/')) continue;
+    const base = server.pathname.replace(/\/$/, '');
+    const expression = `${base}${path}`.split(/(\{[^}]+\})/g)
+      .map(part => part.startsWith('{') && part.endsWith('}') ? '[^/]+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
+    targets.push({ origin: server.origin, method, path: new RegExp(`^${expression}$`) });
+  }
+  return calls.filter(call => {
+    if (!call || typeof call.origin !== 'string' || typeof call.endpoint !== 'string') return false;
+    const split = call.endpoint.indexOf(' ');
+    if (split < 1) return false;
+    return targets.some(target => target.origin === call.origin
+      && target.method === call.endpoint.slice(0, split)
+      && target.path.test(call.endpoint.slice(split + 1)));
+  }).slice(0, 50);
+}
+
 export function compareContracts(before: object, after: object) {
   const found = rulesFromOpenApi(before, after);
   const sampleProof = proveWithSchemas(before, after, found.rules);
@@ -46,5 +95,6 @@ export function compareContracts(before: object, after: object) {
       rule: note.rule, message: note.message, severity: note.severity,
     })).slice(0, 50),
     sampleProof: { ok: sampleProof.ok, samples: sampleProof.samples },
+    affectedEndpoints: affectedEndpoints(found),
   };
 }

@@ -74,6 +74,15 @@ published by this pipeline yet. Consumer mapping, version applicability,
 bounded patch generation, failing-before/passing-after validation, and draft
 PR creation are separate release gates.
 
+The scanner now also records literal HTTPS `fetch` and `axios` calls with a
+static method and URL. When a connected OpenAPI contract changes, Mender
+compares its old `servers` origin, base path, and affected operations with
+these calls in scanned repositories in the same workspace. Matching source
+locations are saved as **unverified consumer candidates** in the finding
+evidence. Dynamic URLs, other HTTP clients, server variables, ambiguous
+methods, and unscanned repositories are not matched. This is a conservative
+inventory signal, not consumer breakage proof or a validated repair.
+
 ## Operations
 
 Query `repository_scan_jobs` for `status='dead'`, oldest `queued` age, retry
