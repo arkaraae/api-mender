@@ -1,5 +1,5 @@
 type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
-type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string };
+type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string; origin?: string };
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
@@ -19,6 +19,26 @@ async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.tr
 
 export function extractCalls(file: string, source: string): CallSite[] {
   const found: CallSite[] = [];
+  const addHttpCall = (offset: number, symbol: string, method: string, address: string) => {
+    if (address.includes('${')) return;
+    let url: URL;
+    try { url = new URL(address); } catch { return; }
+    if (url.protocol !== 'https:' || url.username || url.password) return;
+    found.push({ file, line: source.slice(0, offset).split('\n').length, symbol,
+      endpoint: `${method.toUpperCase()} ${url.pathname}`, origin: url.origin, fields: [], uncertain: true,
+      reason: 'Static HTTP URL found; request fields and runtime behavior have not been verified' });
+  };
+  // Only literal HTTPS calls with an unambiguous method are recorded. Dynamic
+  // URLs and request options require a parser and explicit consumer binding.
+  for (const match of source.matchAll(/\bfetch\s*\(\s*(['"`])(https:\/\/[^'"`\s]+)\1\s*,\s*\{\s*method\s*:\s*(['"`])(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\3/gi)) {
+    addHttpCall(match.index, 'fetch', match[4], match[2]);
+  }
+  for (const match of source.matchAll(/\bfetch\s*\(\s*(['"`])(https:\/\/[^'"`\s]+)\1\s*\)/g)) {
+    addHttpCall(match.index, 'fetch', 'GET', match[2]);
+  }
+  for (const match of source.matchAll(/\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])(https:\/\/[^'"`\s]+)\2/gi)) {
+    addHttpCall(match.index, `axios.${match[1].toLowerCase()}`, match[1], match[3]);
+  }
   const pattern = /\.paymentIntents\.create\s*\(/g;
   for (const match of source.matchAll(pattern)) {
     const offset = match.index + match[0].length;
@@ -110,23 +130,28 @@ function inventoryFromContents(contents: Map<string, string>) {
   for (const [file, source] of contents) {
     if (!/\.[cm]?[jt]sx?$/.test(file) || file.endsWith('.d.ts')) continue;
     if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) { tests.push(file); continue; }
-    if (!/stripe|paymentIntents|@aws-sdk\/client-s3/.test(source)) continue;
+    if (!/stripe|paymentIntents|@aws-sdk\/client-s3|\bfetch\s*\(|\baxios\./.test(source)) continue;
     const found = extractCalls(file, source);
     if (!found.length) continue;
     files.push(file);
     if (!apiVersion && found.some(call => call.endpoint.startsWith('POST /v1/'))) apiVersion = source.match(/apiVersion\s*:\s*['"`]([^'"`]+)['"`]/)?.[1] || null;
     calls.push(...found);
   }
+  const tooManyCalls = calls.length > 200;
+  if (tooManyCalls) calls.length = 200;
   const s3Calls = calls.filter(call => call.endpoint.startsWith('S3 '));
   const stripeCalls = calls.filter(call => call.endpoint.startsWith('POST /v1/'));
-  const provider = s3Calls.length && stripeCalls.length ? 'aws-s3+stripe' : s3Calls.length ? 'aws-s3' : 'stripe';
+  const httpCalls = calls.filter(call => Boolean(call.origin));
+  const provider = s3Calls.length && stripeCalls.length ? 'aws-s3+stripe' : s3Calls.length ? 'aws-s3' : stripeCalls.length ? 'stripe' : 'http';
   const packageName = s3Calls.length ? '@aws-sdk/client-s3' : 'stripe';
   const sdkVersions = lockedVersions[packageName].size ? lockedVersions[packageName] : declaredVersions[packageName];
   const sdkVersion = sdkVersions.size === 1 ? [...sdkVersions][0] : null;
   const limitations = ['Text scan flags possible calls for review; it does not prove API impact or parse request fields', 'Fixture, example, build, and test files are excluded'];
   if (sdkVersions.size > 1) limitations.push('Multiple SDK versions were found; the version at each call site requires review');
-  else if (!sdkVersion) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
+  else if (!sdkVersion && (s3Calls.length || stripeCalls.length)) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
   if (stripeCalls.length && !apiVersion) limitations.push('Stripe API version not statically discoverable');
-  if (!calls.length) limitations.push('No recognizable Stripe or S3 call sites found; dynamic calls may exist');
+  if (httpCalls.length) limitations.push('HTTP calls are static URL candidates only; they have not been tied to a contract or tested');
+  if (tooManyCalls) limitations.push('Only the first 200 call sites were retained');
+  if (!calls.length) limitations.push('No recognizable Stripe, S3, or literal HTTPS call sites found; dynamic calls may exist');
   return { provider, sdkVersion, apiVersion, files, calls, tests, limitations };
 }

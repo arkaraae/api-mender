@@ -28,7 +28,7 @@ export async function processRepositoryScanJobs(config: Config) {
       const token = await installationToken({ appId: config.GITHUB_APP_ID, privateKey: config.GITHUB_APP_PRIVATE_KEY },
         Number(repository.github_installation_id), Number(repository.github_repo_id));
       const result = await scanInstallationRepository(repository.full_name, job.head_sha, token);
-      await processContractSources(database, repository, job.head_sha, token);
+      await processContractSources(database, repository, job.head_sha, token, result.inventory.calls);
       const { data: finished, error: finishError } = await database.rpc('finish_repository_scan_job', {
         p_job_id: job.id, p_lease_token: job.lease_token, p_succeeded: true,
         p_inventory: result.inventory,

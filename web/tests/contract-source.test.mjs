@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareContracts, readGitHubContract } from '../lib/contract-source.ts';
+import { compareContracts, matchContractCalls, readGitHubContract } from '../lib/contract-source.ts';
+import { extractCalls } from '../lib/public-scan.ts';
 
 function spec(field) {
   return { openapi: '3.0.3', info: { title: 'Orders', version: '1' }, paths: {
@@ -34,4 +35,29 @@ test('contract comparison reports a required request field rename as a possible 
   assert.notEqual(report.verdict, 'safe');
   assert.ok(report.changes.length || report.notes.length);
   assert.equal(typeof report.sampleProof.ok, 'boolean');
+});
+
+test('changed OpenAPI operation links only to static calls on its declared HTTPS server', () => {
+  const before = { ...spec('customerId'), servers: [{ url: 'https://api.customer.example/v1' }] };
+  const after = { ...spec('accountId'), servers: [{ url: 'https://api.customer.example/v1' }] };
+  const report = compareContracts(before, after);
+  assert.ok(report.affectedEndpoints.includes('POST /orders'));
+  const calls = extractCalls('src/orders.ts', [
+    "await fetch('https://api.customer.example/v1/orders', { method: 'POST', body: JSON.stringify(order) });",
+    "await axios.post('https://other.example/v1/orders', order);",
+    "await fetch('https://api.customer.example/v1/orders');",
+    "await fetch(`${base}/v1/orders`, { method: 'POST' });",
+  ].join('\n'));
+  const candidates = matchContractCalls(before, report.affectedEndpoints, calls);
+  assert.deepEqual(candidates.map(call => [call.file, call.line, call.endpoint]), [
+    ['src/orders.ts', 1, 'POST /v1/orders'],
+  ]);
+});
+
+test('template paths match one segment and unresolved servers produce no candidate', () => {
+  const call = extractCalls('src/orders.ts', "axios.get('https://api.customer.example/v1/orders/42')");
+  assert.equal(matchContractCalls({ servers: [{ url: 'https://api.customer.example/v1' }] },
+    ['GET /orders/{id}'], call).length, 1);
+  assert.equal(matchContractCalls({ servers: [{ url: 'https://{tenant}.customer.example/v1' }] },
+    ['GET /orders/{id}'], call).length, 0);
 });

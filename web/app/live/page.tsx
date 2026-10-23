@@ -31,11 +31,14 @@ function AwsSdkSection({ snapshot, busy, onCheck }: { snapshot: AwsSnapshot | nu
 function RepositoryInventory({ repository }: { repository: Repository }) {
   const s3Calls = repository.call_sites.filter(call => call.endpoint?.startsWith('S3 '));
   const stripeCalls = repository.call_sites.filter(call => call.endpoint?.startsWith('POST /v1/'));
+  const httpCalls = repository.call_sites.filter(call => call.symbol === 'fetch' || call.symbol?.startsWith('axios.'));
   const summary = repository.api_version?.startsWith('quotes-')
     ? `Quotes API: ${repository.api_version} · Call sites: ${repository.call_sites.length}`
     : s3Calls.length
       ? `AWS S3 SDK: ${repository.sdk_version || 'Unresolved'} · S3 commands: ${s3Calls.length}${stripeCalls.length ? ` · Stripe calls: ${stripeCalls.length}` : ''}`
-      : `Stripe SDK: ${repository.sdk_version || 'Unresolved'} · API version: ${repository.api_version || 'Unresolved'} · Call sites: ${repository.call_sites.length}`;
+      : stripeCalls.length
+        ? `Stripe SDK: ${repository.sdk_version || 'Unresolved'} · API version: ${repository.api_version || 'Unresolved'} · Call sites: ${repository.call_sites.length}`
+        : `Static HTTP call candidates: ${httpCalls.length} · Impact unverified`;
   return <><p>{summary}</p>{repository.head_sha && repository.call_sites.length > 0 && <ul className="live-call-sites">
     {repository.call_sites.slice(0, 12).map(call => <li key={`${call.file}:${call.line}:${call.symbol}`}>
       <a href={`https://github.com/${repository.full_name}/blob/${repository.head_sha}/${call.file.split('/').map(encodeURIComponent).join('/')}#L${call.line}`} target="_blank" rel="noopener noreferrer">{call.symbol} · {call.file}:{call.line} ↗</a>
