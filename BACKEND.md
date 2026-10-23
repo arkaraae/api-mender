@@ -6,9 +6,19 @@ The customer data plane is Supabase. `workspaces`, `workspace_members`,
 Cloudflare Worker receives GitHub events and processes repository scan jobs.
 The separate D1/KV watch and SQLite testbed are not part of this customer path.
 
+Connected repositories can also register an OpenAPI JSON file through
+`POST /api/live/contracts` with a signed-in user's Supabase bearer token:
+`{"workspaceId":"…","repositoryId":"…","path":"openapi.json"}`. The
+worker reads it at the pushed SHA, keeps each contract version in
+`api_contract_versions`, compares it to the prior version, and writes a
+possible-break finding when the schema changes. `GET /api/live/contracts` with
+`workspaceId` lists registered paths. Only OpenAPI 3.0/3.1 JSON under 512 KB
+is supported in this stage; the schema comparison is not a runtime test.
+
 ## Deploy order
 
-1. Apply `supabase/migrations/20261022120000_backend_foundation.sql` to a
+1. Apply `supabase/migrations/20261022120000_backend_foundation.sql` and then
+   `supabase/migrations/20261022150000_git_contract_sources.sql` to a
    non-production database and verify the ownership, editor, and unrelated-user
    access cases. The migration adds team membership and server-only GitHub and
    job tables. Back up production, then apply it there before shipping the
@@ -23,9 +33,10 @@ The separate D1/KV watch and SQLite testbed are not part of this customer path.
    `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_ID`, and `GITHUB_APP_PRIVATE_KEY`.
    Keep these out of `wrangler.jsonc`, GitHub source, and browser variables.
    Rotate them if exposed. The Worker cron claims at most two jobs each minute.
-4. Deploy the Worker after the migration and secrets are in place. Verify
+4. Deploy the Worker after both migrations and secrets are in place. Verify
    signed webhook receipt, one default-branch push, one saved scan, a duplicate
-   delivery, and a failed job retry before inviting a customer.
+   delivery, a contract baseline and change, and a failed job retry before
+   inviting a customer.
 
 ## Connect a beta customer's repository
 
@@ -55,11 +66,13 @@ repository, reads up to 80 source/manifest files (5 MB total) at the exact
 commit, and saves possible Stripe or AWS S3 call sites. It retries failures up
 to five times. Only the newest pushed SHA replaces the displayed inventory.
 
-This is **call-site inventory**, not proof that an upstream API change breaks
-the code. A release update still yields only an informational finding. No
-customer fix is generated or published by this pipeline yet. Contract diff,
-version applicability, bounded patch generation, failing-before/passing-after
-validation, and draft PR creation are separate release gates.
+The repository scan is **call-site inventory**. A tracked OpenAPI file is
+compared to its prior version and can yield a possible-break finding. Neither
+path proves that a customer's running code breaks. A release update still
+yields only an informational finding. No customer fix is generated or
+published by this pipeline yet. Consumer mapping, version applicability,
+bounded patch generation, failing-before/passing-after validation, and draft
+PR creation are separate release gates.
 
 ## Operations
 
@@ -70,6 +83,6 @@ delivery failures and Supabase errors. The webhook returns 503 on enqueue
 failure so GitHub can redeliver; duplicate delivery IDs do not create jobs.
 
 For local code checks run `cd web && npm run typecheck && npm test && npm run
-build`. The SQL migration has also been applied to a temporary local PostgreSQL
+build`. Both SQL migrations have also been applied to a temporary local PostgreSQL
 instance with stub Supabase roles to check its syntax, RLS path, webhook
 idempotency, job claim, and completion. This is not a Supabase staging rollout.
