@@ -18,7 +18,8 @@ is supported in this stage; the schema comparison is not a runtime test.
 ## Deploy order
 
 1. Apply `supabase/migrations/20261022120000_backend_foundation.sql` and then
-   `supabase/migrations/20261022150000_git_contract_sources.sql` to a
+   `supabase/migrations/20261022150000_git_contract_sources.sql`, then
+   `supabase/migrations/20261022170000_database_schema_evidence.sql` to a
    non-production database and verify the ownership, editor, and unrelated-user
    access cases. The migration adds team membership and server-only GitHub and
    job tables. Back up production, then apply it there before shipping the
@@ -82,6 +83,11 @@ locations are saved as **unverified consumer candidates** in the finding
 evidence. Dynamic URLs, other HTTP clients, server variables, ambiguous
 methods, and unscanned repositories are not matched. This is a conservative
 inventory signal, not consumer breakage proof or a validated repair.
+
+`DATABASE_ACCESS.md` describes the optional customer-run Postgres metadata
+probe and authenticated workspace ingestion endpoint. Schema evidence is
+customer-attested and is not yet joined to contract findings. A customer
+production database is never accessed by the Cloudflare Worker in this stage.
 
 ## Operations
 
