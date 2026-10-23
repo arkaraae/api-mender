@@ -22,14 +22,12 @@ export function readInterestRequest(input) {
   return problems.length ? { problems } : { request, robot: Boolean(shortText(value.website, 200)) };
 }
 
-export async function saveInterestRequest(db, request, { now = Date.now() } = {}) {
-  const date = new Date(now).toISOString();
-  await db.prepare(`INSERT INTO interest_contacts (created_at, updated_at, name, email, interest, message)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(email) DO UPDATE SET updated_at = excluded.updated_at,
-      name = excluded.name,
-      interest = CASE WHEN excluded.interest != '' THEN excluded.interest ELSE interest_contacts.interest END,
-      message = CASE WHEN excluded.message != '' THEN excluded.message ELSE interest_contacts.message END`)
-    .bind(date, date, request.name, request.email, request.interest, request.message)
-    .run();
+export async function saveInterestRequest(supabase, request) {
+  const { error } = await supabase.rpc('save_interest_contact', {
+    p_name: request.name,
+    p_email: request.email,
+    p_interest: request.interest,
+    p_message: request.message,
+  });
+  if (error) throw error;
 }
