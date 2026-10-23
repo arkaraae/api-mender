@@ -1,18 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readInterestRequest, saveInterestRequest } from '../lib/mender/interest.js';
-import { memoryD1 } from './d1.mjs';
 
-test('name and email alone are enough, and a repeat signup keeps one contact', async () => {
+test('name and email alone are enough, and the server sends a normalized contact to Supabase', async () => {
   const first = readInterestRequest({ name: '  Ada   Lovelace ', email: 'Ada@Example.com', interest: 'feedback', message: 'Great demo.' });
   assert.deepEqual(first.request, { name: 'Ada Lovelace', email: 'ada@example.com', interest: 'feedback', message: 'Great demo.' });
-  const db = memoryD1();
-  await saveInterestRequest(db, first.request, { now: Date.parse('2026-10-19T12:00:00Z') });
-  const second = readInterestRequest({ name: 'Ada', email: 'ada@example.com' });
-  await saveInterestRequest(db, second.request, { now: Date.parse('2026-10-20T12:00:00Z') });
-  assert.deepEqual(db.rows('SELECT name, email, interest, message FROM interest_contacts'), [
-    { name: 'Ada', email: 'ada@example.com', interest: 'feedback', message: 'Great demo.' },
-  ]);
+  let received;
+  await saveInterestRequest({ rpc: async (name, args) => { received = { name, args }; return { error: null }; } }, first.request);
+  assert.deepEqual(received, { name: 'save_interest_contact', args: { p_name: 'Ada Lovelace', p_email: 'ada@example.com', p_interest: 'feedback', p_message: 'Great demo.' } });
+  await assert.rejects(saveInterestRequest({ rpc: async () => ({ error: new Error('database unavailable') }) }, first.request), /database unavailable/);
 });
 
 test('bad contact details are refused and a hidden spam field is detected', () => {
