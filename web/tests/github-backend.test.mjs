@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { createHmac, generateKeyPairSync } from 'node:crypto';
+import { createHmac, generateKeyPairSync, verify } from 'node:crypto';
 import { test } from 'node:test';
-import { installationToken, parsePushEvent, readBoundedBody, verifyWebhookSignature } from '../lib/github-app.ts';
+import { githubAppJwt, installationToken, parsePushEvent, readBoundedBody, verifyWebhookSignature } from '../lib/github-app.ts';
 import { scanInstallationRepository } from '../lib/public-scan.ts';
 
 test('webhook validation rejects changed bodies and ignores non-default-branch pushes', async () => {
@@ -36,6 +36,18 @@ test('installation token is restricted to one repository and read-only contents'
     await installationToken({ appId: '123', privateKey }, 12, 'private-repo');
     assert.deepEqual(JSON.parse(request.options.body), { repositories: ['private-repo'], permissions: { contents: 'read' } });
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('GitHub App JWT accepts downloaded PKCS#1 RSA keys', async () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const jwt = await githubAppJwt({ appId: '123', privateKey });
+  const [header, payload, signature] = jwt.split('.');
+  assert.equal(JSON.parse(Buffer.from(payload, 'base64url').toString()).iss, '123');
+  assert.equal(verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature, 'base64url')), true);
 });
 
 test('private scan reads only pinned GitHub blobs using its installation token', async () => {
