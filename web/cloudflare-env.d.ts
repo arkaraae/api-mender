@@ -7,5 +7,9 @@ declare namespace Cloudflare {
     MENDER_DB?: D1Database;
     SITE_ORIGIN?: string;
     SALES_WEBHOOK?: string;
+    SUPABASE_SECRET_KEY?: string;
+    GITHUB_WEBHOOK_SECRET?: string;
+    GITHUB_APP_ID?: string;
+    GITHUB_APP_PRIVATE_KEY?: string;
   }
 }

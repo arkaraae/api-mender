@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { scanPublicRepository } from '@/lib/public-scan';
+import { env } from 'cloudflare:workers';
+import { backendAdmin } from '@/lib/backend-admin';
 
 export async function POST(request: NextRequest) {
   const token = request.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
@@ -13,12 +15,13 @@ export async function POST(request: NextRequest) {
   if (authError || !identity.user) return NextResponse.json({ error: 'Session expired' }, { status: 401 });
   const body = await request.json().catch(() => null) as { repositoryId?: unknown } | null;
   if (typeof body?.repositoryId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.repositoryId)) return NextResponse.json({ error: 'Invalid repository' }, { status: 400 });
-  const { data: repository, error: lookupError } = await supabase.from('monitored_repositories').select('id,full_name,branch,visibility,paused').eq('id', body.repositoryId).single();
+  const { data: repository, error: lookupError } = await supabase.from('monitored_repositories').select('id,full_name,branch,visibility,paused,github_installation_id').eq('id', body.repositoryId).single();
   if (lookupError || !repository) return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
-  if (repository.paused || repository.visibility !== 'public') return NextResponse.json({ error: 'Only active public repositories can be scanned' }, { status: 409 });
+  if (repository.paused || repository.visibility !== 'public' || repository.github_installation_id) return NextResponse.json({ error: 'This repository is scanned through its GitHub installation' }, { status: 409 });
   try {
     const result = await scanPublicRepository(repository.full_name, repository.branch);
-    const { error } = await supabase.from('monitored_repositories').update({ head_sha: result.head, sdk_version: result.inventory.sdkVersion, api_version: result.inventory.apiVersion, call_sites: result.inventory.calls, limitations: result.inventory.limitations, scanned_at: result.scannedAt }).eq('id', repository.id);
+    const admin = backendAdmin(env);
+    const { error } = await admin.from('monitored_repositories').update({ head_sha: result.head, target_sha: result.head, sdk_version: result.inventory.sdkVersion, api_version: result.inventory.apiVersion, call_sites: result.inventory.calls, limitations: result.inventory.limitations, scanned_at: result.scannedAt }).eq('id', repository.id);
     if (error) throw new Error('Could not save scan result');
     return NextResponse.json({ head: result.head, inventory: result.inventory, scannedAt: result.scannedAt });
   } catch (error) {
