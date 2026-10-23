@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:staging": "vinext build --mode staging",
     "preview": "wrangler dev --config dist/server/wrangler.json",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
