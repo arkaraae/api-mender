@@ -1,0 +1,88 @@
+name: Deploy apimender.com
+
+# Every push to mender-demo that touches the site publishes it to apimender.com, so anyone on the
+# team can change the site without a deploy from one person's laptop. The steps are the ones in
+# web/README.md, "Publishing to apimender.com": check, apply new D1 migrations, build for the
+# `apimender` environment, deploy, then make sure the live site and the gateway still answer.
+#
+# Needs the repository secret CLOUDFLARE_API_TOKEN: a Cloudflare API token for the apimender.com
+# account that can edit Workers, KV, D1 and the apimender.com Worker routes. Until it is set, the
+# workflow only runs the checks and says so.
+
+on:
+  push:
+    branches: [mender-demo]
+    paths:
+      - 'web/**'
+      - 'mender/**'
+      - '.github/workflows/deploy-apimender.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One release at a time; a newer push waits for the running one instead of cancelling it halfway.
+concurrency:
+  group: deploy-apimender
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 54294ccf89ff59f1769bb8a0fafcda98
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Check for the Cloudflare token
+        id: token
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::Not deployed: the repository secret CLOUDFLARE_API_TOKEN is not set. See .github/workflows/deploy-apimender.yml."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply new database migrations
+        if: steps.token.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply apimender --remote --env apimender
+
+      - name: Build for apimender.com
+        if: steps.token.outputs.ready == 'true'
+        run: npm run build
+        env:
+          CLOUDFLARE_ENV: apimender
+
+      - name: Deploy
+        if: steps.token.outputs.ready == 'true'
+        run: npx wrangler deploy --config dist/server/wrangler.json
+
+      - name: Check the live site
+        if: steps.token.outputs.ready == 'true'
+        run: |
+          set -u
+          fail=0
+          expect() { # expect <status> <description> <curl args…>
+            want=$1; what=$2; shift 2
+            got=$(curl -s -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 --retry-all-errors "$@")
+            if [ "$got" = "$want" ]; then echo "ok   $got  $what"; else echo "FAIL $got (wanted $want)  $what"; fail=1; fi
+          }
+          old='{"customerId":"acct_fixture_1","amountCents":2500}'
+          expect 200 'homepage'            https://apimender.com/
+          expect 200 'check a change'      https://apimender.com/check
+          expect 200 'old call through Mender is translated' -X POST -H 'content-type: application/json' -H 'x-consumer: deploy-check' -d "$old" https://apimender.com/mender/v1/api/testbed/quotes
+          expect 422 'old call straight to the API is refused' -X POST -H 'content-type: application/json' -H 'x-consumer: deploy-check' -d "$old" https://apimender.com/api/testbed/quotes
+          exit $fail

@@ -43,7 +43,7 @@ Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace cre
 
 Before the first release of the interest form, apply its D1 migration with `npx wrangler d1 migrations apply apimender --remote --env apimender`. To see submitted contacts later, use Cloudflare D1 or run `npx wrangler d1 execute apimender --remote --env apimender --command "SELECT created_at, name, email, interest, message FROM interest_contacts ORDER BY id DESC"`. For local testing, use `--local` instead of `--remote` and the `apimender` environment.
 
-Each release, from `web/`:
+Releases are automatic: every push to `mender-demo` that changes `web/` or `mender/` runs `.github/workflows/deploy-apimender.yml`, which checks the code, applies new D1 migrations, builds, deploys and then checks the live site. It needs the repository secret `CLOUDFLARE_API_TOKEN` (a token for the apimender.com account that can edit Workers, KV, D1 and the apimender.com Worker routes); without it the workflow only runs the checks. To release by hand instead, from `web/`:
 
 ```bash
 CLOUDFLARE_ENV=apimender npm run build
