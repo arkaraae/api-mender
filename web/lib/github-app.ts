@@ -4,6 +4,20 @@ const encoder = new TextEncoder();
 const apiHeaders = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-app' };
 const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+function der(tag: number, content: Uint8Array) {
+  const length: number[] = [];
+  for (let remaining = content.byteLength; remaining > 0; remaining >>>= 8) length.unshift(remaining & 0xff);
+  const prefix = content.byteLength < 128 ? [content.byteLength] : [0x80 | length.length, ...length];
+  return Uint8Array.from([tag, ...prefix, ...content]);
+}
+
+function pkcs8FromRsaPrivateKey(pkcs1: Uint8Array) {
+  // GitHub App downloads use PKCS#1 (BEGIN RSA PRIVATE KEY); Web Crypto imports PKCS#8.
+  const algorithm = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
+  const wrapped = der(0x04, pkcs1);
+  return der(0x30, Uint8Array.from([0x02, 0x01, 0x00, ...algorithm, ...wrapped]));
+}
+
 export async function readBoundedBody(request: Request, limit = 1_000_000) {
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
@@ -49,9 +63,12 @@ export function parsePushEvent(event: string | null, payload: unknown) {
 
 export async function githubAppJwt(config: GithubAppConfig) {
   if (!/^\d+$/.test(config.appId)) throw new Error('GitHub App ID is not configured');
-  const pem = config.privateKey.replace(/\\n/g, '\n').replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '');
-  const der = Uint8Array.from(atob(pem), char => char.charCodeAt(0));
-  const key = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const pem = config.privateKey.replace(/\\n/g, '\n').trim();
+  const match = /^-----BEGIN (RSA )?PRIVATE KEY-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END \1PRIVATE KEY-----$/.exec(pem);
+  if (!match) throw new Error('GitHub App private key is not a supported PEM');
+  const decoded = Uint8Array.from(atob(match[2].replace(/\s/g, '')), char => char.charCodeAt(0));
+  const keyData = match[1] ? pkcs8FromRsaPrivateKey(decoded) : decoded;
+  const key = await crypto.subtle.importKey('pkcs8', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(encoder.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
   const body = base64url(encoder.encode(JSON.stringify({ iat: now - 60, exp: now + 540, iss: config.appId })));
