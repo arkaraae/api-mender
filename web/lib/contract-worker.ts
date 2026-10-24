@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { compareContracts, matchContractCalls, readGitHubContract } from './contract-source';
+import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from './contract-source';
 
 async function digest(text: string) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
@@ -29,6 +29,31 @@ export async function processContractSources(database: SupabaseClient, repositor
       head_sha: head, content_sha256: current.sha256, document: current.document,
     }, { onConflict: 'source_id,head_sha' });
     if (writeError) throw writeError;
+    const currentMismatches = checkCurrentContractCalls(current.document, currentCalls);
+    if (currentMismatches.length) {
+      const contractUrl = `https://github.com/${repository.full_name}/blob/${head}/${source.path}`;
+      const { data: baselineSnapshot, error: baselineError } = await database.from('source_snapshots').upsert({
+        workspace_id: repository.workspace_id, provider: 'github-openapi', source_url: contractUrl,
+        sha256: current.sha256, simulated: false,
+        metadata: { sourceId: source.id, path: source.path, head, kind: 'current-contract-check' },
+      }, { onConflict: 'workspace_id,source_url,sha256' }).select('id').single();
+      if (baselineError || !baselineSnapshot) throw baselineError || new Error('Contract snapshot was not saved');
+      for (const mismatch of currentMismatches) {
+        const { call, missing, required } = mismatch;
+        const fingerprint = await digest(`request-schema:${source.id}:${repository.id}:${call.file}:${call.line}:${call.endpoint}:${current.sha256}:${missing.join(',')}`);
+        const codeUrl = `https://github.com/${repository.full_name}/blob/${head}/${call.file}#L${call.bodyLine || call.line}`;
+        const { error: findingError } = await database.from('findings').upsert({
+          workspace_id: repository.workspace_id, repository_id: repository.id, source_id: baselineSnapshot.id,
+          fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
+          description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.`,
+          severity: 'medium', confidence: 'probable', status: 'Action required', base_sha: head,
+          evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: current.sha256,
+            codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
+              fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
+        }, { onConflict: 'repository_id,fingerprint', ignoreDuplicates: true });
+        if (findingError) throw findingError;
+      }
+    }
     if (!before || before.content_sha256 === current.sha256) continue;
     const report = compareContracts(before.document, current.document);
     if (report.verdict === 'safe') continue;

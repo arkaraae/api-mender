@@ -32,6 +32,32 @@ export async function readGitHubContract(fullName: string, head: string, path: s
 }
 
 type HttpCall = { file: string; line: number; symbol: string; endpoint: string; origin?: string };
+type JsonCall = HttpCall & { fields?: string[]; fieldsComplete?: boolean; bodyLine?: number };
+
+// A complete literal JSON body can establish which top-level keys this call
+// sends. It still cannot prove that the call executes or what its values are.
+export function checkCurrentContractCalls(contract: object, calls: JsonCall[]) {
+  const document = contract as { paths?: Record<string, Record<string, any>> };
+  if (!document.paths || typeof document.paths !== 'object' || Array.isArray(document.paths)) return [];
+  const knownCalls = calls.filter(call => call.fieldsComplete === true && Array.isArray(call.fields)
+    && call.fields.length <= 100 && call.fields.every(field => typeof field === 'string'));
+  const mismatches: { call: JsonCall; operation: string; missing: string[]; required: string[] }[] = [];
+  for (const [path, pathItem] of Object.entries(document.paths).slice(0, 500)) {
+    if (!path.startsWith('/') || !pathItem || typeof pathItem !== 'object') continue;
+    for (const method of ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']) {
+      const schema = pathItem[method]?.requestBody?.content?.['application/json']?.schema;
+      if (schema?.type !== 'object' || !Array.isArray(schema.required)
+        || schema.required.length > 100 || !schema.required.every((name: unknown) => typeof name === 'string' && name.length <= 128)) continue;
+      const operation = `${method.toUpperCase()} ${path}`;
+      for (const call of matchContractCalls(contract, [operation], knownCalls)) {
+        const missing = schema.required.filter((name: string) => !call.fields?.includes(name));
+        if (missing.length) mismatches.push({ call, operation, missing, required: schema.required });
+        if (mismatches.length >= 50) return mismatches;
+      }
+    }
+  }
+  return mismatches;
+}
 
 function affectedEndpoints(found: ReturnType<typeof rulesFromOpenApi>) {
   const endpoints = new Set<string>();
@@ -50,7 +76,7 @@ function affectedEndpoints(found: ReturnType<typeof rulesFromOpenApi>) {
 // A static call is a candidate only when its HTTPS origin and complete path
 // match a server and changed operation in the old contract. This is not proof
 // that the code ran or that the change breaks that consumer.
-export function matchContractCalls(before: { servers?: { url?: string }[] }, affected: string[], calls: HttpCall[]) {
+export function matchContractCalls<T extends HttpCall>(before: { servers?: { url?: string }[] }, affected: string[], calls: T[]): T[] {
   const servers = (Array.isArray(before.servers) ? before.servers : []).flatMap(server => {
     if (typeof server?.url !== 'string' || server.url.includes('{')) return [];
     try {

@@ -1,5 +1,7 @@
+import { parseStaticHttpCalls } from './static-http-calls.ts';
+
 type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
-type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string; origin?: string };
+type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string; origin?: string; fieldsComplete?: boolean; bodyLine?: number };
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
@@ -18,14 +20,17 @@ async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.tr
 }
 
 export function extractCalls(file: string, source: string): CallSite[] {
-  const found: CallSite[] = [];
+  const found: CallSite[] = [...parseStaticHttpCalls(file, source)];
   const addHttpCall = (offset: number, symbol: string, method: string, address: string) => {
     if (address.includes('${')) return;
     let url: URL;
     try { url = new URL(address); } catch { return; }
     if (url.protocol !== 'https:' || url.username || url.password) return;
-    found.push({ file, line: source.slice(0, offset).split('\n').length, symbol,
-      endpoint: `${method.toUpperCase()} ${url.pathname}`, origin: url.origin, fields: [], uncertain: true,
+    const line = source.slice(0, offset).split('\n').length;
+    const endpoint = `${method.toUpperCase()} ${url.pathname}`;
+    if (found.some(call => call.line === line && call.endpoint === endpoint && call.origin === url.origin)) return;
+    found.push({ file, line, symbol,
+      endpoint, origin: url.origin, fields: [], uncertain: true,
       reason: 'Static HTTP URL found; request fields and runtime behavior have not been verified' });
   };
   // Only literal HTTPS calls with an unambiguous method are recorded. Dynamic
@@ -146,11 +151,11 @@ function inventoryFromContents(contents: Map<string, string>) {
   const packageName = s3Calls.length ? '@aws-sdk/client-s3' : 'stripe';
   const sdkVersions = lockedVersions[packageName].size ? lockedVersions[packageName] : declaredVersions[packageName];
   const sdkVersion = sdkVersions.size === 1 ? [...sdkVersions][0] : null;
-  const limitations = ['Text scan flags possible calls for review; it does not prove API impact or parse request fields', 'Fixture, example, build, and test files are excluded'];
+  const limitations = ['Static scan flags possible calls for review; it does not prove runtime API impact', 'Fixture, example, build, and test files are excluded'];
   if (sdkVersions.size > 1) limitations.push('Multiple SDK versions were found; the version at each call site requires review');
   else if (!sdkVersion && (s3Calls.length || stripeCalls.length)) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
   if (stripeCalls.length && !apiVersion) limitations.push('Stripe API version not statically discoverable');
-  if (httpCalls.length) limitations.push('HTTP calls are static URL candidates only; they have not been tied to a contract or tested');
+  if (httpCalls.length) limitations.push('HTTP calls are static candidates; only complete literal JSON request bodies have known field names, and none have been run by the scanner');
   if (tooManyCalls) limitations.push('Only the first 200 call sites were retained');
   if (!calls.length) limitations.push('No recognizable Stripe, S3, or literal HTTPS call sites found; dynamic calls may exist');
   return { provider, sdkVersion, apiVersion, files, calls, tests, limitations };

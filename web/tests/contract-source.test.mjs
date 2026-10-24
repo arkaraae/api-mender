@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareContracts, matchContractCalls, readGitHubContract } from '../lib/contract-source.ts';
+import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from '../lib/contract-source.ts';
 import { extractCalls } from '../lib/public-scan.ts';
 
 function spec(field) {
@@ -60,4 +60,35 @@ test('template paths match one segment and unresolved servers produce no candida
     ['GET /orders/{id}'], call).length, 1);
   assert.equal(matchContractCalls({ servers: [{ url: 'https://{tenant}.customer.example/v1' }] },
     ['GET /orders/{id}'], call).length, 0);
+});
+
+test('current contract identifies the pilot request body missing accountId', () => {
+  const current = { ...spec('accountId'), servers: [{ url: 'https://apimender.com' }] };
+  const code = [
+    "export async function createQuote(customerId, sku, fetch = globalThis.fetch) {",
+    "  return fetch('https://apimender.com/orders', {",
+    "    method: 'POST',",
+    "    body: JSON.stringify({ customerId, sku }),",
+    '  });',
+    '}',
+  ].join('\n');
+  const calls = extractCalls('src/client.mjs', code);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].fields, ['customerId', 'sku']);
+  assert.equal(calls[0].fieldsComplete, true);
+  assert.equal(calls[0].bodyLine, 4);
+  assert.deepEqual(checkCurrentContractCalls(current, calls).map(issue => ({
+    missing: issue.missing, file: issue.call.file, line: issue.call.bodyLine,
+  })), [{ missing: ['accountId'], file: 'src/client.mjs', line: 4 }]);
+});
+
+test('dynamic JSON bodies and spreads cannot create missing-field findings', () => {
+  const current = { ...spec('accountId'), servers: [{ url: 'https://apimender.com' }] };
+  const calls = extractCalls('src/orders.ts', [
+    "fetch('https://apimender.com/orders', { method: 'POST', body: JSON.stringify(order) });",
+    "fetch('https://apimender.com/orders', { method: 'POST', body: JSON.stringify({ ...order, sku }) });",
+    "fetch('https://apimender.com/orders', { method: 'POST', body: JSON.stringify({ accountId, sku }) });",
+  ].join('\n'));
+  assert.deepEqual(calls.map(call => call.fieldsComplete), [false, false, true]);
+  assert.deepEqual(checkCurrentContractCalls(current, calls), []);
 });
