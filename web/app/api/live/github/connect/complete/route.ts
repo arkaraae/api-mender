@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { authenticatedEditor, githubConfiguration, githubJson, onboardingDatabase, sha256, statePattern } from '@/lib/github-onboarding';
+import { authenticatedEditor, githubConfiguration, githubHeaders, githubJson, onboardingDatabase, sha256, statePattern } from '@/lib/github-onboarding';
 import { matchingInstallation, validAccessibleRepositories } from '@/lib/github-onboarding-policy';
 
 import type { VerifiedInstallation as Installation, AccessibleRepository as Repository } from '@/lib/github-onboarding-policy';
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     .is('consumed_at', null).gt('expires_at', new Date().toISOString())
     .select('state_hash').maybeSingle();
   if (claimError || !claimed) return Response.json({ error: 'GitHub connection was already used' }, { status: 409 });
+  let userToken: string | null = null;
   try {
     const exchange = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000),
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     const tokenResponse = await exchange.json() as { access_token?: string; error?: string };
     if (!tokenResponse.access_token || tokenResponse.error) throw new Error('GitHub authorization was denied or expired');
     const token = tokenResponse.access_token;
+    userToken = token;
     let selected: Installation | undefined;
     for (let page = 1; page <= 5 && !selected; page++) {
       const listing = await githubJson<{ installations?: Installation[] }>(
@@ -95,5 +97,17 @@ export async function POST(request: Request) {
       { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return Response.json({ error: 'Could not verify the GitHub installation or save its repositories. Start again.' }, { status: 502 });
+  } finally {
+    // The user token exists only to prove installation and repository access once.
+    if (userToken) {
+      try {
+        await fetch(`https://api.github.com/applications/${config.clientId}/token`, {
+          method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(5_000),
+          headers: { ...githubHeaders, Authorization: `Basic ${btoa(`${config.clientId}:${config.clientSecret}`)}`,
+            'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: userToken }),
+        });
+      } catch { /* The token was never persisted and GitHub will expire it. */ }
+    }
   }
 }
