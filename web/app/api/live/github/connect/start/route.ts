@@ -1,4 +1,4 @@
-import { authenticatedEditor, onboardingDatabase, randomState, sha256, uuid } from '@/lib/github-onboarding';
+import { authenticatedEditor, githubConfiguration, onboardingDatabase, randomState, sha256, uuid } from '@/lib/github-onboarding';
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { workspaceId?: unknown } | null;
@@ -6,6 +6,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid workspace' }, { status: 400 });
   const identity = await authenticatedEditor(request, body.workspaceId);
   if (!identity) return Response.json({ error: 'Workspace editor sign-in required' }, { status: 403 });
+  if (!githubConfiguration())
+    return Response.json({ error: 'GitHub connection is being configured. Please try again later.' }, { status: 503 });
   const state = randomState();
   try {
     const { error } = await onboardingDatabase().from('github_onboarding_attempts').insert({
