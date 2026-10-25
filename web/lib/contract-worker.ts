@@ -1,9 +1,81 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from './contract-source';
+import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from './contract-source.ts';
 
 async function digest(text: string) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+type Call = { file: string; line: number; symbol: string; endpoint: string; origin?: string;
+  fields?: string[]; fieldsComplete?: boolean; bodyLine?: number };
+type Repository = { id: string; workspace_id: string; full_name: string; head_sha?: string | null;
+  target_sha?: string | null; call_sites?: Call[] };
+type Source = { id: string; workspace_id: string; repository_id?: string; path: string; paused?: boolean };
+type Contract = { document: object; sha256: string };
+
+async function saveCurrentRequestFindings(database: SupabaseClient, source: Source,
+  sourceRepository: Repository, sourceHead: string, contract: Contract,
+  consumer: Repository, consumerHead: string, calls: Call[]) {
+  const mismatches = checkCurrentContractCalls(contract.document, calls);
+  if (!mismatches.length) return 0;
+  const contractUrl = `https://github.com/${sourceRepository.full_name}/blob/${sourceHead}/${source.path}`;
+  const { data: snapshot, error: snapshotError } = await database.from('source_snapshots').upsert({
+    workspace_id: source.workspace_id, provider: 'github-openapi', source_url: contractUrl,
+    sha256: contract.sha256, simulated: false,
+    metadata: { sourceId: source.id, path: source.path, head: sourceHead, kind: 'current-contract-check' },
+  }, { onConflict: 'workspace_id,source_url,sha256' }).select('id').single();
+  if (snapshotError || !snapshot) throw snapshotError || new Error('Contract snapshot was not saved');
+  for (const mismatch of mismatches) {
+    const { call, missing, required } = mismatch;
+    const fingerprint = await digest(`request-schema:${source.id}:${consumer.id}:${call.file}:${call.line}:${call.endpoint}:${contract.sha256}:${missing.join(',')}`);
+    const codeUrl = `https://github.com/${consumer.full_name}/blob/${consumerHead}/${call.file}#L${call.bodyLine || call.line}`;
+    const { error } = await database.from('findings').upsert({
+      workspace_id: source.workspace_id, repository_id: consumer.id, source_id: snapshot.id,
+      fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
+      description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.`,
+      severity: 'medium', confidence: 'probable', status: 'Action required', base_sha: consumerHead,
+      evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: contract.sha256,
+        codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
+          fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
+    }, { onConflict: 'repository_id,fingerprint', ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  return mismatches.length;
+}
+
+// Called on consumer pushes. The source document was already fetched during
+// its own installed repository scan; no customer code or cross-repo token is run.
+export async function processBoundContractConsumers(database: SupabaseClient,
+  consumer: Repository, consumerHead: string, currentCalls: Call[]) {
+  if (consumer.target_sha !== consumerHead) return { checked: 0, findings: 0 };
+  const { data: bindings, error } = await database.from('api_contract_consumers')
+    .select('source_id,workspace_id').eq('repository_id', consumer.id).eq('paused', false).limit(21);
+  if (error) throw error;
+  if ((bindings || []).length > 20) throw new Error('Repository exceeds the contract consumer limit');
+  let checked = 0;
+  let findings = 0;
+  for (const binding of bindings || []) {
+    if (binding.workspace_id !== consumer.workspace_id) throw new Error('Contract consumer workspace mismatch');
+    const { data: source, error: sourceError } = await database.from('api_contract_sources')
+      .select('id,workspace_id,repository_id,path,paused').eq('id', binding.source_id).single();
+    if (sourceError || !source || source.paused || source.workspace_id !== consumer.workspace_id) continue;
+    const { data: sourceRepository, error: repositoryError } = await database.from('monitored_repositories')
+      .select('id,workspace_id,full_name,head_sha,target_sha,paused')
+      .eq('id', source.repository_id).single();
+    if (repositoryError || !sourceRepository || sourceRepository.paused
+      || sourceRepository.workspace_id !== consumer.workspace_id
+      || !sourceRepository.head_sha || sourceRepository.head_sha !== sourceRepository.target_sha) continue;
+    const { data: version, error: versionError } = await database.from('api_contract_versions')
+      .select('document,content_sha256').eq('source_id', source.id)
+      .eq('head_sha', sourceRepository.head_sha).maybeSingle();
+    if (versionError) throw versionError;
+    if (!version) continue;
+    checked++;
+    findings += await saveCurrentRequestFindings(database, source, sourceRepository,
+      sourceRepository.head_sha, { document: version.document, sha256: version.content_sha256 },
+      consumer, consumerHead, currentCalls);
+  }
+  return { checked, findings };
 }
 
 export async function processContractSources(database: SupabaseClient, repository: {
@@ -29,29 +101,25 @@ export async function processContractSources(database: SupabaseClient, repositor
       head_sha: head, content_sha256: current.sha256, document: current.document,
     }, { onConflict: 'source_id,head_sha' });
     if (writeError) throw writeError;
-    const currentMismatches = checkCurrentContractCalls(current.document, currentCalls);
-    if (currentMismatches.length) {
-      const contractUrl = `https://github.com/${repository.full_name}/blob/${head}/${source.path}`;
-      const { data: baselineSnapshot, error: baselineError } = await database.from('source_snapshots').upsert({
-        workspace_id: repository.workspace_id, provider: 'github-openapi', source_url: contractUrl,
-        sha256: current.sha256, simulated: false,
-        metadata: { sourceId: source.id, path: source.path, head, kind: 'current-contract-check' },
-      }, { onConflict: 'workspace_id,source_url,sha256' }).select('id').single();
-      if (baselineError || !baselineSnapshot) throw baselineError || new Error('Contract snapshot was not saved');
-      for (const mismatch of currentMismatches) {
-        const { call, missing, required } = mismatch;
-        const fingerprint = await digest(`request-schema:${source.id}:${repository.id}:${call.file}:${call.line}:${call.endpoint}:${current.sha256}:${missing.join(',')}`);
-        const codeUrl = `https://github.com/${repository.full_name}/blob/${head}/${call.file}#L${call.bodyLine || call.line}`;
-        const { error: findingError } = await database.from('findings').upsert({
-          workspace_id: repository.workspace_id, repository_id: repository.id, source_id: baselineSnapshot.id,
-          fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
-          description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.`,
-          severity: 'medium', confidence: 'probable', status: 'Action required', base_sha: head,
-          evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: current.sha256,
-            codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
-              fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
-        }, { onConflict: 'repository_id,fingerprint', ignoreDuplicates: true });
-        if (findingError) throw findingError;
+    await saveCurrentRequestFindings(database, source, repository, head, current,
+      repository, head, currentCalls);
+    const { data: bindings, error: bindingError } = await database.from('api_contract_consumers')
+      .select('repository_id,workspace_id').eq('source_id', source.id).eq('paused', false).limit(51);
+    if (bindingError) throw bindingError;
+    if ((bindings || []).length > 50) throw new Error('Contract source exceeds the consumer limit');
+    if (bindings?.length) {
+      const ids = bindings.map(binding => binding.repository_id);
+      if (bindings.some(binding => binding.workspace_id !== repository.workspace_id))
+        throw new Error('Contract consumer workspace mismatch');
+      const { data: consumers, error: consumerError } = await database.from('monitored_repositories')
+        .select('id,workspace_id,full_name,head_sha,target_sha,call_sites,paused')
+        .eq('workspace_id', repository.workspace_id).in('id', ids).limit(50);
+      if (consumerError) throw consumerError;
+      for (const consumer of consumers || []) {
+        if (consumer.paused || !consumer.head_sha || consumer.head_sha !== consumer.target_sha
+          || !Array.isArray(consumer.call_sites)) continue;
+        await saveCurrentRequestFindings(database, source, repository, head, current,
+          consumer, consumer.head_sha, consumer.call_sites);
       }
     }
     if (!before || before.content_sha256 === current.sha256) continue;

@@ -1,7 +1,7 @@
 import { backendAdmin } from './backend-admin';
 import { installationToken } from './github-app';
 import { scanInstallationRepository } from './public-scan';
-import { processContractSources } from './contract-worker';
+import { processBoundContractConsumers, processContractSources } from './contract-worker';
 
 type Config = {
   NEXT_PUBLIC_SUPABASE_URL?: string; SUPABASE_SECRET_KEY?: string;
@@ -29,6 +29,7 @@ export async function processRepositoryScanJobs(config: Config) {
         Number(repository.github_installation_id), Number(repository.github_repo_id));
       const result = await scanInstallationRepository(repository.full_name, job.head_sha, token);
       await processContractSources(database, repository, job.head_sha, token, result.inventory.calls);
+      await processBoundContractConsumers(database, repository, job.head_sha, result.inventory.calls);
       const { data: finished, error: finishError } = await database.rpc('finish_repository_scan_job', {
         p_job_id: job.id, p_lease_token: job.lease_token, p_succeeded: true,
         p_inventory: result.inventory,
