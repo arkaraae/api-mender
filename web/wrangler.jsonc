@@ -25,6 +25,7 @@
         "NEXT_PUBLIC_SUPABASE_URL": "https://xedurkvshpszwevmhkzx.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_uF7jRot-UE-GLErDy8YO0g_BeBsdtms",
         "GITHUB_APP_ID": "5435760",
+        "GITHUB_APP_CLIENT_ID": "Iv23liXSFTwlAlL3X5wG",
         "SITE_ORIGIN": "https://api-mender-staging.amorales8.workers.dev"
       }
     },
