@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { processBoundContractConsumers } from '../lib/contract-worker.ts';
+import { processBoundContractConsumers, processContractSources } from '../lib/contract-worker.ts';
 
 const sourceHead = 'a'.repeat(40);
 const consumerHead = 'b'.repeat(40);
@@ -63,4 +63,52 @@ test('outdated consumer scan does not create findings', async () => {
   }, sourceHead, []);
   assert.deepEqual(result, { checked: 0, findings: 0 });
   assert.deepEqual(saved, []);
+});
+
+test('upstream push checks a separate connected consumer inventory', async () => {
+  const saved = [];
+  const document = {
+    openapi: '3.0.3', servers: [{ url: 'https://api.example.test' }],
+    paths: { '/quotes': { post: { requestBody: { content: {
+      'application/json': { schema: { type: 'object', required: ['accountId', 'sku'] } },
+    } } } } },
+  };
+  const encoded = Buffer.from(JSON.stringify(document));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    type: 'file', encoding: 'base64', size: encoded.length, content: encoded.toString('base64'),
+  }), { status: 200 });
+  const rows = {
+    api_contract_sources: [{ id: 'source-1', workspace_id: 'workspace-1', path: 'openapi.json' }],
+    api_contract_versions: [],
+    api_contract_consumers: [{ repository_id: 'consumer-1', workspace_id: 'workspace-1' }],
+    monitored_repositories: [{ id: 'consumer-1', workspace_id: 'workspace-1',
+      full_name: 'acme/checkout', head_sha: consumerHead, target_sha: consumerHead, paused: false,
+      call_sites: [{ file: 'src/quote.ts', line: 9, bodyLine: 12, symbol: 'fetch',
+        endpoint: 'POST /quotes', origin: 'https://api.example.test',
+        fields: ['customerId', 'sku'], fieldsComplete: true }] }],
+    source_snapshots: { id: 'snapshot-1' },
+  };
+  const database = { from(table) {
+    let result = { data: rows[table], error: null };
+    return {
+      select() { return this; }, eq() { return this; }, limit() { return this; },
+      order() { return this; }, in() { return this; },
+      upsert(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
+      single: async () => table === 'source_snapshots' ? { data: rows.source_snapshots, error: null } : result,
+      then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
+    };
+  } };
+  try {
+    const result = await processContractSources(database, {
+      id: 'provider-1', workspace_id: 'workspace-1', full_name: 'acme/upstream-api',
+      target_sha: sourceHead,
+    }, sourceHead, 'installation-token', []);
+    assert.deepEqual(result, { checked: 1, changed: 0 });
+    const finding = saved.find(item => item.table === 'findings')?.row;
+    assert.equal(finding.repository_id, 'consumer-1');
+    assert.deepEqual(finding.evidence.missing, ['accountId']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
