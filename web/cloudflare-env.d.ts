@@ -3,6 +3,8 @@
 // optional secret: a Slack or Discord address that gets each "Contact sales" request.
 declare namespace Cloudflare {
   interface Env {
+    NEXT_PUBLIC_SUPABASE_URL?: string;
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
     MENDER_WATCH?: KVNamespace;
     MENDER_DB?: D1Database;
     SITE_ORIGIN?: string;
@@ -11,5 +13,7 @@ declare namespace Cloudflare {
     GITHUB_WEBHOOK_SECRET?: string;
     GITHUB_APP_ID?: string;
     GITHUB_APP_PRIVATE_KEY?: string;
+    GITHUB_APP_CLIENT_ID?: string;
+    GITHUB_APP_CLIENT_SECRET?: string;
   }
 }
