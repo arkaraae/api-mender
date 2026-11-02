@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     || call.file.startsWith('/') || call.file.split('/').some((part: string) => part === '.' || part === '..'))
     return Response.json({ error: 'This finding cannot produce a bounded repair' }, { status: 422, headers: noStore });
   const { data: repository, error: repoError } = await database.from('monitored_repositories')
-    .select('id,workspace_id,full_name,github_repo_id,github_installation_id,head_sha,target_sha,paused')
+    .select('id,workspace_id,full_name,branch,github_repo_id,github_installation_id,head_sha,target_sha,paused')
     .eq('id', finding.repository_id).eq('workspace_id', body.workspaceId).maybeSingle();
   if (repoError || !repository || repository.paused || !repository.github_installation_id
     || !repository.github_repo_id || !repository.head_sha || repository.head_sha !== repository.target_sha
@@ -66,6 +66,15 @@ export async function POST(request: Request) {
     const token = await installationToken({ appId: env.GITHUB_APP_ID,
       privateKey: env.GITHUB_APP_PRIVATE_KEY }, Number(repository.github_installation_id), Number(repository.github_repo_id));
     const repo = repository.full_name.split('/').map(encodeURIComponent).join('/');
+    const branchResponse = await fetch(`https://api.github.com/repos/${repo}/branches/${encodeURIComponent(repository.branch)}`, {
+      headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
+      redirect: 'error', signal: AbortSignal.timeout(15_000),
+    });
+    if (!branchResponse.ok) throw new Error('Could not verify the current consumer branch');
+    const branch = await branchResponse.json() as { commit?: { sha?: string } };
+    if (branch.commit?.sha !== repository.head_sha)
+      return Response.json({ error: 'The consumer branch moved; scan its latest commit first' },
+        { status: 409, headers: noStore });
     const path = call.file.split('/').map(encodeURIComponent).join('/');
     const response = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${repository.head_sha}`, {
       headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
