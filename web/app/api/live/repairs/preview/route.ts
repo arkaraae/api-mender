@@ -94,8 +94,6 @@ export async function POST(request: Request) {
     });
     const sourceHash = await sha256(sourceText);
     const patchedHash = await sha256(proposal.afterSource);
-    let repairJob: { id: string; status: string } | null = null;
-    let savedPrUrl: string | undefined;
     if (body.action === 'prepare') {
       const { error: insertError } = await database.from('repair_jobs').insert({
         workspace_id: body.workspaceId, finding_id: finding.id, repository_id: repository.id,
@@ -107,27 +105,26 @@ export async function POST(request: Request) {
       });
       if (insertError && insertError.code !== '23505')
         return Response.json({ error: 'Could not save the repair job' }, { status: 502, headers: noStore });
-      const { data: saved, error: savedError } = await database.from('repair_jobs')
-        .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field')
-        .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
-        .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
-        .maybeSingle();
-      if (savedError || !saved)
-        return Response.json({ error: 'Could not read the repair job' }, { status: 502, headers: noStore });
-      if (saved.source_sha256 !== sourceHash || saved.patched_sha256 !== patchedHash
-        || saved.file_path !== proposal.file || saved.old_field !== proposal.oldField
-        || saved.new_field !== proposal.newField)
-        return Response.json({ error: 'A different repair already exists for this finding and commit' },
-          { status: 409, headers: noStore });
-      repairJob = { id: saved.id, status: saved.status };
-      savedPrUrl = saved.pr_url || undefined;
     }
+    const { data: saved, error: savedError } = await database.from('repair_jobs')
+      .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field')
+      .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
+      .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
+      .maybeSingle();
+    if (savedError || (body.action === 'prepare' && !saved))
+      return Response.json({ error: 'Could not read the repair job' }, { status: 502, headers: noStore });
+    if (saved && (saved.source_sha256 !== sourceHash || saved.patched_sha256 !== patchedHash
+      || saved.file_path !== proposal.file || saved.old_field !== proposal.oldField
+      || saved.new_field !== proposal.newField))
+      return Response.json({ error: 'A different repair already exists for this finding and commit' },
+        { status: 409, headers: noStore });
+    const repairJob = saved ? { id: saved.id, status: saved.status } : null;
     return Response.json({ findingId: finding.id, repository: repository.full_name,
       baseSha: repository.head_sha, contractSha256: version.content_sha256,
       file: proposal.file, line: proposal.line, oldField: proposal.oldField,
       newField: proposal.newField, before: proposal.before, after: proposal.after,
       sourceSha256: sourceHash, patchedSha256: patchedHash, repairJob,
-      prUrl: repairJob ? savedPrUrl : undefined,
+      prUrl: saved?.pr_url || undefined,
       validation: 'static_only', runtimeVerified: false, note: proposal.note }, { headers: noStore });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Could not prepare repair' },
