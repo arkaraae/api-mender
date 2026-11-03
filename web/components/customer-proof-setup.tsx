@@ -12,7 +12,7 @@ export default function CustomerProofSetup({ database, workspaceId, repositories
   database: SupabaseClient; workspaceId: string; repositories: Repository[]; consumers: Consumer[];
 }) {
   const consumerIds = new Set(consumers.filter(item => !item.paused).map(item => item.repository_id));
-  const choices = repositories.filter(repo => consumerIds.has(repo.id) && repo.github_installation_id && !repo.paused);
+  const choices = repositories.filter(repo => repo.github_installation_id && !repo.paused);
   const [repositoryId, setRepositoryId] = useState('');
   const [testCommand, setTestCommand] = useState('');
   const [expectedBeforeOutput, setExpectedBeforeOutput] = useState('');
@@ -37,16 +37,18 @@ export default function CustomerProofSetup({ database, workspaceId, repositories
     finally { setBusy(false); }
   }
 
-  if (!choices.length) return null;
-  return <div className="live-fields">
+  return <div className="live-fields" id="ci-proof-setup">
     <h3>Customer CI proof setup</h3>
     <p>Choose a consumer repository, then check whether its proof workflow is present. The test command must fail on the old request and pass on a repair branch. Run it against a test API or safe read-only endpoint.</p>
+    {!choices.length && <p role="status">Connect a GitHub repository above to set up CI proof.</p>}
     <label>Consumer repository
       <select value={repositoryId} onChange={event => { setRepositoryId(event.target.value); setSetup(null); }}>
         <option value="">Choose repository</option>
-        {choices.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}
+        {choices.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}{consumerIds.has(repo.id) ? ' · linked consumer' : ''}</option>)}
       </select>
     </label>
+    {repositoryId && !consumerIds.has(repositoryId) &&
+      <p className="live-muted">You can prepare this workflow now. Connect the repository as a consumer above before requesting a repair.</p>}
     <button disabled={busy || !repositoryId} onClick={() => void check(false)}>
       {busy ? 'Checking GitHub…' : 'Check proof workflow'}
     </button>
