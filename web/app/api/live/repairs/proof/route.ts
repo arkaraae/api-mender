@@ -1,17 +1,9 @@
 import { env } from 'cloudflare:workers';
-import { authenticatedEditor, githubHeaders, onboardingDatabase, uuid } from '@/lib/github-onboarding';
-import { installationToken, readBoundedBody } from '@/lib/github-app';
-import { evaluateRepairProof } from '@/lib/repair-proof';
+import { authenticatedEditor, onboardingDatabase, uuid } from '@/lib/github-onboarding';
+import { readBoundedBody } from '@/lib/github-app';
+import { refreshRepairProofJob } from '@/lib/repair-proof-worker';
 
 const noStore = { 'Cache-Control': 'no-store' };
-const sha = /^[a-f0-9]{40}$/;
-
-async function githubRead(url: string, token: string) {
-  const response = await fetch(url, { headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
-    redirect: 'manual', signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-  return response.json() as Promise<any>;
-}
 
 /** Refresh a draft repair PR's customer-run CI attestation for its pinned patch SHA. */
 export async function POST(request: Request) {
@@ -31,54 +23,11 @@ export async function POST(request: Request) {
     .select('id,workspace_id,repository_id,pr_number,patch_branch,patch_sha,status')
     .eq('id', body.jobId).eq('workspace_id', body.workspaceId).maybeSingle();
   if (jobError) return Response.json({ error: 'Could not load repair job' }, { status: 502, headers: noStore });
-  if (!job || !job.pr_number || !job.patch_branch || !job.patch_sha || !sha.test(job.patch_sha)
-    || !['proof_pending', 'proof_failed', 'validated'].includes(job.status))
+  if (!job)
     return Response.json({ error: 'Repair job has no draft PR awaiting CI proof' }, { status: 409, headers: noStore });
-  const { data: repository, error: repoError } = await database.from('monitored_repositories')
-    .select('full_name,branch,github_repo_id,github_installation_id,paused')
-    .eq('id', job.repository_id).eq('workspace_id', body.workspaceId).maybeSingle();
-  if (repoError || !repository || repository.paused || !repository.github_repo_id || !repository.github_installation_id)
-    return Response.json({ error: 'Connected repository is unavailable' }, { status: 409, headers: noStore });
   try {
-    const token = await installationToken({ appId: env.GITHUB_APP_ID,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY }, Number(repository.github_installation_id),
-    Number(repository.github_repo_id), 'proof-read');
-    const repo = repository.full_name.split('/').map(encodeURIComponent).join('/');
-    const prUrl = `https://api.github.com/repos/${repo}/pulls/${job.pr_number}`;
-    const verifyPr = async () => {
-      const pr = await githubRead(prUrl, token);
-      if (pr.state !== 'open' || pr.head?.sha !== job.patch_sha
-        || pr.head?.ref !== job.patch_branch || pr.base?.ref !== repository.branch
-        || String(pr.head?.repo?.id) !== String(repository.github_repo_id)
-        || String(pr.base?.repo?.id) !== String(repository.github_repo_id))
-        throw new Error('The repair PR no longer points to its saved patch commit');
-      if (typeof pr.base?.sha !== 'string' || !sha.test(pr.base.sha))
-        throw new Error('GitHub returned an invalid repair PR base commit');
-      if (pr.merge_commit_sha !== null && pr.merge_commit_sha !== undefined
-        && (typeof pr.merge_commit_sha !== 'string' || !sha.test(pr.merge_commit_sha)))
-        throw new Error('GitHub returned an invalid repair PR merge commit');
-      return { baseSha: pr.base.sha as string, mergeSha: pr.merge_commit_sha as string | null };
-    };
-    const current = await verifyPr();
-    const checkedShas = [...new Set([job.patch_sha, current.mergeSha].filter((value): value is string => !!value))];
-    const responses = await Promise.all(checkedShas.map(ref => githubRead(
-      `https://api.github.com/repos/${repo}/commits/${ref}/check-runs?check_name=mender-repair-proof&per_page=100`, token)));
-    if (responses.some(checks => !Number.isSafeInteger(checks.total_count) || checks.total_count > 100
-      || !Array.isArray(checks.check_runs)))
-      throw new Error('GitHub returned an unsupported number of CI checks');
-    const result = evaluateRepairProof(responses.flatMap(checks => checks.check_runs), { checkedShas,
-      patchSha: job.patch_sha, baseSha: current.baseSha, prNumber: job.pr_number });
-    const after = await verifyPr();
-    if (after.mergeSha !== current.mergeSha || after.baseSha !== current.baseSha)
-      throw new Error('The repair PR changed while CI proof was checked');
-    const proof = result.proof ? { ...result.proof, observedAt: new Date().toISOString() } : {};
-    const { error: updateError } = await database.from('repair_jobs')
-      .update({ status: result.status, proof, updated_at: new Date().toISOString() })
-      .eq('id', job.id).eq('workspace_id', body.workspaceId).eq('patch_sha', job.patch_sha);
-    if (updateError) throw new Error('Could not record CI proof');
-    return Response.json({ jobId: job.id, status: result.status,
-      validation: result.status === 'validated' ? 'customer_ci_attested' : 'pending_or_failed',
-      proof: result.proof }, { headers: noStore });
+    const result = await refreshRepairProofJob(database, env, job);
+    return Response.json(result, { headers: noStore });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Could not verify customer CI' },
       { status: 502, headers: noStore });
