@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -27,7 +28,9 @@ jobs:
           expected-before-output: 'Quote API returned 422'
 ```
 
-Pin the action to a reviewed commit SHA. Mender only treats the `mender-repair-proof`
+Pin the action to a reviewed commit SHA. The full checkout must include both
+the PR base and head commits; the action does not fetch or retain Git credentials.
+Mender only treats the `mender-repair-proof`
 GitHub Actions check on the saved patch commit as customer CI attestation. This
 does not establish that every runtime path or data migration is safe. The draft
 PR remains for human review and is never merged automatically.
