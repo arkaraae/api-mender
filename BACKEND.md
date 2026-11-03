@@ -4,11 +4,13 @@
 
 The isolated `codex/staging-github-app` branch deploys to
 `https://api-mender-staging.amorales8.workers.dev`. It has a team-owned
-GitHub App with read access to only the two pilot repositories, a separate
+GitHub App installed on only the two pilot repositories, a separate
 Supabase project, signed push ingestion, pinned repository scans, connected
 OpenAPI sources and consumer repositories, and static request-schema findings.
-An existing installation is routed through GitHub OAuth; its final callback
-still needs a non-disruptive end-to-end verification. A new customer chooses
+The App has repository Contents and pull request write permission plus Checks
+read permission, restricted to repositories each installer selects. An existing
+installation is routed through GitHub OAuth; its final callback still needs
+an end-to-end verification. A new customer chooses
 repositories during installation. Installed repositories can
 request a rate-limited rescan from the workspace.
 
@@ -18,27 +20,27 @@ The preview checks the current GitHub branch, scanned commit, API contract,
 workspace binding, and source shape. An editor can save that proposal as an
 idempotent `repair_jobs` record. The record stores commit and source hashes,
 the exact key edit, and an explicit `proposed` status; it stores no full file.
-It changes no repository code. A local
-test shows the old pilot request returning 422 and the proposed field rename
-returning 200 against a test API. The hosted preview and saved job have not
-been established as a customer runtime fix. Customer CI proof is still required.
+It changes no repository code until an editor opens a draft PR. The pilot's
+old request returned 422 and the proposed field rename returned 200 against
+the live Quote API.
 
-Staging now has a draft-PR publisher behind a staging-origin gate. It rechecks
-the pinned file, contract, and source hashes, then uses a repository-scoped
-installation token to create one draft PR on a deterministic branch. It never
-merges. The current Scanner App is still read-only, so this path cannot yet
-open a live PR. A separate customer-run GitHub Actions check named
-`mender-repair-proof` can reproduce a focused failure on the base commit and
-pass the same test on the patch commit. Mender's proof endpoint records that
-CI attestation only for the saved patch SHA; no customer CI has yet run through
-the hosted flow. See `.github/actions/mender-repair-proof/README.md`.
+Staging has a draft-PR publisher behind a staging-origin gate. It rechecks the
+pinned file, contract, and source hashes, then uses a repository-scoped
+installation token to create a draft PR on a deterministic branch. It never
+merges. The customer-run GitHub Actions check `mender-repair-proof` reproduced
+the old failure and passed the patch in the private consumer pilot. Mender
+recorded that exact PR, patch, base, and successful check as validated. The
+Worker now refreshes up to two pending CI proofs on each minute's cron, and
+the earlier pilot PR became validated without a button click. See
+`.github/actions/mender-repair-proof/README.md`.
 
 No customer database is directly connected. Database schema evidence remains
-customer-attested. The App has no repository write or pull-request permission;
-Mender does not yet create AI repairs, run customer tests, or open a draft PR.
-Do not promote this staging branch to `apimender.com` as a complete repair
-product. The rest of this document describes the underlying rollout design
-and includes earlier operator steps retained for reference.
+customer-attested. The repair covers one deterministic request-field case and
+depends on a customer CI workflow; Mender does not yet generate general AI
+repairs or run arbitrary customer tests. Do not promote this staging branch to
+`apimender.com` as a complete repair product. The rest of this document
+describes the rollout design and includes earlier operator steps retained for
+reference.
 
 The customer data plane is Supabase. `workspaces`, `workspace_members`,
 `monitored_repositories`, `github_installations`, `github_webhook_deliveries`,
