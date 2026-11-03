@@ -19,7 +19,7 @@ function pathSegments(value: string) { return value.split('/').map(encodeURIComp
 
 async function github(url: string, token: string, init: RequestInit = {}) {
   const response = await fetch(url, {
-    ...init, redirect: 'error', signal: AbortSignal.timeout(15_000),
+    ...init, redirect: 'manual', signal: AbortSignal.timeout(15_000),
     headers: { ...githubHeaders, Authorization: `Bearer ${token}`,
       ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
   });
