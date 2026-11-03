@@ -1,6 +1,6 @@
 # Customer backend rollout
 
-## Current staging state (2026-11-02)
+## Current staging state (2026-11-03)
 
 The isolated `codex/staging-github-app` branch deploys to
 `https://api-mender-staging.amorales8.workers.dev`. It has a team-owned
@@ -15,10 +15,13 @@ request a rate-limited rescan from the workspace.
 For one narrow case—a literal `fetch` JSON body with one missing required
 field and one unrecognized field—an editor can preview the exact source edit.
 The preview checks the current GitHub branch, scanned commit, API contract,
-workspace binding, and source shape. It changes no repository code. A local
+workspace binding, and source shape. An editor can save that proposal as an
+idempotent `repair_jobs` record. The record stores commit and source hashes,
+the exact key edit, and an explicit `proposed` status; it stores no full file.
+It changes no repository code. A local
 test shows the old pilot request returning 422 and the proposed field rename
-returning 200 against a test API. The hosted preview has not been established
-as a customer runtime fix.
+returning 200 against a test API. The hosted preview and saved job have not
+been established as a customer runtime fix. Customer CI proof is still required.
 
 No customer database is directly connected. Database schema evidence remains
 customer-attested. The App has no repository write or pull-request permission;
@@ -29,7 +32,7 @@ and includes earlier operator steps retained for reference.
 
 The customer data plane is Supabase. `workspaces`, `workspace_members`,
 `monitored_repositories`, `github_installations`, `github_webhook_deliveries`,
-`repository_scan_jobs`, `source_snapshots`, and `findings` live there. The
+`repository_scan_jobs`, `source_snapshots`, `findings`, and `repair_jobs` live there. The
 Cloudflare Worker receives GitHub events and processes repository scan jobs.
 The separate D1/KV watch and SQLite testbed are not part of this customer path.
 
@@ -50,7 +53,9 @@ is supported in this stage; the schema comparison is not a runtime test.
    non-production database and verify the ownership, editor, and unrelated-user
    access cases. The migration adds team membership and server-only GitHub and
    job tables. Back up production, then apply it there before shipping the
-   Worker code. The Worker code depends on its RPC functions.
+   Worker code. The Worker code depends on its RPC functions. Apply
+   `supabase/migrations/20261103190815_repair_jobs.sql` before enabling saved
+   repair proposals.
 2. Register a GitHub App owned by the API Mender team. Give it repository
    **Contents: read** and **Metadata: read**; subscribe to `push`,
    `installation`, and `installation_repositories`. Set its webhook URL to
