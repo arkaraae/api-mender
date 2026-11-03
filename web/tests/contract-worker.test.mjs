@@ -25,7 +25,7 @@ function fakeDatabase(saved) {
       const result = { data: rows[table] ?? null, error: null };
       const builder = {
         select() { return this; }, eq() { return this; }, limit() { return this; },
-        upsert(row) { saved.push({ table, row }); return this; },
+        upsert(row, options) { saved.push({ table, row, options }); return this; },
         single: async () => result,
         maybeSingle: async () => result,
         then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
@@ -63,6 +63,24 @@ test('outdated consumer scan does not create findings', async () => {
   }, sourceHead, []);
   assert.deepEqual(result, { checked: 0, findings: 0 });
   assert.deepEqual(saved, []);
+});
+
+test('repeat mismatch refreshes the finding to the latest scanned commit', async () => {
+  const saved = [];
+  const database = fakeDatabase(saved);
+  const calls = [{ file: 'src/quote.ts', line: 9, bodyLine: 12,
+    symbol: 'fetch', endpoint: 'POST /quotes', origin: 'https://api.example.test',
+    fields: ['customerId', 'sku'], fieldsComplete: true }];
+  for (const head of [consumerHead, 'd'.repeat(40)]) {
+    await processBoundContractConsumers(database, {
+      id: 'consumer-1', workspace_id: 'workspace-1', full_name: 'acme/checkout', target_sha: head,
+    }, head, calls);
+  }
+  const findings = saved.filter(item => item.table === 'findings');
+  assert.equal(findings.length, 2);
+  assert.equal(findings[0].row.fingerprint, findings[1].row.fingerprint);
+  assert.equal(findings[1].row.base_sha, 'd'.repeat(40));
+  assert.equal(findings[1].options.ignoreDuplicates, undefined);
 });
 
 test('upstream push checks a separate connected consumer inventory', async () => {
