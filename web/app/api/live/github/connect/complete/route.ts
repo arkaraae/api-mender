@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   let userToken: string | null = null;
   try {
     const exchange = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000),
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret,
         code: body.code, redirect_uri: config.callback, code_verifier: attempt.code_verifier }),
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     if (userToken) {
       try {
         await fetch(`https://api.github.com/applications/${config.clientId}/token`, {
-          method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(5_000),
+          method: 'DELETE', redirect: 'manual', signal: AbortSignal.timeout(5_000),
           headers: { ...githubHeaders, Authorization: `Basic ${btoa(`${config.clientId}:${config.clientSecret}`)}`,
             'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: userToken }),
