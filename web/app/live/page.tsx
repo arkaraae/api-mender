@@ -142,11 +142,22 @@ export default function LiveWorkspace() {
   }
 
   async function scan(repositoryId: string) {
-    if (!supabase || !user) return;
+    if (!supabase || !user || !workspace) return;
     setBusy(true); setMessage('');
     try {
       const { data } = await supabase.auth.getSession();
       if (!data.session) { setMessage('Please sign in again.'); return; }
+      const installed = repositories.find(repo => repo.id === repositoryId)?.github_installation_id;
+      if (installed) {
+        const response = await fetch('/api/live/scan/installed', {
+          method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspaceId: workspace.id, repositoryId }),
+        });
+        const result = await response.json() as { head?: string; status?: string; error?: string };
+        setMessage(response.ok ? `Installed repository ${result.status === 'recent' ? 'was scanned recently' : `scan ${result.status}`}. Commit ${result.head?.slice(0, 8) || 'unknown'}. Refresh later to see findings.` : result.error || 'Could not queue scan');
+        if (response.ok) await refresh(user.id);
+        return;
+      }
       const response = await fetch('/api/live/scan', { method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ repositoryId }) });
       const result = await response.json() as { head?: string; inventory?: { calls?: CallSite[] }; error?: string };
       const s3Count = result.inventory?.calls?.filter(call => call.endpoint?.startsWith('S3 ')).length || 0;
