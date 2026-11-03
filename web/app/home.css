@@ -26,6 +26,9 @@
 .home-button-ink{background:var(--m-ink);color:#fff;border-color:rgba(255,255,255,.25)}
 .home-button-ink:hover{border-color:#fff}
 .home a:focus-visible,.home button:focus-visible{outline:3px solid var(--m-accent);outline-offset:3px}
+.floating-join{position:fixed;top:18px;right:24px;z-index:80;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;border-radius:8px;background:var(--m-accent);color:#fff;font:600 13px/1 var(--m-mono);text-decoration:none;box-shadow:0 12px 34px rgba(0,0,0,.32);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-8px);transition:opacity .2s,transform .2s,visibility .2s}
+.floating-join.is-visible{opacity:1;visibility:visible;pointer-events:auto;transform:none}
+.floating-join:hover{background:var(--m-accent-hover)}
 
 /* ---------- the gateway film and the X-ray lens ---------- */
 /* The film sits in a rounded glass frame, not a spotlight: a panel, edge to edge within the hero. */
@@ -147,17 +150,44 @@
 .door .door-price{font-weight:600;font-size:19px;color:inherit}
 .door-run .door-price{color:var(--m-pass)}
 
+/* ---------- open interest list ---------- */
+.home-join{max-width:1100px;margin:0 auto 112px;padding:48px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:56px;align-items:start;border:1px solid rgba(255,255,255,.19);border-radius:22px;background:radial-gradient(circle at 0 0,rgba(166,67,158,.16),transparent 42%),#15151a;scroll-margin-top:84px}
+.home-join h2{margin:0 0 20px;font-size:clamp(32px,3.9vw,52px);line-height:1.05;letter-spacing:-.035em;font-weight:600;text-wrap:balance}
+.home-join-copy p{margin:0;color:#d5d3dc;font-size:17px;line-height:1.6;max-width:44ch}
+.join-form{display:grid;gap:17px}
+.join-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.join-form label{display:grid;gap:8px;color:#fff;font:500 13px/1.4 var(--m-mono)}
+.join-form .join-label{display:flex;gap:7px;flex-wrap:wrap;align-items:baseline}
+.join-form .join-label em{color:#a8a5af;font-style:normal;font-weight:400}
+.join-form input,.join-form select,.join-form textarea{width:100%;min-width:0;padding:12px 14px;background:#fff;color:#17171a;border:1px solid #fff;border-radius:8px;font:400 14px/1.5 var(--m-font)}
+.join-form input::placeholder,.join-form textarea::placeholder{color:#727078}
+.join-form textarea{resize:vertical;min-height:82px}
+.join-form input:focus-visible,.join-form select:focus-visible,.join-form textarea:focus-visible{outline:3px solid var(--m-accent-light);outline-offset:2px}
+.join-trap{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.join-submit{display:flex;align-items:center;gap:17px;flex-wrap:wrap}
+.join-submit button{min-height:48px;padding:0 24px;background:var(--m-accent);border:0;border-radius:8px;color:#fff;font:600 14px/1 var(--m-mono);cursor:pointer}
+.join-submit button:hover:not(:disabled){background:var(--m-accent-hover)}
+.join-submit button:disabled{opacity:.65;cursor:wait}
+.join-submit p{margin:0;color:#a8a5af;font-size:12px;line-height:1.5;max-width:22ch}
+.join-error{margin:0;color:#fff;background:#702b35;padding:10px 12px;border-radius:8px;font-size:13px}
+.join-success{display:flex;gap:15px;align-items:start;padding:24px;border:1px solid rgba(159,242,201,.45);border-radius:14px;background:rgba(53,224,143,.12)}
+.join-success>span{display:grid;place-items:center;width:30px;height:30px;flex:none;border-radius:50%;background:#9ff2c9;color:#123521;font-weight:700}
+.join-success strong{display:block;font-size:19px}
+.join-success p{margin:7px 0 0;color:#d5d3dc;font-size:14px}
+
 .home-footer{color:var(--m-grey);border-top:1px solid var(--m-black-line)}
 .home-footer .mascot{filter:invert(1);mix-blend-mode:screen}
 .home-footer nav{display:flex;flex-wrap:wrap;gap:20px}
 
 @media (max-width:900px){
-  .home-seam,.home-doors{grid-template-columns:minmax(0,1fr)}
+  .home-seam,.home-doors,.home-join{grid-template-columns:minmax(0,1fr)}
   .home-seam{gap:40px;padding-top:80px}
   .home-seam-intro{position:static}
+  .home-join{margin:0 24px 80px;gap:32px}
   .home-console{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:760px){
+  .floating-join{top:14px;right:16px;min-height:40px;padding:0 16px;font-size:12px}
       .scene{height:auto;margin:12px 0 0;border-radius:18px}
   .home-call-head{flex-direction:column;align-items:stretch;gap:12px}
   .home-call-head .hero-button{width:100%}
@@ -165,5 +195,7 @@
   .home-seam{padding:64px 16px}
   .home-doors{padding:0 16px 72px}
   .door{padding:28px 24px}
+  .home-join{margin:0 16px 64px;padding:28px 22px}
+  .join-fields{grid-template-columns:minmax(0,1fr)}
   .home-footer{flex-wrap:wrap}
 }
