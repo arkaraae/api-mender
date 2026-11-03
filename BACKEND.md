@@ -35,6 +35,13 @@ Worker now refreshes up to two pending CI proofs on each minute's cron, and
 the earlier pilot PR became validated without a button click. See
 `.github/actions/mender-repair-proof/README.md`.
 
+The staging workspace can check whether a connected consumer repository has
+the proof workflow on its default branch. It generates a pinned workflow from
+the customer's focused test command and expected old failure, but never writes
+the workflow into the customer's repository. The customer commits that file;
+Mender then recognizes its structure. This check does not establish test
+quality or prove a repair until the customer CI run succeeds on the draft PR.
+
 No customer database is directly connected. Database schema evidence remains
 customer-attested. The repair covers one deterministic request-field case and
 depends on a customer CI workflow; Mender does not yet generate general AI
