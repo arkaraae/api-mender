@@ -34,7 +34,7 @@ test('publisher writes only the saved patch to a deterministic branch and opens 
     assert.equal(calls.every(call => call.url.startsWith('https://api.github.com/repos/customer/repo/')),
       true);
     assert.equal(calls.every(call => call.options.headers.Authorization === 'Bearer scoped-token'
-      && call.options.redirect === 'error'), true);
+      && call.options.redirect === 'manual'), true);
     assert.deepEqual(JSON.parse(calls[0].options.body), { ref: `refs/heads/${branch}`, sha: baseSha });
     const write = JSON.parse(calls[1].options.body);
     assert.equal(write.branch, branch);
