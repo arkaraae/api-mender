@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const repo = repository.full_name.split('/').map(encodeURIComponent).join('/');
     const response = await fetch(`https://api.github.com/repos/${repo}/branches/${encodeURIComponent(repository.branch)}`, {
       headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
-      redirect: 'error', signal: AbortSignal.timeout(15_000),
+      redirect: 'manual', signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error('Could not verify the current GitHub branch');
     const branch = await response.json() as { commit?: { sha?: string } };
