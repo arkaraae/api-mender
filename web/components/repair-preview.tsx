@@ -13,9 +13,10 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [proofMessage, setProofMessage] = useState('');
 
   async function load(action?: 'prepare') {
-    setBusy(true); setError(''); setPreview(null);
+    setBusy(true); setError(''); setProofMessage(''); setPreview(null);
     try {
       const { data } = await database.auth.getSession();
       if (!data.session) throw new Error('Sign in again to preview this repair');
@@ -33,7 +34,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
 
   async function advance(path: 'publish' | 'proof') {
     if (!preview?.repairJob) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setProofMessage('');
     try {
       const { data } = await database.auth.getSession();
       if (!data.session) throw new Error('Sign in again to continue this repair');
@@ -42,11 +43,22 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
         headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId, jobId: preview.repairJob.id }),
       });
-      const result = await response.json() as { status?: string; prUrl?: string; error?: string };
+      const result = await response.json() as { status?: string; prUrl?: string; error?: string;
+        proof?: { url?: string; conclusion?: string | null } | null };
       if (!response.ok) throw new Error(result.error || 'Could not update repair job');
       setPreview(current => current?.repairJob ? { ...current,
         repairJob: { ...current.repairJob, status: result.status || current.repairJob.status },
         prUrl: result.prUrl || current.prUrl } : current);
+      if (path === 'proof') {
+        const checkedAt = new Date().toLocaleTimeString();
+        setProofMessage(result.status === 'validated'
+          ? `Customer CI proof passed at ${checkedAt}. The draft PR still needs human review.`
+          : result.status === 'proof_failed'
+            ? `Customer CI failed. Checked at ${checkedAt}; review the check before retrying.`
+            : result.proof?.url
+              ? `Customer CI is still running. Checked at ${checkedAt}; check again after it finishes.`
+              : `No matching customer CI check is available yet. Checked at ${checkedAt}.`);
+      }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update repair job'); }
     finally { setBusy(false); }
   }
@@ -56,14 +68,19 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
     {preview && <div className="live-muted" role="status">
       <p>{preview.file}:{preview.line} · Replace <code>{preview.oldField}</code> with <code>{preview.newField}</code></p>
       <pre><code>{`- ${preview.before}\n+ ${preview.after}`}</code></pre>
-      <p>{preview.note} No code has been changed or published.</p>
+      <p>{preview.note} {preview.prUrl
+        ? 'The proposed change is in a draft PR for review; it has not been merged.'
+        : 'No code has been changed or published.'}</p>
       {preview.repairJob
         ? <div><p>Repair job {preview.repairJob.id} · {preview.repairJob.status}.</p>
           {preview.repairJob.status === 'proposed' &&
             <button disabled={busy} onClick={() => void advance('publish')}>Open draft repair PR</button>}
           {preview.repairJob.status !== 'proposed' && <>
             {preview.prUrl && <p><a href={preview.prUrl} target="_blank" rel="noreferrer">Review draft PR ↗</a></p>}
-            <button disabled={busy} onClick={() => void advance('proof')}>Check customer CI proof</button>
+            <button disabled={busy} onClick={() => void advance('proof')}>
+              {busy ? 'Checking GitHub CI…' : 'Check customer CI proof'}
+            </button>
+            {proofMessage && <p role="status">{proofMessage}</p>}
             <p>{preview.repairJob.status === 'validated'
               ? 'Customer CI reports the expected old failure and a passing patch. Human review is still required.'
               : 'Customer CI proof is required before this repair is validated.'}</p>
