@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { authenticatedEditor, githubHeaders, onboardingDatabase, uuid } from '@/lib/github-onboarding';
+import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { proposeRequestFieldRepair } from '@/lib/request-repair';
 
@@ -7,11 +7,12 @@ const noStore = { 'Cache-Control': 'no-store' };
 const sourcePath = /^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/;
 
 export async function POST(request: Request) {
-  let body: { workspaceId?: unknown; findingId?: unknown } | null;
+  let body: { workspaceId?: unknown; findingId?: unknown; action?: unknown } | null;
   try {
     body = JSON.parse(new TextDecoder().decode(await readBoundedBody(request, 2048)));
   } catch { return Response.json({ error: 'Invalid request' }, { status: 400, headers: noStore }); }
-  if (!body || Object.keys(body).sort().join(',') !== 'findingId,workspaceId'
+  if (!body || !['findingId,workspaceId', 'action,findingId,workspaceId'].includes(Object.keys(body).sort().join(','))
+    || (body.action !== undefined && body.action !== 'prepare')
     || typeof body.workspaceId !== 'string' || !uuid.test(body.workspaceId)
     || typeof body.findingId !== 'string' || !uuid.test(body.findingId))
     return Response.json({ error: 'Invalid repair request' }, { status: 400, headers: noStore });
@@ -86,14 +87,44 @@ export async function POST(request: Request) {
       || file.size > 64_000 || typeof file.content !== 'string') throw new Error('Consumer file is unsupported or too large');
     const bytes = Uint8Array.from(atob(file.content.replace(/\s/g, '')), char => char.charCodeAt(0));
     if (bytes.byteLength !== file.size) throw new Error('Consumer file was incomplete');
+    const sourceText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const proposal = proposeRequestFieldRepair({
-      source: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+      source: sourceText,
       evidence: call, contract: version.document, missing: evidence.missing,
     });
+    const sourceHash = await sha256(sourceText);
+    const patchedHash = await sha256(proposal.afterSource);
+    let repairJob: { id: string; status: string } | null = null;
+    if (body.action === 'prepare') {
+      const { error: insertError } = await database.from('repair_jobs').insert({
+        workspace_id: body.workspaceId, finding_id: finding.id, repository_id: repository.id,
+        created_by: identity.user.id, base_sha: repository.head_sha,
+        contract_sha256: version.content_sha256, file_path: proposal.file,
+        line_number: proposal.line, source_sha256: sourceHash, patched_sha256: patchedHash,
+        old_field: proposal.oldField, new_field: proposal.newField,
+        before_snippet: proposal.before, after_snippet: proposal.after,
+      });
+      if (insertError && insertError.code !== '23505')
+        return Response.json({ error: 'Could not save the repair job' }, { status: 502, headers: noStore });
+      const { data: saved, error: savedError } = await database.from('repair_jobs')
+        .select('id,status,source_sha256,patched_sha256,file_path,old_field,new_field')
+        .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
+        .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
+        .maybeSingle();
+      if (savedError || !saved)
+        return Response.json({ error: 'Could not read the repair job' }, { status: 502, headers: noStore });
+      if (saved.source_sha256 !== sourceHash || saved.patched_sha256 !== patchedHash
+        || saved.file_path !== proposal.file || saved.old_field !== proposal.oldField
+        || saved.new_field !== proposal.newField)
+        return Response.json({ error: 'A different repair already exists for this finding and commit' },
+          { status: 409, headers: noStore });
+      repairJob = { id: saved.id, status: saved.status };
+    }
     return Response.json({ findingId: finding.id, repository: repository.full_name,
       baseSha: repository.head_sha, contractSha256: version.content_sha256,
       file: proposal.file, line: proposal.line, oldField: proposal.oldField,
       newField: proposal.newField, before: proposal.before, after: proposal.after,
+      sourceSha256: sourceHash, patchedSha256: patchedHash, repairJob,
       validation: 'static_only', runtimeVerified: false, note: proposal.note }, { headers: noStore });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Could not prepare repair' },
