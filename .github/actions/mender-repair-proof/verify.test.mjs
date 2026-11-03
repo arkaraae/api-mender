@@ -27,6 +27,7 @@ test('proof action requires a reproduced base failure and a passing repair commi
     git(repo, 'add', '.'); git(repo, 'commit', '-m', 'repair consumer');
     const head = git(repo, 'rev-parse', 'HEAD');
     git(repo, 'push', 'origin', 'mender/repair-test');
+    git(repo, 'remote', 'remove', 'origin');
     const eventFile = join(root, 'event.json');
     writeFileSync(eventFile, JSON.stringify({ pull_request: { base: { sha: base, repo: { id: 1 } },
       head: { sha: head, ref: 'mender/repair-test', repo: { id: 1 } } } }));
