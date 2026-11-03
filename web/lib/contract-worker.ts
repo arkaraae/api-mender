@@ -37,7 +37,7 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
       evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: contract.sha256,
         codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
           fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
-    }, { onConflict: 'repository_id,fingerprint', ignoreDuplicates: true });
+    }, { onConflict: 'repository_id,fingerprint' });
     if (error) throw error;
   }
   return mismatches.length;
