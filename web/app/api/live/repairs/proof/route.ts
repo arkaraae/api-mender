@@ -52,17 +52,21 @@ export async function POST(request: Request) {
         || String(pr.head?.repo?.id) !== String(repository.github_repo_id)
         || String(pr.base?.repo?.id) !== String(repository.github_repo_id))
         throw new Error('The repair PR no longer points to its saved patch commit');
-      if (typeof pr.base?.sha !== 'string' || !sha.test(pr.base.sha)
-        || typeof pr.merge_commit_sha !== 'string' || !sha.test(pr.merge_commit_sha))
-        throw new Error('GitHub has not prepared a merge commit for this repair PR');
-      return { baseSha: pr.base.sha as string, mergeSha: pr.merge_commit_sha as string };
+      if (typeof pr.base?.sha !== 'string' || !sha.test(pr.base.sha))
+        throw new Error('GitHub returned an invalid repair PR base commit');
+      if (pr.merge_commit_sha !== null && pr.merge_commit_sha !== undefined
+        && (typeof pr.merge_commit_sha !== 'string' || !sha.test(pr.merge_commit_sha)))
+        throw new Error('GitHub returned an invalid repair PR merge commit');
+      return { baseSha: pr.base.sha as string, mergeSha: pr.merge_commit_sha as string | null };
     };
     const current = await verifyPr();
-    const checks = await githubRead(
-      `https://api.github.com/repos/${repo}/commits/${current.mergeSha}/check-runs?check_name=mender-repair-proof&per_page=100`, token);
-    if (!Number.isSafeInteger(checks.total_count) || checks.total_count > 100)
+    const checkedShas = [...new Set([job.patch_sha, current.mergeSha].filter((value): value is string => !!value))];
+    const responses = await Promise.all(checkedShas.map(ref => githubRead(
+      `https://api.github.com/repos/${repo}/commits/${ref}/check-runs?check_name=mender-repair-proof&per_page=100`, token)));
+    if (responses.some(checks => !Number.isSafeInteger(checks.total_count) || checks.total_count > 100
+      || !Array.isArray(checks.check_runs)))
       throw new Error('GitHub returned an unsupported number of CI checks');
-    const result = evaluateRepairProof(checks.check_runs, { checkedSha: current.mergeSha,
+    const result = evaluateRepairProof(responses.flatMap(checks => checks.check_runs), { checkedShas,
       patchSha: job.patch_sha, baseSha: current.baseSha, prNumber: job.pr_number });
     const after = await verifyPr();
     if (after.mergeSha !== current.mergeSha || after.baseSha !== current.baseSha)
