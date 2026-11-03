@@ -4,7 +4,8 @@ import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Preview = { file: string; line: number; oldField: string; newField: string;
-  before: string; after: string; validation: 'static_only'; runtimeVerified: false; note: string };
+  before: string; after: string; validation: 'static_only'; runtimeVerified: false; note: string;
+  repairJob: { id: string; status: string } | null };
 
 export default function RepairPreview({ database, workspaceId, findingId }: {
   database: SupabaseClient; workspaceId: string; findingId: string;
@@ -13,7 +14,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function load() {
+  async function load(action?: 'prepare') {
     setBusy(true); setError(''); setPreview(null);
     try {
       const { data } = await database.auth.getSession();
@@ -21,7 +22,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
       const response = await fetch('/api/live/repairs/preview', {
         method: 'POST',
         headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, findingId }),
+        body: JSON.stringify({ workspaceId, findingId, ...(action ? { action } : {}) }),
       });
       const result = await response.json() as Preview & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Could not preview repair');
@@ -36,6 +37,9 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
       <p>{preview.file}:{preview.line} · Replace <code>{preview.oldField}</code> with <code>{preview.newField}</code></p>
       <pre><code>{`- ${preview.before}\n+ ${preview.after}`}</code></pre>
       <p>{preview.note} No code has been changed or published.</p>
+      {preview.repairJob
+        ? <p>Repair job {preview.repairJob.id} · {preview.repairJob.status}. Customer CI proof is still required.</p>
+        : <button disabled={busy} onClick={() => void load('prepare')}>Save repair job</button>}
     </div>}
     {error && <p role="alert">{error}</p>}
   </div>;
