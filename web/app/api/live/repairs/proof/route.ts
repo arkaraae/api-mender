@@ -52,14 +52,21 @@ export async function POST(request: Request) {
         || String(pr.head?.repo?.id) !== String(repository.github_repo_id)
         || String(pr.base?.repo?.id) !== String(repository.github_repo_id))
         throw new Error('The repair PR no longer points to its saved patch commit');
+      if (typeof pr.base?.sha !== 'string' || !sha.test(pr.base.sha)
+        || typeof pr.merge_commit_sha !== 'string' || !sha.test(pr.merge_commit_sha))
+        throw new Error('GitHub has not prepared a merge commit for this repair PR');
+      return { baseSha: pr.base.sha as string, mergeSha: pr.merge_commit_sha as string };
     };
-    await verifyPr();
+    const current = await verifyPr();
     const checks = await githubRead(
-      `https://api.github.com/repos/${repo}/commits/${job.patch_sha}/check-runs?check_name=mender-repair-proof&per_page=100`, token);
+      `https://api.github.com/repos/${repo}/commits/${current.mergeSha}/check-runs?check_name=mender-repair-proof&per_page=100`, token);
     if (!Number.isSafeInteger(checks.total_count) || checks.total_count > 100)
       throw new Error('GitHub returned an unsupported number of CI checks');
-    const result = evaluateRepairProof(checks.check_runs, job.patch_sha);
-    await verifyPr();
+    const result = evaluateRepairProof(checks.check_runs, { checkedSha: current.mergeSha,
+      patchSha: job.patch_sha, baseSha: current.baseSha, prNumber: job.pr_number });
+    const after = await verifyPr();
+    if (after.mergeSha !== current.mergeSha || after.baseSha !== current.baseSha)
+      throw new Error('The repair PR changed while CI proof was checked');
     const proof = result.proof ? { ...result.proof, observedAt: new Date().toISOString() } : {};
     const { error: updateError } = await database.from('repair_jobs')
       .update({ status: result.status, proof, updated_at: new Date().toISOString() })
