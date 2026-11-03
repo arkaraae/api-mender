@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Preview = { file: string; line: number; oldField: string; newField: string;
@@ -14,6 +14,32 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [proofMessage, setProofMessage] = useState('');
+  const jobId = preview?.repairJob?.id;
+  const jobStatus = preview?.repairJob?.status;
+
+  useEffect(() => {
+    if (!jobId || !['proof_pending', 'proof_failed'].includes(jobStatus || '')) return;
+    let active = true;
+    async function refreshSavedProof() {
+      const { data, error: readError } = await database.from('repair_jobs')
+        .select('status,pr_url,proof').eq('id', jobId).eq('workspace_id', workspaceId).maybeSingle();
+      if (!active || readError || !data) return;
+      setPreview(current => {
+        if (!current?.repairJob || current.repairJob.id !== jobId) return current;
+        return { ...current, repairJob: { ...current.repairJob, status: data.status },
+          prUrl: data.pr_url || current.prUrl };
+      });
+      if (data.status === 'validated')
+        setProofMessage('Customer CI proof passed. The draft PR still needs human review.');
+      else if (data.status === 'proof_failed')
+        setProofMessage('Customer CI failed. Review the check before retrying.');
+      else if (data.proof?.url)
+        setProofMessage('Customer CI is running. This repair will update when the check finishes.');
+    }
+    void refreshSavedProof();
+    const timer = window.setInterval(() => void refreshSavedProof(), 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [database, workspaceId, jobId, jobStatus]);
 
   async function load(action?: 'prepare') {
     setBusy(true); setError(''); setProofMessage(''); setPreview(null);
