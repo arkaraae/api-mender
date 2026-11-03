@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import CustomerProofSetup from './customer-proof-setup';
 
 type Repository = { id: string; full_name: string; github_installation_id?: number | null; paused: boolean };
 type Source = { id: string; repository_id: string; path: string; paused: boolean };
@@ -92,6 +93,7 @@ export default function GitHubConnections({ database, workspaceId, repositories 
       <button disabled={busy || !selectedSource || !consumerRepository} onClick={() => void addConsumer()}>Connect consumer</button>
     </div>}
     {consumers.length > 0 && <p className="live-muted">{consumers.filter(consumer => !consumer.paused).length} API-to-consumer connection(s) active.</p>}
+    <CustomerProofSetup database={database} workspaceId={workspaceId} repositories={repositories} consumers={consumers} />
     {message && <p role="status" className="live-message">{message}</p>}
   </section>;
 }
