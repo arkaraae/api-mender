@@ -23,6 +23,16 @@ test shows the old pilot request returning 422 and the proposed field rename
 returning 200 against a test API. The hosted preview and saved job have not
 been established as a customer runtime fix. Customer CI proof is still required.
 
+Staging now has a draft-PR publisher behind a staging-origin gate. It rechecks
+the pinned file, contract, and source hashes, then uses a repository-scoped
+installation token to create one draft PR on a deterministic branch. It never
+merges. The current Scanner App is still read-only, so this path cannot yet
+open a live PR. A separate customer-run GitHub Actions check named
+`mender-repair-proof` can reproduce a focused failure on the base commit and
+pass the same test on the patch commit. Mender's proof endpoint records that
+CI attestation only for the saved patch SHA; no customer CI has yet run through
+the hosted flow. See `.github/actions/mender-repair-proof/README.md`.
+
 No customer database is directly connected. Database schema evidence remains
 customer-attested. The App has no repository write or pull-request permission;
 Mender does not yet create AI repairs, run customer tests, or open a draft PR.
@@ -55,7 +65,9 @@ is supported in this stage; the schema comparison is not a runtime test.
    job tables. Back up production, then apply it there before shipping the
    Worker code. The Worker code depends on its RPC functions. Apply
    `supabase/migrations/20261103190815_repair_jobs.sql` before enabling saved
-   repair proposals.
+   repair proposals, followed by
+   `supabase/migrations/20261103192403_repair_pr_metadata.sql` before enabling
+   draft PR creation or CI proof refresh.
 2. Register a GitHub App owned by the API Mender team. Give it repository
    **Contents: read** and **Metadata: read**; subscribe to `push`,
    `installation`, and `installation_repositories`. Set its webhook URL to
