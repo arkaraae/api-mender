@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     .select('state_hash').maybeSingle();
   if (claimError || !claimed) return Response.json({ error: 'GitHub connection was already used' }, { status: 409 });
   let userToken: string | null = null;
+  let stage = 'authorization exchange';
   try {
     const exchange = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
@@ -35,11 +36,17 @@ export async function POST(request: Request) {
       body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret,
         code: body.code, redirect_uri: config.callback, code_verifier: attempt.code_verifier }),
     });
-    if (!exchange.ok) throw new Error('GitHub authorization exchange failed');
+    if (!exchange.ok) throw new Error(`GitHub returned HTTP ${exchange.status}`);
     const tokenResponse = await exchange.json() as { access_token?: string; error?: string };
-    if (!tokenResponse.access_token || tokenResponse.error) throw new Error('GitHub authorization was denied or expired');
+    if (tokenResponse.error) {
+      const known = new Set(['incorrect_client_credentials', 'redirect_uri_mismatch',
+        'bad_verification_code', 'unverified_user_email', 'access_denied']);
+      throw new Error(known.has(tokenResponse.error) ? tokenResponse.error : 'GitHub rejected the authorization');
+    }
+    if (!tokenResponse.access_token) throw new Error('GitHub returned no user token');
     const token = tokenResponse.access_token;
     userToken = token;
+    stage = 'installation access check';
     let selected: Installation | undefined;
     for (let page = 1; page <= 5 && !selected; page++) {
       const listing = await githubJson<{ installations?: Installation[] }>(
@@ -49,6 +56,7 @@ export async function POST(request: Request) {
     }
     if (!selected || !selected.account?.login || selected.suspended_at)
       return Response.json({ error: 'Your GitHub user cannot access this API Mender installation' }, { status: 403 });
+    stage = 'repository access check';
     const repoResponse = await githubJson<{ total_count?: number; repositories?: Repository[] }>(
       `https://api.github.com/user/installations/${selected.id}/repositories?per_page=100`, token);
     const repositories = repoResponse.repositories || [];
@@ -56,6 +64,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Select 25 or fewer repositories in the GitHub installation, then reconnect' }, { status: 400 });
     if (!validAccessibleRepositories(repositories, repoResponse.total_count || 0))
       throw new Error('GitHub returned invalid repository metadata');
+    stage = 'repository sync';
     const { data: existing, error: existingError } = await database.from('github_installations')
       .select('workspace_id').eq('installation_id', selected.id).maybeSingle();
     if (existingError) throw existingError;
@@ -95,8 +104,14 @@ export async function POST(request: Request) {
     }
     return Response.json({ account: selected.account.login, repositories: repositories.length, scansQueued: queued },
       { headers: { 'Cache-Control': 'no-store' } });
-  } catch {
-    return Response.json({ error: 'Could not verify the GitHub installation or save its repositories. Start again.' }, { status: 502 });
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : 'Unexpected error';
+    console.error('GitHub connection failed', { stage, detail });
+    const publicDetail = stage === 'authorization exchange' &&
+      /^(incorrect_client_credentials|redirect_uri_mismatch|bad_verification_code|unverified_user_email|access_denied|GitHub returned HTTP \d{3}|GitHub returned no user token|GitHub rejected the authorization)$/.test(detail)
+      ? ` (${detail})` : '';
+    return Response.json({ error: `GitHub connection failed during ${stage}${publicDetail}. Start again.` },
+      { status: 502, headers: { 'Cache-Control': 'no-store' } });
   } finally {
     // The user token exists only to prove installation and repository access once.
     if (userToken) {
