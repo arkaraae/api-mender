@@ -11,18 +11,20 @@ export type RepairCheckRun = {
   pull_requests?: unknown;
 };
 
-type ProofContext = { checkedSha: string; patchSha: string; baseSha: string; prNumber: number };
+type ProofContext = { checkedShas: string[]; patchSha: string; baseSha: string; prNumber: number };
 
 /** Customer CI attestation for the PR's exact merge, patch, and base commits. */
 export function evaluateRepairProof(checkRuns: unknown, context: ProofContext) {
-  if (![context.checkedSha, context.patchSha, context.baseSha].every(value => shaPattern.test(value))
+  if (!Array.isArray(context.checkedShas) || context.checkedShas.length < 1
+    || context.checkedShas.length > 2 || new Set(context.checkedShas).size !== context.checkedShas.length
+    || ![...context.checkedShas, context.patchSha, context.baseSha].every(value => shaPattern.test(value))
     || !Number.isSafeInteger(context.prNumber) || context.prNumber < 1
-    || !Array.isArray(checkRuns) || checkRuns.length > 100)
+    || !Array.isArray(checkRuns) || checkRuns.length > 200)
     throw new Error('Invalid GitHub check response');
   const matching = checkRuns.filter((run): run is RepairCheckRun => run !== null
     && typeof run === 'object'
     && run.name === 'mender-repair-proof'
-    && run.head_sha === context.checkedSha
+    && context.checkedShas.includes(run.head_sha)
     && run.app?.slug === 'github-actions'
     && Array.isArray(run.pull_requests)
     && run.pull_requests.some((pr: any) => pr?.number === context.prNumber
@@ -33,7 +35,7 @@ export function evaluateRepairProof(checkRuns: unknown, context: ProofContext) {
   if (typeof latest.html_url !== 'string' || !latest.html_url.startsWith('https://github.com/'))
     throw new Error('Invalid GitHub check URL');
   const proof = { provider: 'github-actions', checkName: 'mender-repair-proof',
-    checkRunId: latest.id as number, checkedSha: context.checkedSha,
+    checkRunId: latest.id as number, checkedSha: latest.head_sha as string,
     patchSha: context.patchSha, baseSha: context.baseSha, prNumber: context.prNumber,
     url: latest.html_url,
     conclusion: latest.conclusion === null ? null : latest.conclusion };
