@@ -9,8 +9,9 @@ Supabase project, signed push ingestion, pinned repository scans, connected
 OpenAPI sources and consumer repositories, and static request-schema findings.
 The App has repository Contents and pull request write permission plus Checks
 read permission, restricted to repositories each installer selects. An existing
-installation is routed through GitHub OAuth; its final callback still needs
-an end-to-end verification. A new customer chooses
+installation was synced through GitHub OAuth and its callback completed in
+staging. A fresh customer installation still needs an end-to-end check. New
+customers choose
 repositories during installation. Installed repositories can
 request a rate-limited rescan from the workspace.
 
@@ -87,9 +88,16 @@ is supported in this stage; the schema comparison is not a runtime test.
 
 ## Connect a beta customer's repository
 
-The installation setup URL's `installation_id` can be spoofed, so this stage
-uses an operator command instead of binding a workspace from that URL. After
-the customer installs the App on a selected repository, run:
+The staging workspace offers a self-service GitHub connection. It stores a
+short-lived state, sends the customer through installation and GitHub user
+authorization, then checks that the returned user can access the exact App
+installation and selected repositories before binding them to the workspace.
+The setup URL's `installation_id` is never trusted by itself. The existing
+pilot installation completed this flow in staging. A fresh installation by a
+different customer still needs a live check before this is a launch path.
+
+For an authorized pilot where the callback is unavailable, an operator can
+bind a selected repository with:
 
 ```bash
 cd web
@@ -100,9 +108,7 @@ The command requires the four Worker secrets above and
 `NEXT_PUBLIC_SUPABASE_URL` in its local environment. It verifies the App is
 installed on that repository, obtains a repository-scoped read token, checks
 the repository metadata, and binds the installation to exactly one workspace.
-Do not run it for a repository without the customer's authorization. A
-self-service connection must verify the installing GitHub user before replacing
-this operator step.
+Do not run it for a repository without the customer's authorization.
 
 ## What a scan means
 
