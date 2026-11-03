@@ -7,8 +7,9 @@ The isolated `codex/staging-github-app` branch deploys to
 GitHub App with read access to only the two pilot repositories, a separate
 Supabase project, signed push ingestion, pinned repository scans, connected
 OpenAPI sources and consumer repositories, and static request-schema findings.
-An existing installation can reconnect through GitHub OAuth; a new customer
-still chooses repositories during installation. Installed repositories can
+An existing installation is routed through GitHub OAuth; its final callback
+still needs a non-disruptive end-to-end verification. A new customer chooses
+repositories during installation. Installed repositories can
 request a rate-limited rescan from the workspace.
 
 For one narrow case—a literal `fetch` JSON body with one missing required
