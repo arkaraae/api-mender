@@ -8,7 +8,7 @@ const sha = /^[a-f0-9]{40}$/;
 
 async function githubRead(url: string, token: string) {
   const response = await fetch(url, { headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
-    redirect: 'error', signal: AbortSignal.timeout(15_000) });
+    redirect: 'manual', signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
   return response.json() as Promise<any>;
 }
