@@ -95,6 +95,7 @@ export async function POST(request: Request) {
     const sourceHash = await sha256(sourceText);
     const patchedHash = await sha256(proposal.afterSource);
     let repairJob: { id: string; status: string } | null = null;
+    let savedPrUrl: string | undefined;
     if (body.action === 'prepare') {
       const { error: insertError } = await database.from('repair_jobs').insert({
         workspace_id: body.workspaceId, finding_id: finding.id, repository_id: repository.id,
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
       if (insertError && insertError.code !== '23505')
         return Response.json({ error: 'Could not save the repair job' }, { status: 502, headers: noStore });
       const { data: saved, error: savedError } = await database.from('repair_jobs')
-        .select('id,status,source_sha256,patched_sha256,file_path,old_field,new_field')
+        .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field')
         .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
         .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
         .maybeSingle();
@@ -119,12 +120,14 @@ export async function POST(request: Request) {
         return Response.json({ error: 'A different repair already exists for this finding and commit' },
           { status: 409, headers: noStore });
       repairJob = { id: saved.id, status: saved.status };
+      savedPrUrl = saved.pr_url || undefined;
     }
     return Response.json({ findingId: finding.id, repository: repository.full_name,
       baseSha: repository.head_sha, contractSha256: version.content_sha256,
       file: proposal.file, line: proposal.line, oldField: proposal.oldField,
       newField: proposal.newField, before: proposal.before, after: proposal.after,
       sourceSha256: sourceHash, patchedSha256: patchedHash, repairJob,
+      prUrl: repairJob ? savedPrUrl : undefined,
       validation: 'static_only', runtimeVerified: false, note: proposal.note }, { headers: noStore });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Could not prepare repair' },
