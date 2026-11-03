@@ -73,7 +73,8 @@ export function proposeRequestFieldRepair(input: {
   source: string; evidence: CallEvidence; contract: object; missing: string[];
 }) {
   const { source, evidence } = input;
-  if (source.length > 64_000 || !/^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/.test(evidence.file)
+  if (source.length > 64_000 || evidence.file.length > 512
+    || !/^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/.test(evidence.file)
     || evidence.file.startsWith('/') || evidence.file.split('/').some(part => part === '.' || part === '..')
     || !Number.isSafeInteger(evidence.line) || evidence.line < 1 || evidence.line > 100_000
     || evidence.fieldsComplete !== true || !Array.isArray(evidence.fields) || evidence.fields.length > 100)
@@ -82,12 +83,14 @@ export function proposeRequestFieldRepair(input: {
   if (input.missing.length !== 1 || !schema.required.includes(input.missing[0]))
     throw new Error('A single required request field is needed for this repair');
   const newField = input.missing[0];
-  if (!/^[A-Za-z_$][\w$]*$/.test(newField)) throw new Error('The new field cannot be edited safely');
+  if (newField.length > 120 || !/^[A-Za-z_$][\w$]*$/.test(newField))
+    throw new Error('The new field cannot be edited safely');
   const oldFields = evidence.fields.filter(name => !Object.hasOwn(schema.properties, name));
   if (oldFields.length !== 1 || schema.required.includes(oldFields[0]) || oldFields[0] === newField)
     throw new Error('The replaced request field is ambiguous');
   const oldField = oldFields[0];
-  if (!/^[A-Za-z_$][\w$]*$/.test(oldField)) throw new Error('The old field cannot be edited safely');
+  if (oldField.length > 120 || !/^[A-Za-z_$][\w$]*$/.test(oldField))
+    throw new Error('The old field cannot be edited safely');
   const beforeCalls = parseStaticHttpCalls(evidence.file, source);
   const beforeMatches = beforeCalls.filter(call => call.line === evidence.line
     && call.endpoint === evidence.endpoint && call.origin === evidence.origin);
