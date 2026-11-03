@@ -5,6 +5,7 @@ import handler from 'vinext/server/fetch-handler';
 import { forgetOldCounts } from '../lib/mender/limits.js';
 import { runDue } from '../lib/mender/watch.js';
 import { processRepositoryScanJobs } from '../lib/repository-scan-worker';
+import { processRepairProofJobs } from '../lib/repair-proof-worker';
 
 export default {
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
@@ -17,8 +18,10 @@ export default {
     return handler.fetch(request, env, ctx);
   },
   async scheduled(controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
-    if (env.SUPABASE_SECRET_KEY && env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY)
+    if (env.SUPABASE_SECRET_KEY && env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY) {
       ctx.waitUntil(processRepositoryScanJobs(env));
+      ctx.waitUntil(processRepairProofJobs(env));
+    }
     if (controller.cron === '17 * * * *') {
       if (env.MENDER_WATCH) ctx.waitUntil(runDue(env.MENDER_WATCH, { origin: env.SITE_ORIGIN ?? 'https://apimender.com' }));
       if (env.MENDER_DB) ctx.waitUntil(forgetOldCounts(env.MENDER_DB));
