@@ -34,6 +34,7 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
       fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
       description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.`,
       severity: 'medium', confidence: 'probable', status: 'Action required', base_sha: consumerHead,
+      updated_at: new Date().toISOString(),
       evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: contract.sha256,
         codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
           fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
