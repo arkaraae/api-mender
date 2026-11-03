@@ -86,7 +86,7 @@ export async function installationToken(config: GithubAppConfig, installationId:
   if (!scope) throw new Error('Invalid GitHub repository');
   const jwt = await githubAppJwt(config);
   const permissions = purpose === 'repair-write' ? { contents: 'write', pull_requests: 'write' }
-    : purpose === 'proof-read' ? { contents: 'read', checks: 'read' } : { contents: 'read' };
+    : purpose === 'proof-read' ? { contents: 'read', pull_requests: 'read', checks: 'read' } : { contents: 'read' };
   const response = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
     method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
     headers: { ...apiHeaders, Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
