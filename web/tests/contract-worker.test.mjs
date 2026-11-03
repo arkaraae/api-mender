@@ -80,6 +80,7 @@ test('repeat mismatch refreshes the finding to the latest scanned commit', async
   assert.equal(findings.length, 2);
   assert.equal(findings[0].row.fingerprint, findings[1].row.fingerprint);
   assert.equal(findings[1].row.base_sha, 'd'.repeat(40));
+  assert.ok(Date.parse(findings[1].row.updated_at) > 0);
   assert.equal(findings[1].options.ignoreDuplicates, undefined);
 });
 
