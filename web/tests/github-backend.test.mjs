@@ -36,6 +36,10 @@ test('installation token is restricted to one repository and read-only contents'
     assert.match(request.options.headers.Authorization, /^Bearer [^.]+\.[^.]+\.[^.]+$/);
     await installationToken({ appId: '123', privateKey }, 12, 'private-repo');
     assert.deepEqual(JSON.parse(request.options.body), { repositories: ['private-repo'], permissions: { contents: 'read' } });
+    await installationToken({ appId: '123', privateKey }, 12, 34, 'repair-write');
+    assert.deepEqual(JSON.parse(request.options.body), { repository_ids: [34], permissions: { contents: 'write', pull_requests: 'write' } });
+    await installationToken({ appId: '123', privateKey }, 12, 34, 'proof-read');
+    assert.deepEqual(JSON.parse(request.options.body), { repository_ids: [34], permissions: { contents: 'read', checks: 'read' } });
   } finally { globalThis.fetch = originalFetch; }
 });
 
