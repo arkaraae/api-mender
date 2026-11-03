@@ -1,5 +1,31 @@
 # Customer backend rollout
 
+## Current staging state (2026-11-02)
+
+The isolated `codex/staging-github-app` branch deploys to
+`https://api-mender-staging.amorales8.workers.dev`. It has a team-owned
+GitHub App with read access to only the two pilot repositories, a separate
+Supabase project, signed push ingestion, pinned repository scans, connected
+OpenAPI sources and consumer repositories, and static request-schema findings.
+An existing installation can reconnect through GitHub OAuth; a new customer
+still chooses repositories during installation. Installed repositories can
+request a rate-limited rescan from the workspace.
+
+For one narrow case—a literal `fetch` JSON body with one missing required
+field and one unrecognized field—an editor can preview the exact source edit.
+The preview checks the current GitHub branch, scanned commit, API contract,
+workspace binding, and source shape. It changes no repository code. A local
+test shows the old pilot request returning 422 and the proposed field rename
+returning 200 against a test API. The hosted preview has not been established
+as a customer runtime fix.
+
+No customer database is directly connected. Database schema evidence remains
+customer-attested. The App has no repository write or pull-request permission;
+Mender does not yet create AI repairs, run customer tests, or open a draft PR.
+Do not promote this staging branch to `apimender.com` as a complete repair
+product. The rest of this document describes the underlying rollout design
+and includes earlier operator steps retained for reference.
+
 The customer data plane is Supabase. `workspaces`, `workspace_members`,
 `monitored_repositories`, `github_installations`, `github_webhook_deliveries`,
 `repository_scan_jobs`, `source_snapshots`, and `findings` live there. The
