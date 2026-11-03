@@ -17,8 +17,7 @@ export default function SiteNav({ current, tone = 'light' }: { current?: string;
         {LINKS.map((link) => <a key={link.href} href={link.href} aria-current={current === link.href ? 'page' : undefined}>{link.label}</a>)}
       </nav>
       <div className="marketing-nav-actions">
-        <a className="nav-text-link" href="/live">Log in</a>
-        <a className="pill-button pill-dark nav-cta" href="/check">Check a change</a>
+        <a className="pill-button pill-dark nav-cta" href="/#join">Join us</a>
       </div>
     </header>
   );
