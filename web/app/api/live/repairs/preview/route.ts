@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const repo = repository.full_name.split('/').map(encodeURIComponent).join('/');
     const branchResponse = await fetch(`https://api.github.com/repos/${repo}/branches/${encodeURIComponent(repository.branch)}`, {
       headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
-      redirect: 'error', signal: AbortSignal.timeout(15_000),
+      redirect: 'manual', signal: AbortSignal.timeout(15_000),
     });
     if (!branchResponse.ok) throw new Error('Could not verify the current consumer branch');
     const branch = await branchResponse.json() as { commit?: { sha?: string } };
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const path = call.file.split('/').map(encodeURIComponent).join('/');
     const response = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${repository.head_sha}`, {
       headers: { ...githubHeaders, Authorization: `Bearer ${token}` },
-      redirect: 'error', signal: AbortSignal.timeout(15_000),
+      redirect: 'manual', signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error('GitHub could not read the pinned consumer file');
     const file = await response.json() as { type?: unknown; encoding?: unknown; size?: unknown; content?: unknown };
