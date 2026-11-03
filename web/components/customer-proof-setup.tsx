@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Repository = { id: string; full_name: string; github_installation_id?: number | null; paused: boolean };
@@ -19,6 +19,11 @@ export default function CustomerProofSetup({ database, workspaceId, repositories
   const [setup, setSetup] = useState<Setup | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (window.location.hash === '#ci-proof-setup')
+      requestAnimationFrame(() => document.getElementById('ci-proof-setup')?.scrollIntoView());
+  }, []);
 
   async function check(generate: boolean) {
     setBusy(true); setMessage(''); setSetup(null);
