@@ -40,7 +40,10 @@ function testAt(path, phase) {
 }
 
 try {
-  git('fetch', '--no-tags', 'origin', base, head);
+  // The workflow must check out full history. Do not retain Git credentials or
+  // fetch while running a customer-controlled test command.
+  git('cat-file', '-e', `${base}^{commit}`);
+  git('cat-file', '-e', `${head}^{commit}`);
   git('worktree', 'add', '--detach', before, base);
   git('worktree', 'add', '--detach', after, head);
   const original = testAt(before, 'before');
