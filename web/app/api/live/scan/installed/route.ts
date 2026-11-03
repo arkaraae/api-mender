@@ -43,11 +43,13 @@ export async function POST(request: Request) {
       return Response.json({ head, status: 'recent', retryAfterSeconds: 300 }, { headers: noStore });
     if (previous?.status === 'queued' || previous?.status === 'running')
       return Response.json({ head, status: previous.status }, { headers: noStore });
-    const { data: accepted, error: queueError } = await database.rpc('enqueue_github_scan', {
-      p_delivery_id: crypto.randomUUID(), p_installation_id: repository.github_installation_id,
-      p_github_repo_id: repository.github_repo_id, p_head_sha: head, p_event: 'push',
+    const { error: queueError } = await database.from('repository_scan_jobs').insert({
+      workspace_id: body.workspaceId, repository_id: repository.id, head_sha: head,
     });
-    if (queueError || !accepted) throw new Error('Could not queue the installed repository scan');
+    if (queueError && queueError.code !== '23505') throw new Error('Could not queue the installed repository scan');
+    const { error: targetError } = await database.from('monitored_repositories')
+      .update({ target_sha: head }).eq('id', repository.id).eq('workspace_id', body.workspaceId);
+    if (targetError) throw new Error('Could not mark the latest GitHub commit');
     const { data: job, error: jobError } = await database.from('repository_scan_jobs')
       .select('id,status,finished_at').eq('repository_id', repository.id).eq('head_sha', head).maybeSingle();
     if (jobError || !job) throw new Error('Could not read the queued scan');
