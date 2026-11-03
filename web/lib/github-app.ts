@@ -77,17 +77,20 @@ export async function githubAppJwt(config: GithubAppConfig) {
   return `${unsigned}.${signature}`;
 }
 
-export async function installationToken(config: GithubAppConfig, installationId: number, repository: number | string) {
+export async function installationToken(config: GithubAppConfig, installationId: number, repository: number | string,
+  purpose: 'scan' | 'repair-write' | 'proof-read' = 'scan') {
   if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('Invalid GitHub installation');
   const scope = typeof repository === 'number'
     ? Number.isSafeInteger(repository) && repository > 0 ? { repository_ids: [repository] } : null
     : /^[A-Za-z0-9_.-]+$/.test(repository) ? { repositories: [repository] } : null;
   if (!scope) throw new Error('Invalid GitHub repository');
   const jwt = await githubAppJwt(config);
+  const permissions = purpose === 'repair-write' ? { contents: 'write', pull_requests: 'write' }
+    : purpose === 'proof-read' ? { contents: 'read', checks: 'read' } : { contents: 'read' };
   const response = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
     method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
     headers: { ...apiHeaders, Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...scope, permissions: { contents: 'read' } }),
+    body: JSON.stringify({ ...scope, permissions }),
   });
   if (!response.ok) throw new Error(`GitHub installation token failed (${response.status})`);
   const result = await response.json() as { token?: unknown; expires_at?: unknown };
