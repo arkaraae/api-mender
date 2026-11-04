@@ -5,7 +5,7 @@ import { processBoundContractConsumers, processContractSources } from '../lib/co
 const sourceHead = 'a'.repeat(40);
 const consumerHead = 'b'.repeat(40);
 
-function fakeDatabase(saved) {
+function fakeDatabase(saved, overrides = {}) {
   const rows = {
     api_contract_consumers: [{ source_id: 'source-1', workspace_id: 'workspace-1' }],
     api_contract_sources: { id: 'source-1', workspace_id: 'workspace-1',
@@ -19,12 +19,13 @@ function fakeDatabase(saved) {
       } } } } },
     } },
     source_snapshots: { id: 'snapshot-1' },
+    ...overrides,
   };
   return {
     from(table) {
       const result = { data: rows[table] ?? null, error: null };
       const builder = {
-        select() { return this; }, eq() { return this; }, limit() { return this; },
+        select() { return this; }, eq() { return this; }, limit() { return this; }, order() { return this; },
         upsert(row, options) { saved.push({ table, row, options }); return this; },
         single: async () => result,
         maybeSingle: async () => result,
@@ -53,6 +54,28 @@ test('consumer push checks a different repository against its pinned upstream co
   assert.equal(finding.evidence.codeUrl,
     `https://github.com/acme/checkout/blob/${consumerHead}/src/quote.ts#L12`);
   assert.equal(finding.evidence.runtimeVerified, false);
+});
+
+test('a customer-declared database column is attached as possible impact, not runtime proof', async () => {
+  const saved = [];
+  const capturedAt = new Date().toISOString();
+  const database = fakeDatabase(saved, {
+    api_database_mappings: [{ endpoint: 'POST /quotes', request_field: 'accountId',
+      schema_label: 'orders-prod', table_name: 'quotes', column_name: 'account_id' }],
+    database_schema_snapshots: { id: 'schema-1', source: 'customer-attested',
+      fingerprint: 'f'.repeat(64), captured_at: capturedAt,
+      columns: [{ schema: 'public', table: 'quotes', column: 'account_id', notNull: true }] },
+  });
+  await processBoundContractConsumers(database, { id: 'consumer-1', workspace_id: 'workspace-1',
+    full_name: 'acme/checkout', target_sha: consumerHead }, consumerHead,
+  [{ file: 'src/quote.ts', line: 9, symbol: 'fetch', endpoint: 'POST /quotes',
+    origin: 'https://api.example.test', fields: ['sku'], fieldsComplete: true }]);
+  const impact = saved.find(item => item.table === 'findings').row.evidence.databaseImpact;
+  assert.equal(impact.length, 1);
+  assert.equal(impact[0].status, 'column-present');
+  assert.equal(impact[0].notNull, true);
+  assert.equal(impact[0].schemaFingerprint, 'f'.repeat(64));
+  assert.equal(impact[0].runtimeVerified, false);
 });
 
 test('outdated consumer scan does not create findings', async () => {

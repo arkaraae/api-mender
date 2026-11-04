@@ -144,9 +144,11 @@ methods, and unscanned repositories are not matched. This is a conservative
 inventory signal, not consumer breakage proof or a validated repair.
 
 `DATABASE_ACCESS.md` describes the optional customer-run Postgres metadata
-probe and authenticated workspace ingestion endpoint. Schema evidence is
-customer-attested and is not yet joined to contract findings. A customer
-production database is never accessed by the Cloudflare Worker in this stage.
+probe, authenticated workspace ingestion endpoint, and explicit API-field-to-
+column mapping. A current-contract request mismatch can attach a recent schema
+snapshot and declared column as **possible database impact**. This does not
+trace the consumer's database write, execute its code, or verify a production
+failure. No customer production database is accessed by the Cloudflare Worker.
 
 ## Operations
 

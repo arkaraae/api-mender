@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from './contract-source.ts';
+import { loadDatabaseImpact } from './database-impact.ts';
 
 async function digest(text: string) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
@@ -18,6 +19,7 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
   consumer: Repository, consumerHead: string, calls: Call[]) {
   const mismatches = checkCurrentContractCalls(contract.document, calls);
   if (!mismatches.length) return 0;
+  const databaseImpacts = await loadDatabaseImpact(database, source.workspace_id, source.id, consumer.id, mismatches);
   const contractUrl = `https://github.com/${sourceRepository.full_name}/blob/${sourceHead}/${source.path}`;
   const { data: snapshot, error: snapshotError } = await database.from('source_snapshots').upsert({
     workspace_id: source.workspace_id, provider: 'github-openapi', source_url: contractUrl,
@@ -27,17 +29,22 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
   if (snapshotError || !snapshot) throw snapshotError || new Error('Contract snapshot was not saved');
   for (const mismatch of mismatches) {
     const { call, missing, required } = mismatch;
+    const databaseImpact = databaseImpacts.get(`${mismatch.operation}\0${missing.join(',')}`) || [];
+    const schemaNote = databaseImpact.length
+      ? ` ${databaseImpact.length} customer-declared database mapping${databaseImpact.length === 1 ? '' : 's'} attached; schema metadata is not runtime proof of database impact.`
+      : '';
     const fingerprint = await digest(`request-schema:${source.id}:${consumer.id}:${call.file}:${call.line}:${call.endpoint}:${contract.sha256}:${missing.join(',')}`);
     const codeUrl = `https://github.com/${consumer.full_name}/blob/${consumerHead}/${call.file}#L${call.bodyLine || call.line}`;
     const { error } = await database.from('findings').upsert({
       workspace_id: source.workspace_id, repository_id: consumer.id, source_id: snapshot.id,
       fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
-      description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.`,
+      description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.${schemaNote}`,
       severity: 'medium', confidence: 'probable', status: 'Action required', base_sha: consumerHead,
       updated_at: new Date().toISOString(),
       evidence: { kind: 'request-schema-mismatch', sourceId: source.id, contractUrl, contractSha256: contract.sha256,
         codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
-          fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false },
+          fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false,
+        databaseImpact },
     }, { onConflict: 'repository_id,fingerprint' });
     if (error) throw error;
   }

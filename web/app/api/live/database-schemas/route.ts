@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { env } from 'cloudflare:workers';
 import { backendAdmin } from '../../../../lib/backend-admin';
 import { validateDatabaseSchemaEvidence } from '../../../../lib/database-schema-evidence';
 
@@ -8,8 +9,8 @@ const noStore = { 'Cache-Control': 'no-store' };
 
 function userDatabase(request: Request) {
   const token = request.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!token || !url || !key) return null;
   return { token, client: createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false } }) };
@@ -76,8 +77,7 @@ export async function POST(request: Request) {
   if (member?.role !== 'owner' && member?.role !== 'editor')
     return Response.json({ error: 'Workspace editor access required' }, { status: 403, headers: noStore });
   let database;
-  try { database = backendAdmin({ NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY }); }
+  try { database = backendAdmin(env); }
   catch { return Response.json({ error: 'Schema evidence ingestion is not configured' }, { status: 503, headers: noStore }); }
   const { data, error } = await database.from('database_schema_snapshots').insert({
     workspace_id: workspaceId, label, source: 'customer-attested',

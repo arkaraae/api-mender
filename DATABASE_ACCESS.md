@@ -52,16 +52,44 @@ call and mapping into a database operation, a failing pre-fix test or trace,
 and a passing post-fix test. Production rows should not be used as AI prompt
 context or as a default test fixture.
 
+## Declared API-to-database mapping
+
+Staging can now associate a scanned request field with a customer-attested
+Postgres column. After uploading a fresh schema snapshot, a signed-in workspace
+editor calls `POST /api/live/database-mappings` with:
+
+```json
+{
+  "workspaceId": "WORKSPACE_UUID",
+  "sourceId": "CONNECTED_OPENAPI_SOURCE_UUID",
+  "repositoryId": "CONNECTED_CONSUMER_REPOSITORY_UUID",
+  "endpoint": "POST /quotes",
+  "requestField": "accountId",
+  "schemaLabel": "orders-prod",
+  "table": "quotes",
+  "column": "account_id"
+}
+```
+
+Use the same Supabase bearer token as for schema evidence ingestion. The route
+requires an active source-to-consumer binding and confirms that the column is
+in the latest snapshot under that label. `GET /api/live/database-mappings?workspaceId=…`
+lists mappings; `DELETE /api/live/database-mappings` accepts `workspaceId` and
+`mappingId`. A later schema upload under the same label is picked up by the next
+repository scan. The finding records the matched column, its nullability,
+snapshot fingerprint, capture time, and whether the snapshot is fresh. It says
+**customer-declared mapping** and **runtime unverified**. It does not infer a
+database dependency just because an API field resembles a column name.
+
 ## Remaining product integration
 
-1. Deploy the draft customer GitHub scan/contract pipeline and the schema
-   evidence migration to staging. Verify that a workspace editor can submit
+1. Verify with a customer-run probe that a workspace editor can submit
    evidence and a viewer or unrelated user cannot. Collect only columns needed
    for impact analysis in a later probe revision; this first version includes
    all `public` columns and has a 5,000-column limit.
-2. Build a dependency map from a changed API operation to a pinned consumer
-   call and the code path that reads or writes a table column. If that path
-   cannot be established, report a possible impact, not a confirmed break.
+2. Prove the dependency from a pinned consumer call through the code path that
+   reads or writes the declared table column. A declared mapping and schema
+   presence alone establish possible impact only.
 3. Run old-versus-new integration tests in an isolated customer-controlled
    runner or staging database. Generated patches must never run against the
    production database. Keep the failing and passing logs, the contract and
@@ -70,6 +98,6 @@ context or as a default test fixture.
    dedicated read-only role. Do not expose a customer database to the public
    internet to make API Mender work.
 
-The probe and ingestion code are local backend changes. The migration and route
-are not yet deployed to the hosted workspace, and schema evidence is not yet
-correlated automatically with API changes.
+The probe remains customer-run. API Mender does not connect to or query a
+customer production database, and the staging workspace has no real customer
+schema snapshot yet.
