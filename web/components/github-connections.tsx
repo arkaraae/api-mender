@@ -8,8 +8,8 @@ type Repository = { id: string; full_name: string; github_installation_id?: numb
 type Source = { id: string; repository_id: string; path: string; paused: boolean };
 type Consumer = { id: string; source_id: string; repository_id: string; paused: boolean };
 
-export default function GitHubConnections({ database, workspaceId, repositories }: {
-  database: SupabaseClient; workspaceId: string; repositories: Repository[];
+export default function GitHubConnections({ database, workspaceId, repositories, onConnectionsChange }: {
+  database: SupabaseClient; workspaceId: string; repositories: Repository[]; onConnectionsChange?: () => void;
 }) {
   const [sources, setSources] = useState<Source[]>([]);
   const [consumers, setConsumers] = useState<Consumer[]>([]);
@@ -62,6 +62,7 @@ export default function GitHubConnections({ database, workspaceId, repositories 
       await api('/api/live/contracts', 'POST', { workspaceId, repositoryId: sourceRepository, path: path.trim() });
       setMessage('API contract added. Mender will load it during the next scan.');
       await refresh();
+      onConnectionsChange?.();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not add API contract'); }
     finally { setBusy(false); }
   }
@@ -72,6 +73,7 @@ export default function GitHubConnections({ database, workspaceId, repositories 
       await api('/api/live/contracts/consumers', 'POST', { workspaceId, sourceId: selectedSource, repositoryId: consumerRepository });
       setMessage('Consumer connected. Mender will compare its calls with the API contract.');
       await refresh();
+      onConnectionsChange?.();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not connect consumer'); }
     finally { setBusy(false); }
   }

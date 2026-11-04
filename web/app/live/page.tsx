@@ -5,22 +5,22 @@ import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
 import AuthScreen from '@/components/auth-screen';
 import BrandLogo from '@/components/brand-logo';
-import ManagedApiStudio from '@/components/managed-api-studio';
 import GitHubConnections from '@/components/github-connections';
 import RepairPreview from '@/components/repair-preview';
+import { deriveWatchedServices, type ContractConsumer, type ContractSnapshot, type ContractSource, type ContractVersion } from '@/lib/live-services';
 import { Activity, ArrowUpRight, Bell, ChevronRight, CircleAlert, Folder, Grid2X2,
   FlaskConical, GitBranch, LayoutDashboard, List, Plus, PlugZap, RefreshCw, Search } from 'lucide-react';
 
 type Workspace = { id: string; name: string; owner_id: string };
 type CallSite = { file: string; line: number; symbol: string; endpoint?: string };
-type Repository = { id: string; full_name: string; branch: string; head_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: CallSite[]; limitations: string[]; scanned_at: string | null; paused: boolean; github_installation_id: number | null };
+type Repository = { id: string; full_name: string; branch: string; head_sha: string | null; target_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: CallSite[]; limitations: string[]; scanned_at: string | null; paused: boolean; github_installation_id: number | null };
 type DatabaseImpact = { schemaLabel: string; table: string; column: string;
   status: 'column-present' | 'column-absent' | 'snapshot-missing' | 'snapshot-stale';
   notNull?: boolean; capturedAt?: string; schemaFingerprint?: string };
 type DatabaseWrite = { responseField: string; table: string; column: string; writeLine: number; sourceUrl: string };
 type ConsumerCandidate = { repository: string; file: string; line: number; endpoint: string;
   sourceUrl: string; databaseWrites?: DatabaseWrite[] };
-type Finding = { id: string; title: string; description: string; severity: string; confidence: string; status: string; created_at: string; evidence: { kind?: string; sourceUrl?: string; contractUrl?: string; codeUrl?: string; previousVersion?: string; currentVersion?: string; note?: string; runUrl?: string; pullRequestUrl?: string; databaseImpact?: DatabaseImpact[]; consumerCandidates?: ConsumerCandidate[]; missing?: string[]; report?: { changes?: { title: string; fields: string[] }[] } } };
+type Finding = { id: string; source_id: string | null; title: string; description: string; severity: string; confidence: string; status: string; created_at: string; evidence: { kind?: string; sourceUrl?: string; contractUrl?: string; codeUrl?: string; previousVersion?: string; currentVersion?: string; note?: string; runUrl?: string; pullRequestUrl?: string; databaseImpact?: DatabaseImpact[]; consumerCandidates?: ConsumerCandidate[]; missing?: string[]; report?: { changes?: { title: string; fields: string[] }[] } } };
 type Section = 'overview' | 'findings' | 'repositories' | 'integrations' | 'monitor' | 'lab';
 type AwsRelease = { version: string; publishedAt: string; evidenceUrl: string; summary: string };
 type AwsSnapshot = { retrieved_at: string; metadata: AwsRelease };
@@ -79,8 +79,11 @@ export default function LiveWorkspace() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [awsSnapshot, setAwsSnapshot] = useState<AwsSnapshot | null>(null);
   const [stripeCheckedAt, setStripeCheckedAt] = useState<string | null>(null);
-  const [contractSources, setContractSources] = useState<{ id: string; path: string; repository_id: string }[]>([]);
-  const [selectedService, setSelectedService] = useState<'stripe' | 'aws' | 'contract' | null>(null);
+  const [contractSources, setContractSources] = useState<ContractSource[]>([]);
+  const [contractVersions, setContractVersions] = useState<ContractVersion[]>([]);
+  const [contractConsumers, setContractConsumers] = useState<ContractConsumer[]>([]);
+  const [contractSnapshots, setContractSnapshots] = useState<ContractSnapshot[]>([]);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [showIntegrationSetup, setShowIntegrationSetup] = useState(false);
   const [serviceView, setServiceView] = useState<'grid' | 'list'>('grid');
   const [workspaceName, setWorkspaceName] = useState('API Mender');
@@ -96,7 +99,7 @@ export default function LiveWorkspace() {
   useEffect(() => {
     const syncHash = () => {
       const hash = window.location.hash.slice(1);
-      if (hash === 'ci-proof-setup') setSection('integrations');
+      if (hash === 'ci-proof-setup') { setSection('integrations'); setShowIntegrationSetup(true); }
       else if (['overview', 'findings', 'repositories', 'integrations', 'monitor', 'lab'].includes(hash))
         setSection(hash as Section);
     };
@@ -105,26 +108,36 @@ export default function LiveWorkspace() {
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
 
+  useEffect(() => {
+    if (section === 'integrations' && showIntegrationSetup) document.querySelector('.workspace-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [section, showIntegrationSetup, workspace?.id]);
+
   const refresh = useCallback(async (uid: string) => {
     if (!supabase) return;
-    const { data: workspaces, error } = await supabase.from('workspaces').select('id,name,owner_id').eq('owner_id', uid).order('created_at');
+    const { data: workspaces, error } = await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
     if (error) { setMessage(error.message); return; }
-    const chosen = (workspaces?.[0] as Workspace | undefined) || null;
+    const chosen = (workspaces?.find(item => item.owner_id === uid) || workspaces?.[0] || null) as Workspace | null;
     setWorkspace(chosen);
-    if (!chosen) { setRepositories([]); setFindings([]); setAwsSnapshot(null); setStripeCheckedAt(null); setContractSources([]); return; }
-    const [repoResult, findingResult, awsResult, stripeResult, contractResult] = await Promise.all([
-      supabase.from('monitored_repositories').select('id,full_name,branch,head_sha,sdk_version,api_version,call_sites,limitations,scanned_at,paused,github_installation_id').eq('workspace_id', chosen.id).order('created_at'),
-      supabase.from('findings').select('id,title,description,severity,confidence,status,created_at,evidence').eq('workspace_id', chosen.id).order('created_at', { ascending: false }).limit(50),
+    if (!chosen) { setRepositories([]); setFindings([]); setAwsSnapshot(null); setStripeCheckedAt(null); setContractSources([]); setContractVersions([]); setContractConsumers([]); setContractSnapshots([]); return; }
+    const [repoResult, findingResult, awsResult, stripeResult, contractResult, versionResult, consumerResult, snapshotResult] = await Promise.all([
+      supabase.from('monitored_repositories').select('id,full_name,branch,head_sha,target_sha,sdk_version,api_version,call_sites,limitations,scanned_at,paused,github_installation_id').eq('workspace_id', chosen.id).order('created_at'),
+      supabase.from('findings').select('id,source_id,title,description,severity,confidence,status,created_at,evidence').eq('workspace_id', chosen.id).order('created_at', { ascending: false }).limit(100),
       supabase.from('source_snapshots').select('retrieved_at,metadata').eq('workspace_id', chosen.id).eq('provider', 'aws').eq('source_url', 'https://github.com/aws/aws-sdk-js-v3/releases').order('retrieved_at', { ascending: false }).limit(1),
       supabase.from('source_snapshots').select('retrieved_at').eq('workspace_id', chosen.id).eq('provider', 'stripe').order('retrieved_at', { ascending: false }).limit(1),
-      supabase.from('api_contract_sources').select('id,path,repository_id').eq('workspace_id', chosen.id).eq('paused', false).limit(50),
+      supabase.from('api_contract_sources').select('id,path,repository_id,paused').eq('workspace_id', chosen.id).limit(100),
+      supabase.from('api_contract_versions').select('source_id,head_sha,created_at').eq('workspace_id', chosen.id).order('created_at', { ascending: false }).limit(200),
+      supabase.from('api_contract_consumers').select('source_id,repository_id,paused').eq('workspace_id', chosen.id).limit(200),
+      supabase.from('source_snapshots').select('id,provider,metadata').eq('workspace_id', chosen.id).eq('provider', 'github-openapi').order('retrieved_at', { ascending: false }).limit(200),
     ]);
-    if (repoResult.error || findingResult.error || awsResult.error || stripeResult.error || contractResult.error) { setMessage(repoResult.error?.message || findingResult.error?.message || awsResult.error?.message || stripeResult.error?.message || contractResult.error?.message || 'Could not load workspace'); return; }
+    if (repoResult.error || findingResult.error || awsResult.error || stripeResult.error || contractResult.error || versionResult.error || consumerResult.error || snapshotResult.error) { setMessage(repoResult.error?.message || findingResult.error?.message || awsResult.error?.message || stripeResult.error?.message || contractResult.error?.message || versionResult.error?.message || consumerResult.error?.message || snapshotResult.error?.message || 'Could not load workspace'); return; }
     setRepositories((repoResult.data || []) as Repository[]);
     setFindings((findingResult.data || []) as Finding[]);
     setAwsSnapshot((awsResult.data?.[0] as AwsSnapshot | undefined) || null);
     setStripeCheckedAt(stripeResult.data?.[0]?.retrieved_at || null);
     setContractSources(contractResult.data || []);
+    setContractVersions(versionResult.data || []);
+    setContractConsumers(consumerResult.data || []);
+    setContractSnapshots(snapshotResult.data || []);
   }, [supabase]);
 
   useEffect(() => {
@@ -140,7 +153,7 @@ export default function LiveWorkspace() {
       if (!active) return;
       setUser(session?.user || null);
       if (session?.user) setTimeout(() => { void refresh(session.user.id); }, 0);
-      else { setWorkspace(null); setRepositories([]); setFindings([]); setAwsSnapshot(null); setStripeCheckedAt(null); setContractSources([]); }
+      else { setWorkspace(null); setRepositories([]); setFindings([]); setAwsSnapshot(null); setStripeCheckedAt(null); setContractSources([]); setContractVersions([]); setContractConsumers([]); setContractSnapshots([]); }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, [supabase, refresh]);
@@ -261,30 +274,31 @@ export default function LiveWorkspace() {
   const candidates = selectedFinding?.evidence?.consumerCandidates || [];
   const writes = candidates.flatMap(candidate => (candidate.databaseWrites || []).map(write => ({ ...write, repository: candidate.repository })));
   const scannedCount = repositories.filter(repo => repo.scanned_at).length;
-  const contractNeedsReview = findings.some(finding => finding.evidence?.kind === 'request-schema-mismatch'
-    || (finding.evidence?.report?.changes?.length || 0) > 0);
+  const watchedServices = deriveWatchedServices({ repositories, sources: contractSources,
+    versions: contractVersions, consumers: contractConsumers, snapshots: contractSnapshots, findings });
   const services = [
-    { id: 'stripe' as const, name: 'Stripe', status: stripeCheckedAt ? 'Checked' : 'Not checked',
-      note: stripeCheckedAt ? `Last check ${new Date(stripeCheckedAt).toLocaleDateString()}` : 'Official sources ready',
-      tone: stripeCheckedAt ? 'good' : 'idle' },
-    { id: 'aws' as const, name: 'AWS SDK', status: awsSnapshot ? 'Checked' : 'Not checked',
-      note: awsSnapshot?.metadata?.version || 'JavaScript SDK v3', tone: awsSnapshot ? 'good' : 'idle' },
-    { id: 'contract' as const, name: 'OpenAPI', status: contractNeedsReview ? 'Needs review' : contractSources.length ? 'Watching' : 'Not connected',
-      note: `${contractSources.length} contract source${contractSources.length === 1 ? '' : 's'}`,
-      tone: contractNeedsReview ? 'alert' : contractSources.length ? 'good' : 'idle' },
+    ...watchedServices.map(service => ({ id: `contract:${service.id}`, name: service.name, status: service.status,
+      note: `${service.repositoryName} / ${service.path}`, tone: service.tone,
+      activity: service.findings[0]?.title || `${service.consumerNames.length} connected consumer codebase${service.consumerNames.length === 1 ? '' : 's'}. ${service.lastCheckedAt ? `Last contract scan ${new Date(service.lastCheckedAt).toLocaleString()}.` : 'First contract scan pending.'}` })),
+    ...(stripeCheckedAt ? [{ id: 'stripe', name: 'Stripe', status: 'Checked',
+      note: `Official sources · ${new Date(stripeCheckedAt).toLocaleDateString()}`, tone: 'good' as const,
+      activity: 'Official Stripe sources have been checked for this workspace.' }] : []),
+    ...(awsSnapshot ? [{ id: 'aws', name: 'AWS SDK', status: 'Checked', note: `JavaScript SDK ${awsSnapshot.metadata.version}`,
+      tone: 'good' as const, activity: `AWS SDK ${awsSnapshot.metadata.version} is the latest observed release.` }] : []),
   ];
+  const selectedContract = watchedServices.find(service => `contract:${service.id}` === selectedService);
   const isServicesPage = section === 'monitor' || section === 'integrations';
   const serviceGallery = <>
     <section className={`service-grid service-grid--${serviceView}`} aria-label="Integrated services">{services.map(service => <article key={service.id} className={`service-card service-card--${service.tone}`}>
       <div className="service-card-top"><h2>{service.name}</h2><span className={`service-status service-status--${service.tone}`}>{service.status}</span></div>
       <div className="service-card-meta"><Folder size={13} strokeWidth={1.8} /><span>{service.note}</span></div>
-      <div className="service-card-preview"><span className="service-preview-label">LATEST ACTIVITY</span><strong>{service.status}</strong><p>{service.id === 'aws' ? (awsSnapshot ? `AWS SDK ${awsSnapshot.metadata.version} is the latest observed release.` : 'Run the first AWS SDK check to establish a baseline.') : service.id === 'stripe' ? (stripeCheckedAt ? 'Official Stripe sources have been checked for this workspace.' : 'Run the first Stripe source check to establish a baseline.') : contractNeedsReview ? 'A contract-linked finding needs review.' : contractSources.length ? 'Connected contracts are being compared during scans.' : 'Add an OpenAPI contract to begin monitoring.'}</p></div>
+      <div className="service-card-preview"><span className="service-preview-label">LATEST ACTIVITY</span><strong>{service.status}</strong><p>{service.activity}</p></div>
       <button type="button" className="service-card-action" onClick={() => setSelectedService(service.id)}>Open details <ArrowUpRight size={14} /></button>
-    </article>)}</section>
+    </article>)}{services.length === 0 && <div className="service-card"><div className="service-card-top"><h2>No APIs watched yet</h2></div><p>Connect a GitHub repository, choose its OpenAPI contract, and link consumer code to start detecting changes.</p><button type="button" className="service-card-action" onClick={openIntegrationSetup}>Connect first API <ArrowUpRight size={14} /></button></div>}</section>
     {selectedService && <section className="service-details" aria-live="polite"><div className="service-details-head"><div><span>SERVICE DETAILS</span><h2>{services.find(service => service.id === selectedService)?.name}</h2></div><button type="button" onClick={() => setSelectedService(null)} aria-label="Close service details">×</button></div>
+      {selectedContract && <><p>Contract: {selectedContract.repositoryName} / {selectedContract.path}. {selectedContract.lastCheckedAt ? `Last scanned ${new Date(selectedContract.lastCheckedAt).toLocaleString()}.` : 'Waiting for the first pinned scan.'}</p><p>Consumer codebases: {selectedContract.consumerNames.length ? selectedContract.consumerNames.join(', ') : 'none connected yet'}.</p><p>{selectedContract.findings.length} unresolved finding{selectedContract.findings.length === 1 ? '' : 's'} for the latest scanned contract.</p>{selectedContract.findings.map(finding => <button key={finding.id} type="button" onClick={() => { const full = findings.find(item => item.id === finding.id); if (full) openFinding(full); }}>Review: {finding.title}</button>)}<button disabled={busy} onClick={() => void scan(selectedContract.repositoryId)}>Scan API repository</button><button type="button" onClick={openIntegrationSetup}>Manage API and consumers</button></>}
       {selectedService === 'aws' && <><p>Checks the official AWS SDK for JavaScript release stream. A release is a review signal until consumer impact is verified.</p>{awsSnapshot && <p>Latest observed: {awsSnapshot.metadata.version} · checked {new Date(awsSnapshot.retrieved_at).toLocaleString()}</p>}<button disabled={busy} onClick={() => void checkAwsSdk()}>Check AWS updates</button></>}
       {selectedService === 'stripe' && <><p>Checks official Stripe Node and OpenAPI sources against the workspace baseline.</p>{stripeCheckedAt && <p>Last checked {new Date(stripeCheckedAt).toLocaleString()}</p>}<button disabled={busy} onClick={() => void checkSources()}>Check Stripe sources</button></>}
-      {selectedService === 'contract' && <><p>{contractSources.length} connected OpenAPI contract source{contractSources.length === 1 ? '' : 's'}. {contractNeedsReview ? 'Review the related findings before requesting a repair.' : 'Changes are compared on repository scans.'}</p><button onClick={() => openSection(contractNeedsReview ? 'findings' : 'integrations')}>{contractNeedsReview ? 'Review findings' : 'Manage contracts'}</button></>}
     </section>}
   </>;
 
@@ -311,7 +325,7 @@ export default function LiveWorkspace() {
           </>}
           {section === 'findings' && <section className="workspace-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">CHANGE MONITOR</span><h2>All findings</h2></div><span className="workspace-count">{visibleFindings.length} shown</span></div><div className="workspace-card-list">{visibleFindings.length ? visibleFindings.map(finding => <FindingSummary key={finding.id} finding={finding} onOpen={() => openFinding(finding)} />) : <p className="workspace-empty">No findings match this search.</p>}</div></section>}
           {section === 'repositories' && <div className="workspace-column"><section className="live-card"><h2>Monitored repositories</h2>{visibleRepositories.length ? <div className="live-list">{visibleRepositories.map(repo => <article key={repo.id}><div><strong><a href={`https://github.com/${repo.full_name}`} target="_blank" rel="noopener noreferrer">{repo.full_name} ↗</a></strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? new Date(repo.scanned_at).toLocaleString() : 'Waiting for first scan'}</small><RepositoryInventory repository={repo} />{repo.limitations.length > 0 && <p className="live-muted">{repo.limitations.join('; ')}</p>}</div>{repo.api_version?.startsWith('quotes-') ? <a href="/demo">View testbed ↗</a> : <button disabled={busy || repo.paused} onClick={() => void scan(repo.id)}>Scan now</button>}</article>)}</div> : <p className="workspace-empty">No repositories match this search.</p>}</section><section className="live-card"><h2>Add a public GitHub repository</h2><p>Private repositories connect through the GitHub App in Integrations.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => setRepositoryName(event.target.value)} /></label><label>Branch<input value={branch} onChange={event => setBranch(event.target.value)} /></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim()} onClick={() => void addRepository()}>Add repository</button></section></div>}
-          {isServicesPage && <>{serviceGallery}{section === 'integrations' && showIntegrationSetup && <section className="workspace-setup"><div className="workspace-setup-head"><div><h2>Connect an integration</h2><p>Choose repositories and API sources for this workspace.</p></div><button type="button" onClick={() => setShowIntegrationSetup(false)}>Close</button></div><div className="workspace-column"><GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} /><ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /></div></section>}</>}
+          {isServicesPage && <>{serviceGallery}{section === 'integrations' && showIntegrationSetup && <section className="workspace-setup"><div className="workspace-setup-head"><div><h2>Connect an integration</h2><p>Choose repositories and API sources for this workspace.</p></div><button type="button" onClick={() => setShowIntegrationSetup(false)}>Close</button></div><div className="workspace-column"><GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} onConnectionsChange={() => void refresh(user.id)} /><section className="live-card"><h2>Official provider release checks</h2><p>These checks establish workspace baselines for the AWS SDK for JavaScript and Stripe sources. A release is a review signal, not proof that consumer code broke.</p><button disabled={busy} onClick={() => void checkAwsSdk()}>Check AWS SDK</button> <button disabled={busy} onClick={() => void checkSources()}>Check Stripe</button></section></div></section>}</>}
           {section === 'lab' && <><div className="workspace-lab-toolbar"><label>Finding<select value={selectedFinding?.id || ''} onChange={event => setSelectedFindingId(event.target.value)}>{findings.map(finding => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select></label><span>Static evidence · runtime verification required</span></div>{selectedFinding ? <><div className="workspace-lab-grid"><section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">01 / UPSTREAM</div><h2>Contract change</h2><p>{selectedFinding.title}</p>{selectedFinding.evidence?.report?.changes?.map((change, index) => <div className="workspace-evidence-row" key={index}><strong>{change.title}</strong><small>{change.fields.join(', ')}</small></div>)}{selectedFinding.evidence?.missing?.length ? <div className="workspace-evidence-row"><strong>Required field missing</strong><small>{selectedFinding.evidence.missing.join(', ')}</small></div> : null}{(selectedFinding.evidence?.contractUrl || selectedFinding.evidence?.sourceUrl) && <a className="workspace-evidence-link" href={selectedFinding.evidence.contractUrl || selectedFinding.evidence.sourceUrl} target="_blank" rel="noopener noreferrer">Pinned API source <ArrowUpRight size={14} /></a>}</section>
                     <section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">02 / CONSUMER</div><h2>Code path</h2><p>{candidates.length ? `${candidates.length} matching call candidate${candidates.length === 1 ? '' : 's'}` : selectedFinding.evidence?.codeUrl ? 'Pinned request body' : 'No linked consumer call'}</p>{candidates.slice(0, 10).map((candidate, index) => <div className="workspace-evidence-row" key={`${candidate.file}:${candidate.line}:${index}`}><strong>{candidate.repository}</strong><a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer">{candidate.file}:{candidate.line} <ArrowUpRight size={12} /></a><small>{candidate.endpoint}</small></div>)}{selectedFinding.evidence?.codeUrl && <a className="workspace-evidence-link" href={selectedFinding.evidence.codeUrl} target="_blank" rel="noopener noreferrer">Pinned consumer code <ArrowUpRight size={14} /></a>}</section>
                     <section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">03 / DATABASE</div><h2>Write evidence</h2><p>{writes.length ? 'Direct static response-to-write candidates' : 'No direct database write traced for this change'}</p>{writes.slice(0, 10).map((write, index) => <div className="workspace-evidence-row" key={`${write.repository}:${write.writeLine}:${index}`}><strong>public.{write.table}.{write.column}</strong><small>From response field {write.responseField}</small><a href={write.sourceUrl} target="_blank" rel="noopener noreferrer">{write.repository}:{write.writeLine} <ArrowUpRight size={12} /></a></div>)}<DatabaseImpactEvidence impacts={selectedFinding.evidence?.databaseImpact} /><small className="workspace-evidence-caution">A code trace or schema match does not prove a production failure.</small></section></div><section className="workspace-panel workspace-repair-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">VALIDATION</span><h2>Repair and customer CI</h2></div></div><p>{selectedFinding.description}</p>{selectedFinding.evidence?.kind === 'request-schema-mismatch' ? <RepairPreview database={supabase} workspaceId={workspace.id} findingId={selectedFinding.id} /> : <p className="workspace-empty">A bounded repair is available only for supported literal request body mismatches.</p>}</section></> : <p className="workspace-empty">No finding is available for review yet.</p>}</>}
