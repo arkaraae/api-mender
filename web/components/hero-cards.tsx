@@ -43,18 +43,18 @@ export default function HeroCards() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
         </div>
         <div>
-          <div>LIVE CHECK</div>
+          <div>Live check</div>
           <div className={rescuedNow ? 'is-pass' : live.phase === 'failed' ? 'is-fail' : ''}>
-            {live.phase === 'checking' ? 'RUNNING…' : live.phase === 'failed' ? 'UNAVAILABLE' : rescuedNow ? `${live.direct} → ${live.through}` : `${live.direct} / ${live.through}`}
+            {live.phase === 'checking' ? 'Running…' : live.phase === 'failed' ? 'Unavailable' : rescuedNow ? `${live.direct} → ${live.through}` : `${live.direct} / ${live.through}`}
           </div>
         </div>
       </div>
       <div className="hero-card hero-card-large">
-        <div className="hero-card-label">OLD-VERSION CALLS TRANSLATED:</div>
+        <div className="hero-card-label">Old-version calls translated</div>
         <div className="hero-card-number">{live.phase === 'checking' ? '…' : live.rescued === undefined ? '—' : live.rescued.toLocaleString('en-US')}</div>
         <div className="hero-card-rule" />
         <div className="hero-card-foot">
-          {live.phase === 'ready' ? (rescuedNow ? 'ONE OLD CALL SENT BOTH WAYS JUST NOW .' : 'LIVE QUOTES API, VERSION 2 .') : live.phase === 'failed' ? 'THE LIVE CHECK DID NOT RUN .' : 'SENDING ONE REAL CALL BOTH WAYS .'} <span>/</span>
+          {live.phase === 'ready' ? (rescuedNow ? 'One old call sent both ways just now' : 'Live Quotes API, version 2') : live.phase === 'failed' ? 'The live check did not run' : 'Sending one real call both ways'}
         </div>
       </div>
     </div>

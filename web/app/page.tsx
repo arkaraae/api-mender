@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import AuthCallbackRedirect from '@/components/auth-callback-redirect';
 import BrandLogo from '@/components/brand-logo';
 import FloatingJoin from '@/components/floating-join';
@@ -44,10 +45,10 @@ export default function Home() {
           <p>No AI runs on your traffic. Mender works out the rules once, proves them, and then follows them on every call.</p>
         </div>
         <div className="seam-wrap">
-          <span className="seam-thread" aria-hidden="true" />
           <ol className="seam">
-          {STEPS.map((step) => (
-            <li key={step.title}>
+          {STEPS.map((step, index) => (
+            <li key={step.title} style={{ '--i': index } as CSSProperties}>
+              <span className="seam-count" aria-hidden="true">0{index + 1} <i>/</i> 0{STEPS.length}</span>
               <h3>{step.title}</h3>
               <p>{step.text}</p>
               {step.sample && <code>{step.sample}</code>}
@@ -56,21 +57,6 @@ export default function Home() {
           ))}
           </ol>
         </div>
-      </section>
-
-      <section className="home-doors" aria-label="Who API Mender is for">
-        <article className="door door-call">
-          <h2>You call APIs</h2>
-          <p className="door-price">Free</p>
-          <p>Check what an API change means for your code, watch the APIs you depend on, and get the fix for the lines it touches.</p>
-          <a className="home-button home-button-ink" href="/check">Check a change</a>
-        </article>
-        <article className="door door-run">
-          <h2>You run an API</h2>
-          <p className="door-price">$28.98 per API per month, free while in beta</p>
-          <p>Ship breaking changes behind the gateway, with every rule proven and a list of who still calls the old version.</p>
-          <a className="home-button home-button-thread" href="/pricing">See pricing</a>
-        </article>
       </section>
 
       <section className="home-join" id="join" aria-labelledby="join-title">
@@ -83,7 +69,7 @@ export default function Home() {
       </section>
 
       <footer className="marketing-footer home-footer">
-        <span className="site-brand"><BrandLogo /></span>
+        <span className="site-brand"><BrandLogo label="Mend" /></span>
         <span>Know what changed. Know what to do.</span>
         <nav aria-label="More">
           <a href="/watch">Watch an API</a>

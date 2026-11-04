@@ -4,11 +4,17 @@
 // SUPABASE_SECRET_KEY is a server-only Worker secret for the public interest form.
 declare namespace Cloudflare {
   interface Env {
+    NEXT_PUBLIC_SUPABASE_URL?: string;
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
     MENDER_WATCH?: KVNamespace;
     MENDER_DB?: D1Database;
     SITE_ORIGIN?: string;
     SALES_WEBHOOK?: string;
-    NEXT_PUBLIC_SUPABASE_URL?: string;
     SUPABASE_SECRET_KEY?: string;
+    GITHUB_WEBHOOK_SECRET?: string;
+    GITHUB_APP_ID?: string;
+    GITHUB_APP_PRIVATE_KEY?: string;
+    GITHUB_APP_CLIENT_ID?: string;
+    GITHUB_APP_CLIENT_SECRET?: string;
   }
 }

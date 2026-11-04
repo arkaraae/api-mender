@@ -5,10 +5,12 @@ import './join-cta.css';
 import './demo.css';
 import './brand.css';
 import './public.css';
+import './live/workspace.css';
+import './live/workspace-sketch.css';
 
 export const metadata: Metadata = { title: 'API Mender · API change monitor', description: 'Review evidence, impact, and patches for integration changes.' };
-// DM Sans for the public pages, JetBrains Mono for the top bar, requests and code (see app/public.css).
-const FONTS = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap';
+// DM Sans for the public pages, JetBrains Mono for requests and code (see app/public.css), Fredoka for the homepage's headings.
+const FONTS = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;900&family=Fredoka:wght@500;600&family=JetBrains+Mono:wght@400;500;700&display=swap';
 
 export default function Layout({children}:{children:React.ReactNode}) {
   return <html lang="en">
