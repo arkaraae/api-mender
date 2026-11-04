@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { processBoundContractConsumers, processContractSources } from '../lib/contract-worker.ts';
+import { extractCalls } from '../lib/public-scan.ts';
 
 const sourceHead = 'a'.repeat(40);
 const consumerHead = 'b'.repeat(40);
@@ -153,4 +154,60 @@ test('upstream push checks a separate connected consumer inventory', async () =>
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('changed response field links to a pinned direct database write candidate', async () => {
+  const before = { openapi: '3.0.3', servers: [{ url: 'https://api.example.test' }],
+    paths: { '/orders': { get: { responses: { 200: { description: 'ok', content: {
+      'application/json': { schema: { type: 'object', required: ['customerId'],
+        properties: { customerId: { type: 'string' } } } },
+    } } } } } } };
+  const after = structuredClone(before);
+  after.paths['/orders'].get.responses[200].content['application/json'].schema = {
+    type: 'object', required: ['accountId'], properties: { accountId: { type: 'string' } },
+  };
+  const source = [
+    'export async function sync(supabase) {',
+    "  const response = await fetch('https://api.example.test/orders');",
+    '  const payload = await response.json();',
+    "  await supabase.from('orders').insert({ external_id: payload.customerId });",
+    '}',
+  ].join('\n');
+  const calls = extractCalls('src/sync.ts', source);
+  const saved = [];
+  const encoded = Buffer.from(JSON.stringify(after));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ type: 'file', encoding: 'base64',
+    size: encoded.length, content: encoded.toString('base64') });
+  const rows = {
+    api_contract_sources: [{ id: 'source-1', workspace_id: 'workspace-1', path: 'openapi.json' }],
+    api_contract_versions: [{ head_sha: 'd'.repeat(40), content_sha256: 'c'.repeat(64), document: before }],
+    api_contract_consumers: [],
+    monitored_repositories: [{ id: 'consumer-1', full_name: 'acme/checkout',
+      head_sha: consumerHead, target_sha: consumerHead, call_sites: calls }],
+    source_snapshots: { id: 'snapshot-1' },
+  };
+  const database = { from(table) {
+    let result = { data: rows[table], error: null };
+    return { select() { return this; }, eq() { return this; }, limit() { return this; },
+      order() { return this; }, in() { return this; },
+      upsert(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
+      single: async () => table === 'source_snapshots' ? { data: rows.source_snapshots, error: null } : result,
+      then(resolve) { return Promise.resolve(result).then(resolve); },
+    };
+  } };
+  try {
+    const result = await processContractSources(database, { id: 'provider-1',
+      workspace_id: 'workspace-1', full_name: 'acme/api', target_sha: sourceHead },
+    sourceHead, 'installation-token', []);
+    assert.equal(result.changed, 1);
+    const finding = saved.find(item => item.table === 'findings').row;
+    const write = finding.evidence.consumerCandidates[0].databaseWrites[0];
+    assert.equal(write.responseField, 'customerId');
+    assert.equal(write.column, 'external_id');
+    assert.equal(write.writeLine, 4);
+    assert.equal(write.sourceUrl,
+      `https://github.com/acme/checkout/blob/${consumerHead}/src/sync.ts#L4`);
+    assert.match(finding.description, /runtime behavior are not yet verified/);
+  } finally { globalThis.fetch = originalFetch; }
 });

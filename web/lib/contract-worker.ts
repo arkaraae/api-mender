@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkCurrentContractCalls, compareContracts, matchContractCalls, readGitHubContract } from './contract-source.ts';
 import { loadDatabaseImpact } from './database-impact.ts';
+import type { DatabaseWriteTrace } from './static-database-flow.ts';
 
 async function digest(text: string) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
@@ -8,7 +9,7 @@ async function digest(text: string) {
 }
 
 type Call = { file: string; line: number; symbol: string; endpoint: string; origin?: string;
-  fields?: string[]; fieldsComplete?: boolean; bodyLine?: number };
+  fields?: string[]; fieldsComplete?: boolean; bodyLine?: number; databaseWrites?: DatabaseWriteTrace[] };
 type Repository = { id: string; workspace_id: string; full_name: string; head_sha?: string | null;
   target_sha?: string | null; call_sites?: Call[] };
 type Source = { id: string; workspace_id: string; repository_id?: string; path: string; paused?: boolean };
@@ -88,7 +89,7 @@ export async function processBoundContractConsumers(database: SupabaseClient,
 
 export async function processContractSources(database: SupabaseClient, repository: {
   id: string; workspace_id: string; full_name: string; target_sha: string | null;
-}, head: string, token: string, currentCalls: { file: string; line: number; symbol: string; endpoint: string; origin?: string }[]) {
+}, head: string, token: string, currentCalls: Call[]) {
   if (repository.target_sha !== head) return { checked: 0, changed: 0 };
   const { data: sources, error } = await database.from('api_contract_sources').select('id,workspace_id,path')
     .eq('repository_id', repository.id).eq('paused', false).limit(11);
@@ -137,6 +138,8 @@ export async function processContractSources(database: SupabaseClient, repositor
       .select('id,full_name,head_sha,target_sha,call_sites')
       .eq('workspace_id', repository.workspace_id).eq('paused', false).limit(51);
     if (consumerError) throw consumerError;
+    const changedResponseFields = new Set(report.changes.filter(change => change.rule.startsWith('response-'))
+      .flatMap(change => change.fields));
     const consumerCandidates = (consumers || []).flatMap(consumer => {
       const calls = consumer.id === repository.id && repository.target_sha === head
         ? currentCalls : consumer.head_sha && consumer.head_sha === consumer.target_sha && Array.isArray(consumer.call_sites)
@@ -145,8 +148,11 @@ export async function processContractSources(database: SupabaseClient, repositor
         .map(call => ({ repositoryId: consumer.id, repository: consumer.full_name,
           commit: consumer.id === repository.id ? head : consumer.head_sha,
           file: call.file, line: call.line, symbol: call.symbol, endpoint: call.endpoint,
-          sourceUrl: `https://github.com/${consumer.full_name}/blob/${consumer.id === repository.id ? head : consumer.head_sha}/${call.file}#L${call.line}` }));
+          sourceUrl: `https://github.com/${consumer.full_name}/blob/${consumer.id === repository.id ? head : consumer.head_sha}/${call.file}#L${call.line}`,
+          databaseWrites: (call.databaseWrites || []).filter((write: DatabaseWriteTrace) => changedResponseFields.has(write.responseField))
+            .map((write: DatabaseWriteTrace) => ({ ...write, sourceUrl: `https://github.com/${consumer.full_name}/blob/${consumer.id === repository.id ? head : consumer.head_sha}/${call.file}#L${write.writeLine}` })) }));
     }).slice(0, 50);
+    const tracedWrites = consumerCandidates.reduce((total, candidate) => total + candidate.databaseWrites.length, 0);
     const sourceUrl = `https://github.com/${repository.full_name}/blob/${head}/${source.path}`;
     const { data: snapshot, error: snapshotError } = await database.from('source_snapshots').upsert({
       workspace_id: repository.workspace_id, provider: 'github-openapi', source_url: sourceUrl,
@@ -158,7 +164,7 @@ export async function processContractSources(database: SupabaseClient, repositor
     const { error: findingError } = await database.from('findings').upsert({
       workspace_id: repository.workspace_id, repository_id: repository.id, source_id: snapshot.id,
       fingerprint, title: report.headline,
-      description: 'The connected OpenAPI contract changed. Schema comparison found a possible break. Consumer applicability and runtime behavior are not yet verified.',
+      description: `The connected OpenAPI contract changed. Schema comparison found a possible break.${tracedWrites ? ` ${tracedWrites} direct static response-to-database write${tracedWrites === 1 ? '' : 's'} matched changed fields.` : ''} Consumer applicability and runtime behavior are not yet verified.`,
       severity: report.verdict === 'breaks' ? 'medium' : 'low', confidence: 'probable',
       status: 'Action required', base_sha: head,
       evidence: { sourceUrl, oldSha256: before.content_sha256, newSha256: current.sha256,

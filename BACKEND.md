@@ -143,6 +143,16 @@ evidence. Dynamic URLs, other HTTP clients, server variables, ambiguous
 methods, and unscanned repositories are not matched. This is a conservative
 inventory signal, not consumer breakage proof or a validated repair.
 
+For one bounded JavaScript/TypeScript pattern, the scanner also records a
+direct response-to-Supabase-write candidate: consecutive statements in the
+same function must assign a literal HTTPS `fetch` response, assign
+`response.json()`, and call `supabase.from('table').insert` or `upsert` with a
+direct `payload.field` value. When a connected OpenAPI response field changes,
+the finding links the pinned API call and database write line. Branches,
+aliases, helpers, dynamic fields, and cross-file flow remain unresolved. This
+is static code evidence, not a runtime failure or proof of a customer database
+schema conflict.
+
 `DATABASE_ACCESS.md` describes the optional customer-run Postgres metadata
 probe, authenticated workspace ingestion endpoint, and explicit API-field-to-
 column mapping. A current-contract request mismatch can attach a recent schema

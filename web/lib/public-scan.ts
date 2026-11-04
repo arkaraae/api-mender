@@ -1,7 +1,8 @@
 import { parseStaticHttpCalls } from './static-http-calls.ts';
+import { traceStaticDatabaseWrites, type DatabaseWriteTrace } from './static-database-flow.ts';
 
 type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
-type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string; origin?: string; fieldsComplete?: boolean; bodyLine?: number };
+type CallSite = { file: string; line: number; symbol: string; endpoint: string; fields: string[]; uncertain: boolean; reason: string; origin?: string; fieldsComplete?: boolean; bodyLine?: number; databaseWrites?: DatabaseWriteTrace[] };
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
@@ -57,6 +58,13 @@ export function extractCalls(file: string, source: string): CallSite[] {
       const operation = match[1];
       found.push({ file, line: source.slice(0, match.index).split('\n').length, symbol: `${operation}Command`, endpoint: `S3 ${operation}`, fields: [], uncertain: true, reason: 'Command construction found; request fields and upstream impact require model comparison' });
     }
+  }
+  const flows = source.includes('supabase') && /\.(insert|upsert)\s*\(/.test(source)
+    ? traceStaticDatabaseWrites(file, source) : [];
+  for (const call of found) {
+    const writes = flows.find(flow => flow.callLine === call.line && flow.endpoint === call.endpoint
+      && flow.origin === call.origin)?.databaseWrites;
+    if (writes?.length) call.databaseWrites = writes;
   }
   return found;
 }

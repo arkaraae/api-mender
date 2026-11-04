@@ -8,6 +8,8 @@ import BrandLogo from '@/components/brand-logo';
 import ManagedApiStudio from '@/components/managed-api-studio';
 import GitHubConnections from '@/components/github-connections';
 import RepairPreview from '@/components/repair-preview';
+import { Activity, ArrowUpRight, BookOpen, ChevronRight, CircleAlert,
+  FlaskConical, GitBranch, LayoutDashboard, PlugZap, RefreshCw, Search } from 'lucide-react';
 
 type Workspace = { id: string; name: string; owner_id: string };
 type CallSite = { file: string; line: number; symbol: string; endpoint?: string };
@@ -15,7 +17,11 @@ type Repository = { id: string; full_name: string; branch: string; head_sha: str
 type DatabaseImpact = { schemaLabel: string; table: string; column: string;
   status: 'column-present' | 'column-absent' | 'snapshot-missing' | 'snapshot-stale';
   notNull?: boolean; capturedAt?: string; schemaFingerprint?: string };
-type Finding = { id: string; title: string; description: string; severity: string; confidence: string; status: string; created_at: string; evidence: { kind?: string; sourceUrl?: string; previousVersion?: string; currentVersion?: string; note?: string; runUrl?: string; pullRequestUrl?: string; databaseImpact?: DatabaseImpact[] } };
+type DatabaseWrite = { responseField: string; table: string; column: string; writeLine: number; sourceUrl: string };
+type ConsumerCandidate = { repository: string; file: string; line: number; endpoint: string;
+  sourceUrl: string; databaseWrites?: DatabaseWrite[] };
+type Finding = { id: string; title: string; description: string; severity: string; confidence: string; status: string; created_at: string; evidence: { kind?: string; sourceUrl?: string; contractUrl?: string; codeUrl?: string; previousVersion?: string; currentVersion?: string; note?: string; runUrl?: string; pullRequestUrl?: string; databaseImpact?: DatabaseImpact[]; consumerCandidates?: ConsumerCandidate[]; missing?: string[]; report?: { changes?: { title: string; fields: string[] }[] } } };
+type Section = 'overview' | 'findings' | 'repositories' | 'integrations' | 'monitor' | 'lab';
 type AwsRelease = { version: string; publishedAt: string; evidenceUrl: string; summary: string };
 type AwsSnapshot = { retrieved_at: string; metadata: AwsRelease };
 
@@ -28,6 +34,20 @@ function DatabaseImpactEvidence({ impacts }: { impacts?: DatabaseImpact[] }) {
         : impact.status.replace('-', ' ')}
       {impact.capturedAt && <> · snapshot {new Date(impact.capturedAt).toLocaleString()}</>}
     </li>)}</ul><p>A schema match is a possible impact, not a verified production failure.</p></div>;
+}
+
+function FindingSummary({ finding, onOpen }: { finding: Finding; onOpen: () => void }) {
+  const writes = finding.evidence?.consumerCandidates?.reduce((total, candidate) =>
+    total + (candidate.databaseWrites?.length || 0), 0) || 0;
+  return <article className="workspace-finding-card">
+    <div className="workspace-finding-top"><span className="workspace-status-dot" />
+      <span>{finding.evidence?.kind === 'request-schema-mismatch' ? 'Request mismatch' : 'API change'}</span>
+      <time>{new Date(finding.created_at).toLocaleDateString()}</time></div>
+    <h3>{finding.title}</h3><p>{finding.description}</p>
+    <div className="workspace-finding-foot"><span>{finding.severity} · {finding.confidence}</span>
+      {writes > 0 && <span>{writes} database write {writes === 1 ? 'trace' : 'traces'}</span>}
+      <button type="button" onClick={onOpen}>Open evidence <ArrowUpRight size={14} /></button></div>
+  </article>;
 }
 
 function AwsSdkSection({ snapshot, busy, onCheck }: { snapshot: AwsSnapshot | null; busy: boolean; onCheck: () => void }) {
@@ -78,6 +98,21 @@ export default function LiveWorkspace() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [section, setSection] = useState<Section>('overview');
+  const [search, setSearch] = useState('');
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash === 'ci-proof-setup') setSection('integrations');
+      else if (['overview', 'findings', 'repositories', 'integrations', 'monitor', 'lab'].includes(hash))
+        setSection(hash as Section);
+    };
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
 
   const refresh = useCallback(async (uid: string) => {
     if (!supabase) return;
@@ -211,10 +246,55 @@ export default function LiveWorkspace() {
 
   if (!supabase) return <main className="live-shell"><a href="/">← Home</a><h1>Live workspace unavailable</h1><p>Set the public Supabase URL and publishable key in the app environment.</p></main>;
   if (!ready || !user) return <AuthScreen ready={ready} email={email} password={password} message={message} busy={busy} awaitingConfirmation={awaitingConfirmation} onEmailChange={setEmail} onPasswordChange={setPassword} onAuthenticate={authenticate} onResend={resendConfirmation} onBack={() => { setAwaitingConfirmation(false); setMessage(''); }} />;
-  return <main className="live-shell"><header className="live-header"><a href="/">← Home</a><div className="live-brand"><BrandLogo /><span>LIVE WORKSPACE</span></div>{user && <button onClick={() => void supabase.auth.signOut()}>Sign out</button>}</header>
-    <><div className="live-intro"><div><div className="eyebrow">CONNECTED TO SUPABASE</div><h1>{workspace?.name || 'Create a workspace'}</h1><p>Signed in as {user.email}. Repository scans use the current public GitHub commit.</p></div><span className="live-badge">LIVE DATA</span></div>
-        {!workspace ? <section className="live-card"><h2>Your workspace</h2><p>Create a workspace before adding repositories.</p><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => setWorkspaceName(event.target.value)} /></label><button disabled={busy || !workspaceName.trim()} onClick={() => void createWorkspace()}>Create workspace</button></section>
-          : <><section className="live-stats"><div><span>REPOSITORIES</span><strong>{repositories.length}</strong></div><div><span>FINDINGS</span><strong>{findings.length}</strong></div><div><span>SCANNED</span><strong>{repositories.filter(repo => repo.scanned_at).length}</strong></div></section><ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /><GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} /><AwsSdkSection snapshot={awsSnapshot} busy={busy} onCheck={() => void checkAwsSdk()} /><section className="live-card"><h2>Check official Stripe sources</h2><p>Compares the latest Stripe Node release and OpenAPI file with your workspace baseline. A changed source creates an informational review item for scanned Stripe repositories; it does not claim a breaking API change.</p><button disabled={busy} onClick={() => void checkSources()}>Check Stripe sources</button></section><section className="live-card"><h2>Add a public GitHub repository</h2><p>Public scans read source files only. Private access and pull requests need a GitHub App installation.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => setRepositoryName(event.target.value)} /></label><label>Branch<input value={branch} onChange={event => setBranch(event.target.value)} /></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim()} onClick={() => void addRepository()}>Add repository</button></section><section className="live-card"><h2>Monitored repositories</h2>{repositories.length ? <div className="live-list">{repositories.map(repo => <article key={repo.id}><div><strong><a href={`https://github.com/${repo.full_name}`} target="_blank" rel="noopener noreferrer">{repo.full_name} ↗</a></strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? new Date(repo.scanned_at).toLocaleString() : 'Waiting for first scan'}</small><RepositoryInventory repository={repo} />{repo.limitations.length > 0 && <p className="live-muted">{repo.limitations.join('; ')}</p>}</div>{repo.api_version?.startsWith('quotes-') ? <a href="/demo">View testbed ↗</a> : <button disabled={busy || repo.paused} onClick={() => void scan(repo.id)}>Scan now</button>}</article>)}</div> : <p className="live-muted">No repositories registered.</p>}</section><section className="live-card"><h2>Findings</h2>{findings.length ? findings.map(finding => <article key={finding.id} className="live-finding"><strong>{finding.title}</strong><p>{finding.description}</p><small>{finding.severity} · {finding.confidence} · {finding.status} · {new Date(finding.created_at).toLocaleString()}</small>{finding.evidence?.sourceUrl && <p><a href={finding.evidence.sourceUrl} target="_blank" rel="noopener noreferrer">API source ↗</a> · {finding.evidence.note}</p>}{finding.evidence?.runUrl && <p><a href={finding.evidence.runUrl} target="_blank" rel="noopener noreferrer">Scan and database artifact ↗</a>{finding.evidence.pullRequestUrl && <> · <a href={finding.evidence.pullRequestUrl} target="_blank" rel="noopener noreferrer">Review proposed fix ↗</a></>}</p>}<DatabaseImpactEvidence impacts={finding.evidence?.databaseImpact} />{finding.evidence?.kind === "request-schema-mismatch" && <RepairPreview database={supabase} workspaceId={workspace.id} findingId={finding.id} />}</article>) : <p className="live-muted">No official source changes have been recorded beyond the baseline. Run a repository scan and source check to begin monitoring.</p>}</section></>}
-      </>{message && <p className="live-message" role="status">{message}</p>}
+
+  const navigation = [
+    { id: 'overview' as Section, label: 'Overview', icon: LayoutDashboard },
+    { id: 'findings' as Section, label: 'Findings', icon: CircleAlert, count: findings.length },
+    { id: 'repositories' as Section, label: 'Repositories', icon: GitBranch, count: repositories.length },
+    { id: 'integrations' as Section, label: 'Integrations', icon: PlugZap },
+    { id: 'monitor' as Section, label: 'Monitor', icon: Activity },
+    { id: 'lab' as Section, label: 'Evidence lab', icon: FlaskConical },
+  ];
+  const sectionTitle = navigation.find(item => item.id === section)?.label || 'Overview';
+  const query = search.trim().toLowerCase();
+  const visibleFindings = findings.filter(finding => !query || `${finding.title} ${finding.description}`.toLowerCase().includes(query));
+  const visibleRepositories = repositories.filter(repo => !query || repo.full_name.toLowerCase().includes(query));
+  const selectedFinding = findings.find(finding => finding.id === selectedFindingId) || findings[0];
+  const openSection = (next: Section) => { setSection(next); window.location.hash = next; };
+  const openFinding = (finding: Finding) => { setSelectedFindingId(finding.id); openSection('lab'); };
+  const candidates = selectedFinding?.evidence?.consumerCandidates || [];
+  const writes = candidates.flatMap(candidate => (candidate.databaseWrites || []).map(write => ({ ...write, repository: candidate.repository })));
+
+  return <main className="workspace-app">
+    <aside className="workspace-sidebar">
+      <a href="/" className="workspace-logo" aria-label="Mend home"><BrandLogo /></a>
+      <div className="workspace-switcher"><span className="workspace-avatar">{(workspace?.name || 'M').charAt(0).toUpperCase()}</span><div><strong>{workspace?.name || 'Your workspace'}</strong><small>Team workspace</small></div></div>
+      <p className="workspace-nav-heading">WORKSPACE</p>
+      <nav aria-label="Workspace sections">{navigation.map(item => { const Icon = item.icon; return <button key={item.id} type="button" className={section === item.id ? 'active' : ''} aria-current={section === item.id ? 'page' : undefined} onClick={() => openSection(item.id)}><Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>{item.count !== undefined && <em>{item.count}</em>}</button>; })}</nav>
+      <div className="workspace-sidebar-bottom"><BookOpen size={16} /><span>API changes, with evidence</span></div>
+    </aside>
+    <div className="workspace-main">
+      <header className="workspace-topbar"><div className="workspace-breadcrumb"><span>{workspace?.name || 'Workspace'}</span><ChevronRight size={14} /><strong>{sectionTitle}</strong></div>
+        <label className="workspace-search"><Search size={17} /><input aria-label="Search findings and repositories" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search findings or repositories" /></label>
+        <div className="workspace-account"><button type="button" aria-label="Refresh workspace" title="Refresh workspace" onClick={() => void refresh(user.id)}><RefreshCw size={15} /></button><span title={user.email}>{user.email}</span><button type="button" onClick={() => void supabase.auth.signOut()}>Sign out</button></div></header>
+      <div className="workspace-content">
+        <div className="workspace-page-head"><div><span className="workspace-eyebrow">MEND / {sectionTitle.toUpperCase()}</span><h1>{sectionTitle}</h1><p>{section === 'lab' ? 'Compare the contract change, consumer code, and database evidence.' : 'Monitor upstream changes and review what your connected code actually uses.'}</p></div><span className="workspace-live-tag">STAGING DATA</span></div>
+        {!workspace ? <section className="live-card"><h2>Create your workspace</h2><p>Connect repositories and API sources after creating a workspace.</p><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => setWorkspaceName(event.target.value)} /></label><button disabled={busy || !workspaceName.trim()} onClick={() => void createWorkspace()}>Create workspace</button></section> : <>
+          {section === 'overview' && <>
+            <section className="workspace-metrics" aria-label="Workspace totals"><div><span>Repositories</span><strong>{repositories.length}</strong><small>Connected or registered</small></div><div><span>Findings</span><strong>{findings.length}</strong><small>Recorded review items</small></div><div><span>Scanned</span><strong>{repositories.filter(repo => repo.scanned_at).length}</strong><small>With pinned source inventory</small></div><div><span>Needs review</span><strong>{findings.filter(finding => finding.status === 'Action required').length}</strong><small>Awaiting evidence or repair</small></div></section>
+            <div className="workspace-overview-grid"><section className="workspace-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">RECENT ACTIVITY</span><h2>Findings</h2></div><button type="button" onClick={() => openSection('findings')}>View all <ArrowUpRight size={14} /></button></div><div className="workspace-card-list">{visibleFindings.length ? visibleFindings.slice(0, 4).map(finding => <FindingSummary key={finding.id} finding={finding} onOpen={() => openFinding(finding)} />) : <p className="workspace-empty">No findings match this search.</p>}</div></section>
+              <div className="workspace-overview-side"><section className="workspace-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">CONNECTED CODE</span><h2>Repositories</h2></div><button type="button" onClick={() => openSection('repositories')}>View all <ArrowUpRight size={14} /></button></div>{visibleRepositories.length ? visibleRepositories.slice(0, 4).map(repo => <div key={repo.id} className="workspace-repo-mini"><GitBranch size={16} /><div><strong>{repo.full_name}</strong><small>{repo.scanned_at ? `Scanned ${new Date(repo.scanned_at).toLocaleDateString()}` : 'Not scanned yet'}</small></div></div>) : <p className="workspace-empty">No repositories match this search.</p>}</section><section className="workspace-panel workspace-next-step"><span className="workspace-eyebrow">NEXT CHECK</span><h2>Follow the evidence</h2><p>Review a changed contract, the pinned consumer call, and any database write trace before opening a repair.</p><button type="button" onClick={() => openSection('lab')}>Open evidence lab <ArrowUpRight size={15} /></button></section></div></div>
+          </>}
+          {section === 'findings' && <section className="workspace-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">CHANGE MONITOR</span><h2>All findings</h2></div><span className="workspace-count">{visibleFindings.length} shown</span></div><div className="workspace-card-list">{visibleFindings.length ? visibleFindings.map(finding => <FindingSummary key={finding.id} finding={finding} onOpen={() => openFinding(finding)} />) : <p className="workspace-empty">No findings match this search.</p>}</div></section>}
+          {section === 'repositories' && <div className="workspace-column"><section className="live-card"><h2>Monitored repositories</h2>{visibleRepositories.length ? <div className="live-list">{visibleRepositories.map(repo => <article key={repo.id}><div><strong><a href={`https://github.com/${repo.full_name}`} target="_blank" rel="noopener noreferrer">{repo.full_name} ↗</a></strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? new Date(repo.scanned_at).toLocaleString() : 'Waiting for first scan'}</small><RepositoryInventory repository={repo} />{repo.limitations.length > 0 && <p className="live-muted">{repo.limitations.join('; ')}</p>}</div>{repo.api_version?.startsWith('quotes-') ? <a href="/demo">View testbed ↗</a> : <button disabled={busy || repo.paused} onClick={() => void scan(repo.id)}>Scan now</button>}</article>)}</div> : <p className="workspace-empty">No repositories match this search.</p>}</section><section className="live-card"><h2>Add a public GitHub repository</h2><p>Private repositories connect through the GitHub App in Integrations.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => setRepositoryName(event.target.value)} /></label><label>Branch<input value={branch} onChange={event => setBranch(event.target.value)} /></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim()} onClick={() => void addRepository()}>Add repository</button></section></div>}
+          {section === 'integrations' && <div className="workspace-column"><GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} /><ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /></div>}
+          {section === 'monitor' && <div className="workspace-column"><AwsSdkSection snapshot={awsSnapshot} busy={busy} onCheck={() => void checkAwsSdk()} /><section className="live-card"><h2>Check official Stripe sources</h2><p>Compares the latest Stripe Node release and OpenAPI file with your workspace baseline. A change creates a review item for scanned Stripe repositories.</p><button disabled={busy} onClick={() => void checkSources()}>Check Stripe sources</button></section></div>}
+          {section === 'lab' && <><div className="workspace-lab-toolbar"><label>Finding<select value={selectedFinding?.id || ''} onChange={event => setSelectedFindingId(event.target.value)}>{findings.map(finding => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select></label><span>Static evidence · runtime verification required</span></div>{selectedFinding ? <><div className="workspace-lab-grid"><section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">01 / UPSTREAM</div><h2>Contract change</h2><p>{selectedFinding.title}</p>{selectedFinding.evidence?.report?.changes?.map((change, index) => <div className="workspace-evidence-row" key={index}><strong>{change.title}</strong><small>{change.fields.join(', ')}</small></div>)}{selectedFinding.evidence?.missing?.length ? <div className="workspace-evidence-row"><strong>Required field missing</strong><small>{selectedFinding.evidence.missing.join(', ')}</small></div> : null}{(selectedFinding.evidence?.contractUrl || selectedFinding.evidence?.sourceUrl) && <a className="workspace-evidence-link" href={selectedFinding.evidence.contractUrl || selectedFinding.evidence.sourceUrl} target="_blank" rel="noopener noreferrer">Pinned API source <ArrowUpRight size={14} /></a>}</section>
+                    <section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">02 / CONSUMER</div><h2>Code path</h2><p>{candidates.length ? `${candidates.length} matching call candidate${candidates.length === 1 ? '' : 's'}` : selectedFinding.evidence?.codeUrl ? 'Pinned request body' : 'No linked consumer call'}</p>{candidates.slice(0, 10).map((candidate, index) => <div className="workspace-evidence-row" key={`${candidate.file}:${candidate.line}:${index}`}><strong>{candidate.repository}</strong><a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer">{candidate.file}:{candidate.line} <ArrowUpRight size={12} /></a><small>{candidate.endpoint}</small></div>)}{selectedFinding.evidence?.codeUrl && <a className="workspace-evidence-link" href={selectedFinding.evidence.codeUrl} target="_blank" rel="noopener noreferrer">Pinned consumer code <ArrowUpRight size={14} /></a>}</section>
+                    <section className="workspace-panel workspace-lab-card"><div className="workspace-lab-label">03 / DATABASE</div><h2>Write evidence</h2><p>{writes.length ? 'Direct static response-to-write candidates' : 'No direct database write traced for this change'}</p>{writes.slice(0, 10).map((write, index) => <div className="workspace-evidence-row" key={`${write.repository}:${write.writeLine}:${index}`}><strong>public.{write.table}.{write.column}</strong><small>From response field {write.responseField}</small><a href={write.sourceUrl} target="_blank" rel="noopener noreferrer">{write.repository}:{write.writeLine} <ArrowUpRight size={12} /></a></div>)}<DatabaseImpactEvidence impacts={selectedFinding.evidence?.databaseImpact} /><small className="workspace-evidence-caution">A code trace or schema match does not prove a production failure.</small></section></div><section className="workspace-panel workspace-repair-panel"><div className="workspace-panel-head"><div><span className="workspace-eyebrow">VALIDATION</span><h2>Repair and customer CI</h2></div></div><p>{selectedFinding.description}</p>{selectedFinding.evidence?.kind === 'request-schema-mismatch' ? <RepairPreview database={supabase} workspaceId={workspace.id} findingId={selectedFinding.id} /> : <p className="workspace-empty">A bounded repair is available only for supported literal request body mismatches.</p>}</section></> : <p className="workspace-empty">No finding is available for review yet.</p>}</>}
+        </>}
+        {message && <p className="live-message" role="status">{message}</p>}
+      </div>
+    </div>
   </main>;
 }
