@@ -8,22 +8,12 @@
 // Storage is anything with the Workers KV methods: get(key, 'json'|'text'), put(key, value,
 // { metadata }), delete(key), list({ prefix, cursor }). The tests pass an in-memory one.
 
-const MAX_BYTES = 20 * 1024 * 1024;
+import { boundedBody, fetchPublicSource, publicHttps } from './public-source.js';
+
+export { publicHttps } from './public-source.js';
 const MAX_VERSIONS = 20;
 const DAY = 24 * 60 * 60 * 1000;
 export const CHECK_AGAIN_AFTER = 60 * 1000;
-
-// Only public https addresses: not this site, not local or private names.
-export function publicHttps(raw, what) {
-  let url;
-  try { url = new URL(String(raw ?? '').trim()); } catch { throw new Error(`Enter the full address of the ${what}, starting with https://`); }
-  const host = url.hostname.toLowerCase();
-  if (url.protocol !== 'https:') throw new Error(`The ${what} must start with https://`);
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || /^[\d.]+$/.test(host) || host.includes(':')) {
-    throw new Error(`The ${what} must be on a public website.`);
-  }
-  return url;
-}
 
 export function newId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -52,15 +42,14 @@ async function download(url, previous, fetcher) {
   if (previous?.lastModified) headers['if-modified-since'] = previous.lastModified;
   let response;
   try {
-    response = await fetcher(url, { headers, redirect: 'follow', signal: AbortSignal.timeout(20_000) });
-  } catch {
+    ({ response } = await fetchPublicSource(url, { fetcher, headers, blockedHostname: 'apimender.com' }));
+  } catch (error) {
+    if (error instanceof Error && !['TypeError', 'TimeoutError', 'AbortError'].includes(error.name)) throw error;
     throw new Error(`Could not reach ${new URL(url).hostname}.`);
   }
   if (response.status === 304) return { unchanged: true };
   if (!response.ok) throw new Error(`${new URL(url).hostname} answered ${response.status}.`);
-  if (Number(response.headers.get('content-length') || 0) > MAX_BYTES) throw new Error('The description is larger than 20 MB.');
-  const body = await response.arrayBuffer();
-  if (body.byteLength > MAX_BYTES) throw new Error('The description is larger than 20 MB.');
+  const body = await boundedBody(response);
   const start = new TextDecoder().decode(body.slice(0, 8192));
   if (!/\b(openapi|swagger)\b/i.test(start)) throw new Error('That address does not serve an OpenAPI or Swagger description.');
   return { body, start, etag: response.headers.get('etag'), lastModified: response.headers.get('last-modified'), hash: await sha256(body), size: body.byteLength };

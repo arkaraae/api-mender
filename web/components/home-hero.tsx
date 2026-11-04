@@ -1,14 +1,13 @@
 'use client';
 
-// The homepage: a full-screen opening over the film of a chain of requests, then the live
-// gateway: the team's film of the machine with the X-ray lens, a switch for Mender, and a real
+// The homepage: a centered opening over a faint grid, with floating API tiles, two buttons
+// and the mascot at a glowing horizon; then the live gateway: the team's film of the machine with the X-ray lens, a switch for Mender, and a real
 // call to the live Quotes API (version 2) sent from this page, with or without Mender.
 import { useState } from 'react';
+import FloatingTiles from '@/components/floating-tiles';
 import GatewayScene from '@/components/gateway-scene';
 import HeroCards from '@/components/hero-cards';
 import HeroNav from '@/components/hero-nav';
-import Mascot from '@/components/mascot';
-import XrayLens from '@/components/xray-lens';
 
 type Answer = { status: number; ms: number; throughMender: boolean; detail: string };
 
@@ -48,26 +47,27 @@ export default function HomeHero() {
   return (
     <>
       <section className="hero" aria-labelledby="home-title">
-        <video className="hero-film" autoPlay muted loop playsInline poster="/hero-bg.jpg" src="/hero-bg.mp4" aria-hidden="true" />
-        {/* Over the chain of requests, the same X-ray lens as on the machine below; never over the text or the cards. */}
-        <XrayLens mender={mender} ignore=".hero-copy, .hero-side, .hero-nav, .hero-menu" />
         <HeroNav />
-        <div className="hero-body">
-          <div className="hero-copy">
-            <h1 id="home-title">
-              <span className="hero-anim hero-reveal" style={{ animationDelay: '.2s' }}>APIs change.</span>
-              <span className="hero-anim hero-reveal" style={{ animationDelay: '.38s' }}>Nothing <span className="line-mask">breaks.</span></span>
-            </h1>
-            <p className="hero-lead hero-anim hero-fade" style={{ animationDelay: '.65s' }}>Mender checks the change, fixes the code that calls the API, and keeps old apps working through its gateway. No AI runs on your traffic.</p>
-            <div className="hero-actions hero-anim hero-fade" style={{ animationDelay: '.8s' }}>
-              <a className="hero-button" href="/check">CHECK A CHANGE</a>
-              <a className="hero-link" href="#gateway">See the gateway ↓</a>
-            </div>
+        <span className="hero-grid" aria-hidden="true" />
+        <span className="hero-grid hero-grid-lit" aria-hidden="true" />
+        <FloatingTiles />
+        <div className="hero-copy">
+          <p className="hero-badge hero-anim hero-fade" style={{ animationDelay: '.1s' }}><b>Beta</b>Pro is free while we are in beta</p>
+          <h1 id="home-title">
+            <span className="hero-anim hero-reveal hero-dim" style={{ animationDelay: '.2s' }}>APIs change.</span>
+            <span className="hero-anim hero-reveal" style={{ animationDelay: '.38s' }}>Your integrations shouldn&apos;t break.</span>
+          </h1>
+          <p className="hero-lead hero-anim hero-fade" style={{ animationDelay: '.65s' }}>Mender checks the change, fixes the code that calls the API, and keeps old apps working through its gateway. No AI runs on your traffic.</p>
+          <div className="hero-actions hero-anim hero-fade" style={{ animationDelay: '.8s' }}>
+            <a className="hero-button" href="/check">Start for free</a>
+            <a className="hero-demo" href="#join">Book a demo<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></a>
           </div>
-          <div className="hero-side hero-anim hero-fade" style={{ animationDelay: '.95s' }}>
-            <Mascot className="hero-mascot" size={120} label="Mender, the mascot, following your pointer with its eyes" />
-            <HeroCards />
-          </div>
+        </div>
+        <div className="hero-horizon" aria-hidden="true">
+          <img className="hero-mascot" src="/mend-mascot-dark.png" alt="" width={442} height={360} />
+        </div>
+        <div className="hero-side hero-anim hero-fade" style={{ animationDelay: '.95s' }}>
+          <HeroCards />
         </div>
       </section>
 

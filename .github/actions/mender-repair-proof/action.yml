@@ -1,0 +1,18 @@
+name: Mender repair proof
+description: Reproduce a breaking API test on the PR base and pass it on the proposed repair commit
+inputs:
+  test-command:
+    description: Command that runs the customer's focused API regression test in a clean checkout
+    required: true
+  expected-before-output:
+    description: Exact text expected from the failing test before the repair
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Run before and after regression test
+      shell: bash
+      env:
+        MENDER_TEST_COMMAND: ${{ inputs.test-command }}
+        MENDER_EXPECTED_BEFORE_OUTPUT: ${{ inputs.expected-before-output }}
+      run: node "${{ github.action_path }}/verify.mjs"
