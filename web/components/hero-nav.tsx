@@ -1,9 +1,8 @@
 'use client';
 
-// The homepage's top bar: the mascot (eyes following the pointer) with the name in monospace,
-// the links, and on phones a menu button that turns into a cross and opens a full-screen menu.
+// The homepage's top bar: the Mend logo, the links, and on phones a menu button that turns into a cross and opens a full-screen menu.
 import { useEffect, useState } from 'react';
-import Mascot from '@/components/mascot';
+import BrandLogo from '@/components/brand-logo';
 
 const LINKS = [
   { href: '/check', label: 'Check a change' },
@@ -29,7 +28,7 @@ export default function HeroNav() {
   return (
     <>
       <nav className="hero-nav" aria-label="Main navigation">
-        <a className="hero-brand" href="/" aria-label="API Mender home"><Mascot size={30} /><span>MENDER</span></a>
+        <a className="hero-brand" href="/"><BrandLogo label="Mend home" /></a>
         <div className="hero-links">
           {LINKS.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
         </div>

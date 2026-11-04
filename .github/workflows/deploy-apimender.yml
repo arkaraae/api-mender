@@ -6,8 +6,8 @@ name: Deploy apimender.com
 # `apimender` environment, deploy, then make sure the live site and the gateway still answer.
 #
 # Needs the repository secret CLOUDFLARE_API_TOKEN: a Cloudflare API token for the apimender.com
-# account that can edit Workers, KV, D1 and the apimender.com Worker routes. Until it is set, the
-# workflow only runs the checks and says so.
+# account that can edit Workers, KV, D1 and the apimender.com Worker routes. A missing token
+# fails the release instead of reporting a successful run that never deployed.
 
 on:
   push:
@@ -50,11 +50,10 @@ jobs:
         id: token
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::warning::Not deployed: the repository secret CLOUDFLARE_API_TOKEN is not set. See .github/workflows/deploy-apimender.yml."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Deployment blocked: add the CLOUDFLARE_API_TOKEN repository secret."
+            exit 1
           fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Apply new database migrations
         if: steps.token.outputs.ready == 'true'
