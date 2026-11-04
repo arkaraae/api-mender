@@ -6,6 +6,7 @@ import './demo.css';
 import './brand.css';
 import './public.css';
 import './live/workspace.css';
+import './live/workspace-sketch.css';
 
 export const metadata: Metadata = { title: 'API Mender · API change monitor', description: 'Review evidence, impact, and patches for integration changes.' };
 // DM Sans for the public pages, JetBrains Mono for requests and code (see app/public.css), Fredoka for the homepage's headings.
