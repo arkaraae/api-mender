@@ -7,6 +7,7 @@ import { publishDraftRepair } from '@/lib/repair-pr';
 const noStore = { 'Cache-Control': 'no-store' };
 const publishingOrigins = new Set([
   'https://api-mender-staging.amorales8.workers.dev',
+  'https://api-mender-owner-preview.amorales8.workers.dev',
   'https://apimender.com',
 ]);
 const filePath = /^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/;
