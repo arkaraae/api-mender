@@ -1,10 +1,10 @@
 -- Provider calls are opt-in and capped before any model request is sent.
 alter table public.repair_jobs
-  add column generation_method text not null default 'deterministic'
+  add column if not exists generation_method text not null default 'deterministic'
     check (generation_method in ('deterministic', 'ai_assisted')),
-  add column model_id text;
+  add column if not exists model_id text;
 
-create table public.ai_repair_usage (
+create table if not exists public.ai_repair_usage (
   workspace_id uuid not null,
   day_utc date not null,
   attempts integer not null default 0 check (attempts >= 0),
@@ -15,7 +15,7 @@ alter table public.ai_repair_usage enable row level security;
 revoke all on public.ai_repair_usage from public, anon, authenticated;
 grant select, insert, update on public.ai_repair_usage to service_role;
 
-create function public.claim_ai_repair_budget(p_workspace_id uuid)
+create or replace function public.claim_ai_repair_budget(p_workspace_id uuid)
 returns boolean language plpgsql security definer set search_path = public
 as $$
 declare
