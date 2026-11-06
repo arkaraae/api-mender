@@ -53,6 +53,11 @@
     "owner_live": {
       "name": "api-mender-live",
       "account_id": "7612d5858e401cec8307c5e25c486494",
+      "workers_dev": true,
+      "routes": [
+        { "pattern": "apimender.com", "custom_domain": true },
+        { "pattern": "www.apimender.com", "custom_domain": true }
+      ],
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
@@ -60,7 +65,7 @@
         "GITHUB_APP_ID": "5635720",
         "GITHUB_APP_CLIENT_ID": "Iv23liTisZHjuAalZ3Bf",
         "GITHUB_APP_SLUG": "api-mender-connect",
-        "SITE_ORIGIN": "https://api-mender-live.amorales8.workers.dev"
+        "SITE_ORIGIN": "https://apimender.com"
       }
     },
     // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
