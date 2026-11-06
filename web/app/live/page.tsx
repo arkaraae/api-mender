@@ -14,7 +14,7 @@ import { Activity, ArrowUpRight, Bell, ChevronRight, CircleAlert, Folder, Grid2X
 
 type Workspace = { id: string; name: string; owner_id: string };
 type CallSite = { file: string; line: number; symbol: string; endpoint?: string };
-type Repository = { id: string; full_name: string; branch: string; head_sha: string | null; target_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: CallSite[]; limitations: string[]; scanned_at: string | null; paused: boolean; github_installation_id: number | null };
+type Repository = { id: string; full_name: string; branch: string; visibility: string; head_sha: string | null; target_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: CallSite[]; limitations: string[]; scanned_at: string | null; paused: boolean; github_installation_id: number | null };
 type DatabaseImpact = { schemaLabel: string; table: string; column: string;
   status: 'column-present' | 'column-absent' | 'snapshot-missing' | 'snapshot-stale';
   notNull?: boolean; capturedAt?: string; schemaFingerprint?: string };
@@ -121,7 +121,7 @@ export default function LiveWorkspace() {
     setWorkspace(chosen);
     if (!chosen) { setRepositories([]); setFindings([]); setAwsSnapshot(null); setStripeCheckedAt(null); setContractSources([]); setContractVersions([]); setContractConsumers([]); setContractSnapshots([]); return; }
     const [repoResult, findingResult, awsResult, stripeResult, contractResult, versionResult, consumerResult, snapshotResult] = await Promise.all([
-      supabase.from('monitored_repositories').select('id,full_name,branch,head_sha,target_sha,sdk_version,api_version,call_sites,limitations,scanned_at,paused,github_installation_id').eq('workspace_id', chosen.id).order('created_at'),
+      supabase.from('monitored_repositories').select('id,full_name,branch,visibility,head_sha,target_sha,sdk_version,api_version,call_sites,limitations,scanned_at,paused,github_installation_id').eq('workspace_id', chosen.id).order('created_at'),
       supabase.from('findings').select('id,source_id,title,description,severity,confidence,status,created_at,evidence').eq('workspace_id', chosen.id).order('created_at', { ascending: false }).limit(100),
       supabase.from('source_snapshots').select('retrieved_at,metadata').eq('workspace_id', chosen.id).eq('provider', 'aws').eq('source_url', 'https://github.com/aws/aws-sdk-js-v3/releases').order('retrieved_at', { ascending: false }).limit(1),
       supabase.from('source_snapshots').select('retrieved_at').eq('workspace_id', chosen.id).eq('provider', 'stripe').order('retrieved_at', { ascending: false }).limit(1),

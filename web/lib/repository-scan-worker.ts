@@ -15,7 +15,7 @@ async function pollPublicContractSources(database: ReturnType<typeof backendAdmi
   const window = Math.floor(Date.now() / 900_000);
   if (Math.floor(Date.now() / 60_000) % 15 !== 0) return;
   const { data: sources, error } = await database.from('api_contract_sources')
-    .select('repository_id').eq('paused', false).order('created_at').limit(100);
+    .select('id,repository_id').eq('paused', false).order('created_at').limit(100);
   if (error) throw error;
   const ids = [...new Set((sources || []).map(source => source.repository_id))];
   if (!ids.length) return;
@@ -36,14 +36,33 @@ async function pollPublicContractSources(database: ReturnType<typeof backendAdmi
       if (!response.ok) continue;
       const branch = await response.json() as { commit?: { sha?: string } };
       const head = branch.commit?.sha;
-      if (!head || !/^[a-f0-9]{40}$/.test(head) || head === repository.target_sha) continue;
-      const { error: targetError } = await database.from('monitored_repositories')
-        .update({ target_sha: head }).eq('id', repository.id).eq('workspace_id', repository.workspace_id);
-      if (targetError) throw targetError;
-      const { error: jobError } = await database.from('repository_scan_jobs').upsert({
-        workspace_id: repository.workspace_id, repository_id: repository.id, head_sha: head,
-      }, { onConflict: 'repository_id,head_sha', ignoreDuplicates: true });
-      if (jobError) throw jobError;
+      if (!head || !/^[a-f0-9]{40}$/.test(head)) continue;
+      const sourceIds = (sources || []).filter(source => source.repository_id === id).map(source => source.id);
+      const { data: versions, error: versionError } = await database.from('api_contract_versions')
+        .select('source_id').in('source_id', sourceIds).eq('head_sha', head);
+      if (versionError) throw versionError;
+      const needsScan = (versions || []).length < sourceIds.length;
+      if (head === repository.target_sha && !needsScan) continue;
+      if (head !== repository.target_sha) {
+        const { error: targetError } = await database.from('monitored_repositories')
+          .update({ target_sha: head }).eq('id', repository.id).eq('workspace_id', repository.workspace_id);
+        if (targetError) throw targetError;
+      }
+      const { data: previous, error: previousError } = await database.from('repository_scan_jobs')
+        .select('id,status').eq('repository_id', repository.id).eq('head_sha', head).maybeSingle();
+      if (previousError) throw previousError;
+      if (previous && needsScan && ['succeeded', 'dead'].includes(previous.status)) {
+        const { error: resetError } = await database.from('repository_scan_jobs')
+          .update({ status: 'queued', attempts: 0, available_at: new Date().toISOString(),
+            lease_token: null, leased_until: null, finished_at: null, last_error: null })
+          .eq('id', previous.id);
+        if (resetError) throw resetError;
+      } else if (!previous) {
+        const { error: jobError } = await database.from('repository_scan_jobs').insert({
+          workspace_id: repository.workspace_id, repository_id: repository.id, head_sha: head,
+        });
+        if (jobError && jobError.code !== '23505') throw jobError;
+      }
     } catch (error) {
       console.warn('Public contract source poll failed', error instanceof Error ? error.message : 'unknown error');
     }
