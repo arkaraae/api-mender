@@ -6,6 +6,8 @@ const LINKS = [
   { href: '/mender', label: 'Gateway' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'Demo' },
+  { href: '/docs', label: 'Setup guide' },
+  { href: '/live', label: 'Sign in' },
 ];
 
 // The top bar of the public pages; "dark" for the homepage's black top.
