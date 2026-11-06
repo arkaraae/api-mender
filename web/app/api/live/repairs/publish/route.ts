@@ -73,10 +73,12 @@ export async function POST(request: Request) {
     .select('id,repository_id,paused').eq('id', evidence.sourceId)
     .eq('workspace_id', body.workspaceId).maybeSingle();
   if (sourceError || !source || source.paused) return reply(409, 'API source is unavailable');
-  const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
-    .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
-    .eq('repository_id', repository.id).maybeSingle();
-  if (bindingError || !binding || binding.paused) return reply(409, 'Consumer binding is unavailable');
+  if (source.repository_id !== repository.id) {
+    const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
+      .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
+      .eq('repository_id', repository.id).maybeSingle();
+    if (bindingError || !binding || binding.paused) return reply(409, 'Consumer binding is unavailable');
+  }
   const { data: sourceRepository, error: sourceRepoError } = await database.from('monitored_repositories')
     .select('head_sha,target_sha,paused').eq('id', source.repository_id)
     .eq('workspace_id', body.workspaceId).maybeSingle();

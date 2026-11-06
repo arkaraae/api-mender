@@ -47,12 +47,14 @@ export async function POST(request: Request) {
     .eq('workspace_id', body.workspaceId).maybeSingle();
   if (sourceError || !source || source.paused)
     return Response.json({ error: 'Connected API source is unavailable' }, { status: 409, headers: noStore });
-  const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
-    .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
-    .eq('repository_id', repository.id).maybeSingle();
-  if (bindingError || !binding || binding.paused)
-    return Response.json({ error: 'This repository is no longer connected to the API source' },
-      { status: 409, headers: noStore });
+  if (source.repository_id !== repository.id) {
+    const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
+      .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
+      .eq('repository_id', repository.id).maybeSingle();
+    if (bindingError || !binding || binding.paused)
+      return Response.json({ error: 'This repository is no longer connected to the API source' },
+        { status: 409, headers: noStore });
+  }
   const { data: sourceRepository, error: sourceRepoError } = await database.from('monitored_repositories')
     .select('head_sha,target_sha,paused').eq('id', source.repository_id)
     .eq('workspace_id', body.workspaceId).maybeSingle();
