@@ -58,6 +58,12 @@ export async function refreshRepairProofJob(database: SupabaseClient, config: Co
     if (pr.merge_commit_sha !== null && pr.merge_commit_sha !== undefined
       && (typeof pr.merge_commit_sha !== 'string' || !sha.test(pr.merge_commit_sha)))
       throw new Error('GitHub returned an invalid repair PR merge commit');
+    // GitHub keeps reporting the old base SHA on the PR and its check runs after
+    // the branch moves, so only the branch itself can show that proof went stale.
+    const baseBranch = await githubRead(
+      `https://api.github.com/repos/${repo}/branches/${encodeURIComponent(repository.branch)}`, token);
+    if (baseBranch.commit?.sha !== pr.base.sha)
+      throw new Error('The base branch moved after this repair PR was opened; rescan the latest commit and prepare a new repair');
     return { baseSha: pr.base.sha as string, mergeSha: pr.merge_commit_sha as string | null };
   };
   const current = await verifyPr();

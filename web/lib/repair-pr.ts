@@ -13,6 +13,7 @@ type PublishInput = {
   token: string; fullName: string; baseBranch: string; baseSha: string;
   jobId: string; file: string; source: string; patchedSource: string;
   sourceSha256: string; patchedSha256: string; blobSha: string;
+  generationMethod?: string; modelId?: string | null;
 };
 
 function pathSegments(value: string) { return value.split('/').map(encodeURIComponent).join('/'); }
@@ -112,6 +113,9 @@ export async function publishDraftRepair(input: PublishInput) {
   const title = `Mender: update API request for ${input.file}`.slice(0, 120);
   const body = `This draft changes one request field in \`${input.file}\` for repair job \`${input.jobId}\`.\n\n`
     + `Pinned consumer base: \`${input.baseSha}\`. Patched file SHA-256: \`${input.patchedSha256}\`.\n\n`
+    + (input.generationMethod === 'ai_assisted'
+      ? `**AI-assisted:** ${input.modelId ? `\`${input.modelId}\`` : 'An AI model'} chose which existing request field maps to the new required field, using only the operation and field names. Mender's bounded repair engine wrote the edit. Check this mapping first.\n\n`
+      : '')
     + '**Unverified:** customer CI must show the old request failing and the patched request passing. Review semantics before merging. Mender never merges this PR automatically.';
   const opened = await github(`${root}/pulls`, input.token, {
     method: 'POST', body: JSON.stringify({ title, head: branch, base: input.baseBranch, body, draft: true }),

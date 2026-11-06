@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return reply(503, 'GitHub App is not configured');
   const database = onboardingDatabase();
   const { data: job, error: jobError } = await database.from('repair_jobs')
-    .select('id,workspace_id,finding_id,repository_id,base_sha,contract_sha256,file_path,line_number,source_sha256,patched_sha256,old_field,new_field,before_snippet,after_snippet,status,pr_number,pr_url,patch_branch,patch_sha,publish_started_at')
+    .select('id,workspace_id,finding_id,repository_id,base_sha,contract_sha256,file_path,line_number,source_sha256,patched_sha256,old_field,new_field,before_snippet,after_snippet,status,pr_number,pr_url,patch_branch,patch_sha,publish_started_at,generation_method,model_id')
     .eq('id', body.jobId).eq('workspace_id', body.workspaceId).maybeSingle();
   if (jobError) return reply(502, 'Could not load repair job');
   if (!job) return reply(404, 'Repair job not found');
@@ -139,7 +139,8 @@ export async function POST(request: Request) {
       const published = await publishDraftRepair({ token: writeToken, fullName: repository.full_name,
         baseBranch: repository.branch, baseSha: job.base_sha, jobId: job.id, file: job.file_path,
         source: sourceText, patchedSource: proposal.afterSource, sourceSha256: job.source_sha256,
-        patchedSha256: job.patched_sha256, blobSha: file.sha });
+        patchedSha256: job.patched_sha256, blobSha: file.sha,
+        generationMethod: job.generation_method, modelId: job.model_id });
       const { data: saved, error: savedError } = await database.from('repair_jobs')
         .update({ status: 'proof_pending', publish_started_at: null,
           pr_number: published.prNumber, pr_url: published.prUrl,
