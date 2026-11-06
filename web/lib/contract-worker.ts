@@ -89,7 +89,7 @@ export async function processBoundContractConsumers(database: SupabaseClient,
 
 export async function processContractSources(database: SupabaseClient, repository: {
   id: string; workspace_id: string; full_name: string; target_sha: string | null;
-}, head: string, token: string, currentCalls: Call[]) {
+}, head: string, token: string | undefined, currentCalls: Call[]) {
   if (repository.target_sha !== head) return { checked: 0, changed: 0 };
   const { data: sources, error } = await database.from('api_contract_sources').select('id,workspace_id,path')
     .eq('repository_id', repository.id).eq('paused', false).limit(11);

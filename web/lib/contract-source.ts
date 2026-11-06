@@ -9,12 +9,12 @@ function validPath(path: string) {
   return path.length <= 256 && pathPattern.test(path) && !path.startsWith('/') && !path.split('/').some(part => part === '.' || part === '..');
 }
 
-export async function readGitHubContract(fullName: string, head: string, path: string, token: string) {
-  if (!repoPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head) || !validPath(path) || !token) throw new Error('Invalid contract source');
+export async function readGitHubContract(fullName: string, head: string, path: string, token?: string) {
+  if (!repoPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head) || !validPath(path)) throw new Error('Invalid contract source');
   const repo = fullName.split('/').map(encodeURIComponent).join('/');
   const filename = path.split('/').map(encodeURIComponent).join('/');
   const response = await fetch(`https://api.github.com/repos/${repo}/contents/${filename}?ref=${head}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-contract' },
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-contract' },
     redirect: 'manual', signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`GitHub contract fetch failed (${response.status})`);
