@@ -29,10 +29,12 @@
         "SITE_ORIGIN": "https://api-mender-staging.amorales8.workers.dev"
       }
     },
-    // Isolated preview in the owner's account. Attach fresh KV and D1 IDs before deploying.
+    // Isolated preview in the owner's account; no production domain routes or cron triggers.
     "owner_preview": {
       "name": "api-mender-owner-preview",
       "account_id": "7612d5858e401cec8307c5e25c486494",
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "5ca5d7069f5f44629b1c10e2c921e744" }],
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "api-mender-owner-preview", "database_id": "12c4a387-1f52-4917-9698-2b46da64c871", "migrations_dir": "migrations" }],
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://xedurkvshpszwevmhkzx.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_uF7jRot-UE-GLErDy8YO0g_BeBsdtms",
