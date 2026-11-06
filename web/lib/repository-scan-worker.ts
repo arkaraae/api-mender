@@ -2,9 +2,9 @@ import { backendAdmin } from './backend-admin.ts';
 import { installationToken } from './github-app.ts';
 import { scanInstallationRepository } from './public-scan.ts';
 import { processBoundContractConsumers, processContractSources } from './contract-worker.ts';
+import { reportFailure, type AlertConfig } from './failure-alert.ts';
 
-type Config = {
-  NEXT_PUBLIC_SUPABASE_URL?: string; SUPABASE_SECRET_KEY?: string;
+type Config = AlertConfig & {
   GITHUB_APP_ID?: string; GITHUB_APP_PRIVATE_KEY?: string;
 };
 
@@ -109,6 +109,7 @@ export async function processRepositoryScanJobs(config: Config) {
       });
       if (finishError || !finished) throw finishError || new Error('Scan lease expired');
     } catch (error) {
+      await reportFailure(config, 'repository-scan-job', error);
       await database.rpc('finish_repository_scan_job', {
         p_job_id: job.id, p_lease_token: job.lease_token, p_succeeded: false,
         p_error: error instanceof Error ? error.message : 'Scan failed',
