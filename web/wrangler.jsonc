@@ -5,6 +5,8 @@
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
+  // Keep Worker logs, including failure reports, in the Cloudflare dashboard.
+  "observability": { "enabled": true },
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
