@@ -81,6 +81,9 @@
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "GITHUB_APP_ID": "5635720",
+        "GITHUB_APP_CLIENT_ID": "Iv23liTisZHjuAalZ3Bf",
+        "GITHUB_APP_SLUG": "api-mender-connect",
         "SITE_ORIGIN": "https://apimender.com"
       }
     }
