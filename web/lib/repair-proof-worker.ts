@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { backendAdmin } from './backend-admin';
-import { installationToken } from './github-app';
-import { evaluateRepairProof } from './repair-proof';
+import { backendAdmin } from './backend-admin.ts';
+import { installationToken } from './github-app.ts';
+import { evaluateRepairProof } from './repair-proof.ts';
 
 type Config = {
   NEXT_PUBLIC_SUPABASE_URL?: string; SUPABASE_SECRET_KEY?: string;
@@ -84,25 +84,38 @@ export async function refreshRepairProofJob(database: SupabaseClient, config: Co
 }
 
 /** Refresh a bounded number of pending customer checks on each Worker cron. */
-export async function processRepairProofJobs(config: Config) {
+export async function processRepairProofJobs(config: Config,
+  databaseOverride?: SupabaseClient, refresh = refreshRepairProofJob) {
   if (!config.GITHUB_APP_ID || !config.GITHUB_APP_PRIVATE_KEY) return { checked: 0 };
-  const database = backendAdmin(config);
-  const { data: jobs, error } = await database.from('repair_jobs')
+  const database = databaseOverride || backendAdmin(config);
+  const { data: pending, error: pendingError } = await database.from('repair_jobs')
     .select('id,workspace_id,repository_id,pr_number,patch_branch,patch_sha,status')
     .in('status', ['proof_pending', 'proof_failed'])
     .lt('updated_at', new Date(Date.now() - 60_000).toISOString())
     .order('updated_at', { ascending: true }).limit(2);
-  if (error) throw error;
-  for (const job of jobs || []) {
-    try { await refreshRepairProofJob(database, config, job); }
+  if (pendingError) throw pendingError;
+  // A successful check is only proof for the exact PR base and patch. Recheck
+  // validated jobs so a moved base, changed PR, or revoked installation cannot
+  // leave a stale green result indefinitely.
+  const { data: validated, error: validatedError } = await database.from('repair_jobs')
+    .select('id,workspace_id,repository_id,pr_number,patch_branch,patch_sha,status')
+    .eq('status', 'validated')
+    .lt('updated_at', new Date(Date.now() - 10 * 60_000).toISOString())
+    .order('updated_at', { ascending: true }).limit(1);
+  if (validatedError) throw validatedError;
+  const jobs = [...(pending || []), ...(validated || [])];
+  for (const job of jobs) {
+    try { await refresh(database, config, job); }
     catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not verify customer CI';
       const { error: updateError } = await database.from('repair_jobs')
-        .update({ proof: { error: message, observedAt: new Date().toISOString() },
+        .update({ ...(job.status === 'validated' ? { status: 'proof_pending' } : {}),
+          proof: { error: message, observedAt: new Date().toISOString() },
           updated_at: new Date().toISOString() })
-        .eq('id', job.id).eq('workspace_id', job.workspace_id).eq('patch_sha', job.patch_sha);
+        .eq('id', job.id).eq('workspace_id', job.workspace_id).eq('patch_sha', job.patch_sha)
+        .eq('status', job.status);
       if (updateError) console.error('Could not record CI proof error', updateError);
     }
   }
-  return { checked: (jobs || []).length };
+  return { checked: jobs.length };
 }

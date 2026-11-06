@@ -20,7 +20,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
   const jobStatus = preview?.repairJob?.status;
 
   useEffect(() => {
-    if (!jobId || !['proof_pending', 'proof_failed'].includes(jobStatus || '')) return;
+    if (!jobId || !['proof_pending', 'proof_failed', 'validated'].includes(jobStatus || '')) return;
     let active = true;
     async function refreshSavedProof() {
       const { data, error: readError } = await database.from('repair_jobs')
@@ -35,6 +35,8 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
         setProofMessage('Customer CI proof passed. The draft PR still needs human review.');
       else if (data.status === 'proof_failed')
         setProofMessage('Customer CI failed. Review the check before retrying.');
+      else if (data.proof?.error)
+        setProofMessage('Previous CI proof is no longer current. Review the draft PR and rerun its check.');
       else if (data.proof?.url)
         setProofMessage('Customer CI is running. This repair will update when the check finishes.');
     }
