@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { authenticatedEditor, githubConfiguration, githubHeaders, githubJson, onboardingDatabase, sha256, statePattern } from '@/lib/github-onboarding';
 import { matchingInstallation, validAccessibleRepositories } from '@/lib/github-onboarding-policy';
+import { removedConnectedRepositoryIds } from '@/lib/github-installation-reconciliation';
 
 import type { VerifiedInstallation as Installation, AccessibleRepository as Repository } from '@/lib/github-onboarding-policy';
 
@@ -101,6 +102,21 @@ export async function POST(request: Request) {
         });
         if (!queueError && accepted) queued++;
       } catch { /* A later push can still queue a scan for this connected repository. */ }
+    }
+    // A completed OAuth sync is a complete snapshot of the repositories this
+    // user allowed the App to access. Remove rows that were previously attached
+    // to this installation but are no longer in that selection.
+    const { data: connectedRows, error: connectedError } = await database.from('monitored_repositories')
+      .select('id,github_repo_id').eq('workspace_id', attempt.workspace_id)
+      .eq('github_installation_id', selected.id).limit(101);
+    if (connectedError || !connectedRows || connectedRows.length > 100)
+      throw connectedError || new Error('Could not reconcile connected repositories');
+    const removedIds = removedConnectedRepositoryIds(connectedRows, repositories.filter(repo => !repo.archived).map(repo => repo.id));
+    if (removedIds.length) {
+      const { error: removeError } = await database.from('monitored_repositories')
+        .delete().eq('workspace_id', attempt.workspace_id).eq('github_installation_id', selected.id)
+        .in('id', removedIds);
+      if (removeError) throw removeError;
     }
     return Response.json({ account: selected.account.login, repositories: repositories.length, scansQueued: queued },
       { headers: { 'Cache-Control': 'no-store' } });
