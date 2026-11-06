@@ -9,6 +9,8 @@ const LINKS = [
   { href: '/watch', label: 'Watch an API' },
   { href: '/mender', label: 'Gateway' },
   { href: '/pricing', label: 'Pricing' },
+  { href: '/docs', label: 'Setup guide' },
+  { href: '/live', label: 'Sign in' },
 ];
 
 export default function HeroNav() {
