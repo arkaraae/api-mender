@@ -46,6 +46,18 @@
         "SITE_ORIGIN": "https://api-mender-owner-preview.amorales8.workers.dev"
       }
     },
+    // Customer backend candidate on the owner's account. No custom domain until
+    // installation, webhook, scan, and repair checks pass against production data.
+    "owner_live": {
+      "name": "api-mender-live",
+      "account_id": "7612d5858e401cec8307c5e25c486494",
+      "triggers": { "crons": ["* * * * *"] },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "SITE_ORIGIN": "https://api-mender-live.amorales8.workers.dev"
+      }
+    },
     // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
     // It replaces the pass-through Worker that served apimender.com until now, keeping its domains.
     "apimender": {
