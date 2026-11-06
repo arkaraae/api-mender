@@ -80,7 +80,7 @@ export default function GitHubConnections({ database, workspaceId, repositories,
 
   return <section className="live-card">
     <h2>Connect GitHub and APIs</h2>
-    <p>Install API Mender Scanner on the repositories you choose in GitHub. Mender reads their code and checks saved API contracts against the consumer repositories you connect below.</p>
+    <p>Install the API Mender GitHub App on the repositories you choose in GitHub. Mender reads their code and checks saved API contracts against the consumer repositories you connect below.</p>
     <button disabled={busy} onClick={() => void connectGitHub()}>{connected.length ? 'Sync GitHub repositories' : 'Connect GitHub App'}</button>
     {installationIds.length === 1 && <p className="live-muted"><a href={`https://github.com/settings/installations/${installationIds[0]}`} target="_blank" rel="noopener noreferrer">Change repository access in GitHub ↗</a>, then return here and sync.</p>}
     {connected.length > 0 && <p className="live-muted">Connected: {connected.map(repo => repo.full_name).join(', ')}</p>}
