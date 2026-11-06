@@ -1,7 +1,7 @@
-import { backendAdmin } from './backend-admin';
-import { installationToken } from './github-app';
-import { scanInstallationRepository } from './public-scan';
-import { processBoundContractConsumers, processContractSources } from './contract-worker';
+import { backendAdmin } from './backend-admin.ts';
+import { installationToken } from './github-app.ts';
+import { scanInstallationRepository } from './public-scan.ts';
+import { processBoundContractConsumers, processContractSources } from './contract-worker.ts';
 
 type Config = {
   NEXT_PUBLIC_SUPABASE_URL?: string; SUPABASE_SECRET_KEY?: string;
@@ -11,9 +11,9 @@ type Config = {
 // Public OpenAPI repositories do not need a GitHub App installation. Poll a
 // bounded, rotating slice every 15 minutes; private consumers still use the
 // short-lived repository-scoped installation token.
-async function pollPublicContractSources(database: ReturnType<typeof backendAdmin>) {
-  const window = Math.floor(Date.now() / 900_000);
-  if (Math.floor(Date.now() / 60_000) % 15 !== 0) return;
+export async function pollPublicContractSources(database: ReturnType<typeof backendAdmin>, now = Date.now()) {
+  const window = Math.floor(now / 900_000);
+  if (Math.floor(now / 60_000) % 15 !== 0) return;
   const { data: sources, error } = await database.from('api_contract_sources')
     .select('id,repository_id').eq('paused', false).order('created_at').limit(100);
   if (error) throw error;
