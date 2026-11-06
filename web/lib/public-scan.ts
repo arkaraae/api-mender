@@ -100,7 +100,7 @@ export async function scanPublicRepository(fullName: string, branch: string) {
 // Installation scans read blobs through api.github.com with a short-lived token
 // scoped to this repository. The token is never sent to the raw content host.
 export async function scanInstallationRepository(fullName: string, head: string, token: string) {
-  if (!repositoryPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head) || !token) throw new Error('Invalid repository scan');
+  if (!repositoryPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid repository scan');
   const repositoryPath = fullName.split('/').map(encodeURIComponent).join('/');
   const commit = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/commits/${head}`, token);
   if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');

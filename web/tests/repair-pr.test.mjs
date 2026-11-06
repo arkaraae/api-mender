@@ -48,6 +48,26 @@ test('publisher writes only the saved patch to a deterministic branch and opens 
   } finally { globalThis.fetch = original; }
 });
 
+test('the draft PR discloses an AI-selected field mapping and its model', async () => {
+  const original = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/git/refs')) return Response.json({ ref: `refs/heads/${branch}` }, { status: 201 });
+    if (String(url).endsWith('/contents/src/client.ts')) return Response.json({ commit: { sha: patchSha } });
+    if (String(url).endsWith('/pulls')) {
+      bodies.push(JSON.parse(options.body).body);
+      return Response.json(pull, { status: 201 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  try {
+    await publishDraftRepair({ ...input, generationMethod: 'ai_assisted', modelId: 'claude-sonnet-5' });
+    await publishDraftRepair({ ...input, generationMethod: 'deterministic', modelId: null });
+    assert.match(bodies[0], /\*\*AI-assisted:\*\* `claude-sonnet-5`/);
+    assert.doesNotMatch(bodies[1], /AI-assisted/);
+  } finally { globalThis.fetch = original; }
+});
+
 test('publisher can reconcile a previously opened matching draft without another commit', async () => {
   const original = globalThis.fetch;
   const calls = [];

@@ -47,9 +47,12 @@ export function onboardingDatabase() { return backendAdmin(env); }
 export function githubConfiguration() {
   const clientId = env.GITHUB_APP_CLIENT_ID;
   const clientSecret = env.GITHUB_APP_CLIENT_SECRET;
+  const appSlug = env.GITHUB_APP_SLUG;
   const origin = env.SITE_ORIGIN;
-  if (!clientId || !clientSecret || !origin || !origin.startsWith('https://')) return null;
-  return { clientId, clientSecret, origin, callback: `${origin}/live/github` };
+  if (!clientId || !clientSecret || !appSlug || appSlug.length > 100
+    || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(appSlug)
+    || !origin || !origin.startsWith('https://')) return null;
+  return { clientId, clientSecret, appSlug, origin, callback: `${origin}/live/github` };
 }
 
 export async function githubJson<T>(url: string, token: string): Promise<T> {

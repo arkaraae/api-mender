@@ -22,6 +22,15 @@ export async function POST(request: Request) {
     && Number.isSafeInteger(data.installation?.id)) {
     try {
       const database = backendAdmin(env);
+      if (data.action === 'deleted') {
+        const { error: repositoriesError } = await database.from('monitored_repositories')
+          .delete().eq('github_installation_id', data.installation.id);
+        if (repositoriesError) throw repositoriesError;
+        const { error: installationError } = await database.from('github_installations')
+          .delete().eq('installation_id', data.installation.id);
+        if (installationError) throw installationError;
+        return Response.json({ accepted: true });
+      }
       const { error } = await database.from('github_installations')
         .update({ suspended_at: data.action === 'unsuspend' ? null : new Date().toISOString() })
         .eq('installation_id', data.installation.id);
@@ -36,7 +45,7 @@ export async function POST(request: Request) {
     try {
       const database = backendAdmin(env);
       if (ids.length) {
-        const { error } = await database.from('monitored_repositories').update({ paused: true })
+        const { error } = await database.from('monitored_repositories').delete()
           .eq('github_installation_id', data.installation.id).in('github_repo_id', ids);
         if (error) throw error;
       }

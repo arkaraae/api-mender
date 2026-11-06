@@ -30,6 +30,25 @@ test('contract reader pins GitHub content to a commit and keeps the token on the
   } finally { globalThis.fetch = originalFetch; }
 });
 
+test('public contract reader omits the installation credential', async () => {
+  const originalFetch = globalThis.fetch;
+  const text = JSON.stringify(spec('accountId'));
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url: String(url), options };
+    return Response.json({ type: 'file', encoding: 'base64', size: Buffer.byteLength(text),
+      content: Buffer.from(text).toString('base64') });
+  };
+  try {
+    const head = 'b'.repeat(40);
+    const result = await readGitHubContract('customer/public-api', head, 'openapi.json');
+    assert.equal(result.document.paths['/orders'].post.requestBody.content['application/json'].schema.required[0], 'accountId');
+    assert.equal(request.url, `https://api.github.com/repos/customer/public-api/contents/openapi.json?ref=${head}`);
+    assert.equal(request.options.headers.Authorization, undefined);
+    assert.equal(request.options.redirect, 'manual');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test('contract comparison reports a required request field rename as a possible break', () => {
   const report = compareContracts(spec('customerId'), spec('accountId'));
   assert.notEqual(report.verdict, 'safe');

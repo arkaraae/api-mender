@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { authenticatedEditor, onboardingDatabase } from '@/lib/github-onboarding';
 
 function userDatabase(request: Request) {
   const token = request.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
@@ -35,9 +36,18 @@ export async function POST(request: Request) {
     || body.path.startsWith('/') || body.path.split('/').some(part => part === '.' || part === '..'))
     return Response.json({ error: 'Invalid contract source' }, { status: 400 });
   const { data: repository, error: repoError } = await identity.client.from('monitored_repositories')
-    .select('id,github_installation_id').eq('id', body.repositoryId).eq('workspace_id', body.workspaceId).single();
-  if (repoError || !repository?.github_installation_id) return Response.json({ error: 'Connected repository not found' }, { status: 404 });
-  const { data, error } = await identity.client.from('api_contract_sources').insert({
+    .select('id,github_installation_id,visibility,paused').eq('id', body.repositoryId).eq('workspace_id', body.workspaceId).single();
+  if (repoError || !repository || repository.paused
+    || (!repository.github_installation_id && repository.visibility !== 'public'))
+    return Response.json({ error: 'Connected or public repository not found' }, { status: 404 });
+  // The source table's legacy insert policy requires an installation. For a
+  // public repository, verify editor membership before the server-only insert;
+  // the background worker will fetch its contract without any GitHub token.
+  const publicWithoutInstallation = repository.visibility === 'public' && !repository.github_installation_id;
+  const editor = publicWithoutInstallation ? await authenticatedEditor(request, body.workspaceId) : null;
+  if (publicWithoutInstallation && !editor) return Response.json({ error: 'Workspace editor required' }, { status: 403 });
+  const database = publicWithoutInstallation ? onboardingDatabase() : identity.client;
+  const { data, error } = await database.from('api_contract_sources').insert({
     workspace_id: body.workspaceId, repository_id: body.repositoryId, path: body.path,
   }).select('id,path').single();
   if (error) return Response.json({ error: error.code === '23505' ? 'Contract source already exists' : 'Could not add contract source' }, { status: error.code === '23505' ? 409 : 403 });

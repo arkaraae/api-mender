@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import CustomerProofSetup from './customer-proof-setup';
 
-type Repository = { id: string; full_name: string; github_installation_id?: number | null; paused: boolean };
+type Repository = { id: string; full_name: string; visibility?: string; github_installation_id?: number | null; paused: boolean };
 type Source = { id: string; repository_id: string; path: string; paused: boolean };
 type Consumer = { id: string; source_id: string; repository_id: string; paused: boolean };
 
@@ -20,6 +20,7 @@ export default function GitHubConnections({ database, workspaceId, repositories,
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const connected = repositories.filter(repo => repo.github_installation_id && !repo.paused);
+  const sourceCandidates = repositories.filter(repo => !repo.paused && (repo.github_installation_id || repo.visibility === 'public'));
   const installationIds = [...new Set(connected.map(repo => repo.github_installation_id).filter((id): id is number => !!id))];
 
   async function api<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
@@ -80,12 +81,12 @@ export default function GitHubConnections({ database, workspaceId, repositories,
 
   return <section className="live-card">
     <h2>Connect GitHub and APIs</h2>
-    <p>Install API Mender Scanner on the repositories you choose in GitHub. Mender reads their code and checks saved API contracts against the consumer repositories you connect below.</p>
+    <p>Install the API Mender GitHub App on the repositories you choose in GitHub. Mender reads their code and checks saved API contracts against the consumer repositories you connect below.</p>
     <button disabled={busy} onClick={() => void connectGitHub()}>{connected.length ? 'Sync GitHub repositories' : 'Connect GitHub App'}</button>
     {installationIds.length === 1 && <p className="live-muted"><a href={`https://github.com/settings/installations/${installationIds[0]}`} target="_blank" rel="noopener noreferrer">Change repository access in GitHub ↗</a>, then return here and sync.</p>}
     {connected.length > 0 && <p className="live-muted">Connected: {connected.map(repo => repo.full_name).join(', ')}</p>}
-    {connected.length > 0 && <div className="live-fields">
-      <label>API contract repository<select value={sourceRepository} onChange={event => setSourceRepository(event.target.value)}><option value="">Choose repository</option>{connected.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}</select></label>
+    {sourceCandidates.length > 0 && <div className="live-fields">
+      <label>API contract repository<select value={sourceRepository} onChange={event => setSourceRepository(event.target.value)}><option value="">Choose repository</option>{sourceCandidates.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}</select></label>
       <label>OpenAPI JSON path<input value={path} onChange={event => setPath(event.target.value)} placeholder="openapi.json" /></label>
       <button disabled={busy || !sourceRepository || !path.trim()} onClick={() => void addSource()}>Watch API contract</button>
     </div>}

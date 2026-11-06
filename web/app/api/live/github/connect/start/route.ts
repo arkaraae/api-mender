@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       url.searchParams.set('code_challenge_method', 'S256');
       return Response.json({ url: url.toString() }, { headers: { 'Cache-Control': 'no-store' } });
     }
-    return Response.json({ url: `https://github.com/apps/api-mender-scanner/installations/new?state=${state}` },
+    return Response.json({ url: `https://github.com/apps/${config.appSlug}/installations/new?state=${state}` },
       { headers: { 'Cache-Control': 'no-store' } });
   } catch { return Response.json({ error: 'Could not start GitHub connection' }, { status: 503 }); }
 }

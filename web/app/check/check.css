@@ -96,6 +96,8 @@
 .pricing-questions{margin:0;display:grid;gap:16px}
 .pricing-questions dt{font-weight:700;margin-bottom:4px}
 .pricing-questions dd{margin:0;color:#555;line-height:1.5}
+.docs-steps{margin:0;padding-left:22px;display:grid;gap:14px;line-height:1.5;color:#555}
+.docs-steps b{color:#111}
 .pricing-plan .pricing-price strong{white-space:nowrap}
 .sales-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .sales-wide{grid-column:1/-1}

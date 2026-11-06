@@ -27,7 +27,8 @@ function fakeDatabase(saved, overrides = {}) {
       const result = { data: rows[table] ?? null, error: null };
       const builder = {
         select() { return this; }, eq() { return this; }, limit() { return this; }, order() { return this; },
-        upsert(row, options) { saved.push({ table, row, options }); return this; },
+        upsert(row, options) { saved.push({ table, row, options, operation: 'upsert' }); return this; },
+        update(row) { saved.push({ table, row, operation: 'update' }); return this; },
         single: async () => result,
         maybeSingle: async () => result,
         then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
@@ -100,12 +101,15 @@ test('repeat mismatch refreshes the finding to the latest scanned commit', async
       id: 'consumer-1', workspace_id: 'workspace-1', full_name: 'acme/checkout', target_sha: head,
     }, head, calls);
   }
-  const findings = saved.filter(item => item.table === 'findings');
+  const findings = saved.filter(item => item.table === 'findings' && item.operation === 'upsert');
   assert.equal(findings.length, 2);
   assert.equal(findings[0].row.fingerprint, findings[1].row.fingerprint);
   assert.equal(findings[1].row.base_sha, 'd'.repeat(40));
   assert.ok(Date.parse(findings[1].row.updated_at) > 0);
-  assert.equal(findings[1].options.ignoreDuplicates, undefined);
+  assert.equal(findings[1].options.ignoreDuplicates, true);
+  assert.equal(findings[1].options.defaultToNull, false);
+  assert.equal(saved.filter(item => item.table === 'findings' && item.operation === 'update').length, 2);
+  assert.equal(Object.hasOwn(saved.find(item => item.table === 'findings' && item.operation === 'update').row, 'status'), false);
 });
 
 test('upstream push checks a separate connected consumer inventory', async () => {
@@ -138,6 +142,7 @@ test('upstream push checks a separate connected consumer inventory', async () =>
       select() { return this; }, eq() { return this; }, limit() { return this; },
       order() { return this; }, in() { return this; },
       upsert(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
+      update(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
       single: async () => table === 'source_snapshots' ? { data: rows.source_snapshots, error: null } : result,
       then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
     };
@@ -192,6 +197,7 @@ test('changed response field links to a pinned direct database write candidate',
     return { select() { return this; }, eq() { return this; }, limit() { return this; },
       order() { return this; }, in() { return this; },
       upsert(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
+      update(row) { saved.push({ table, row }); result = { data: null, error: null }; return this; },
       single: async () => table === 'source_snapshots' ? { data: rows.source_snapshots, error: null } : result,
       then(resolve) { return Promise.resolve(result).then(resolve); },
     };

@@ -5,6 +5,8 @@
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
+  // Keep Worker logs, including failure reports, in the Cloudflare dashboard.
+  "observability": { "enabled": true },
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -26,7 +28,46 @@
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_uF7jRot-UE-GLErDy8YO0g_BeBsdtms",
         "GITHUB_APP_ID": "5435760",
         "GITHUB_APP_CLIENT_ID": "Iv23liXSFTwlAlL3X5wG",
+        "GITHUB_APP_SLUG": "api-mender-scanner",
         "SITE_ORIGIN": "https://api-mender-staging.amorales8.workers.dev"
+      }
+    },
+    // Isolated preview in the owner's account; no production domain routes.
+    "owner_preview": {
+      "name": "api-mender-owner-preview",
+      "account_id": "7612d5858e401cec8307c5e25c486494",
+      "triggers": { "crons": ["* * * * *"] },
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "5ca5d7069f5f44629b1c10e2c921e744" }],
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "api-mender-owner-preview", "database_id": "12c4a387-1f52-4917-9698-2b46da64c871", "migrations_dir": "migrations" }],
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://xedurkvshpszwevmhkzx.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_uF7jRot-UE-GLErDy8YO0g_BeBsdtms",
+        "GITHUB_APP_ID": "5435760",
+        "GITHUB_APP_CLIENT_ID": "Iv23liXSFTwlAlL3X5wG",
+        "GITHUB_APP_SLUG": "api-mender-scanner",
+        "SITE_ORIGIN": "https://api-mender-owner-preview.amorales8.workers.dev"
+      }
+    },
+    // Owner-account live Worker. Custom domains activate only after the zone
+    // moves to this account and the OAuth/Auth redirects are ready.
+    "owner_live": {
+      "name": "api-mender-live",
+      "account_id": "7612d5858e401cec8307c5e25c486494",
+      "workers_dev": true,
+      "routes": [
+        { "pattern": "apimender.com", "custom_domain": true },
+        { "pattern": "www.apimender.com", "custom_domain": true }
+      ],
+      "triggers": { "crons": ["* * * * *"] },
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "647309a3aa774e7b957fe5662d4c2efc" }],
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "api-mender-owner-live", "database_id": "26c55314-6c37-4ddf-808e-42155a76befd", "migrations_dir": "migrations" }],
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "GITHUB_APP_ID": "5635720",
+        "GITHUB_APP_CLIENT_ID": "Iv23liTisZHjuAalZ3Bf",
+        "GITHUB_APP_SLUG": "api-mender-connect",
+        "SITE_ORIGIN": "https://apimender.com"
       }
     },
     // apimender.com: build with CLOUDFLARE_ENV=apimender (see README.md, "Publishing to apimender.com").
@@ -47,6 +88,9 @@
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
+        "GITHUB_APP_ID": "5635720",
+        "GITHUB_APP_CLIENT_ID": "Iv23liTisZHjuAalZ3Bf",
+        "GITHUB_APP_SLUG": "api-mender-connect",
         "SITE_ORIGIN": "https://apimender.com"
       }
     }

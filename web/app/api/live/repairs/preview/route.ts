@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
-import { proposeRequestFieldRepair } from '@/lib/request-repair';
+import { proposeRequestFieldRepair, repairCandidateProposals } from '@/lib/request-repair';
+import { selectRepairField } from '@/lib/anthropic-repair';
 
 const noStore = { 'Cache-Control': 'no-store' };
 const sourcePath = /^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/;
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     body = JSON.parse(new TextDecoder().decode(await readBoundedBody(request, 2048)));
   } catch { return Response.json({ error: 'Invalid request' }, { status: 400, headers: noStore }); }
   if (!body || !['findingId,workspaceId', 'action,findingId,workspaceId'].includes(Object.keys(body).sort().join(','))
-    || (body.action !== undefined && body.action !== 'prepare')
+    || (body.action !== undefined && !['prepare', 'ai_prepare'].includes(body.action as string))
     || typeof body.workspaceId !== 'string' || !uuid.test(body.workspaceId)
     || typeof body.findingId !== 'string' || !uuid.test(body.findingId))
     return Response.json({ error: 'Invalid repair request' }, { status: 400, headers: noStore });
@@ -46,12 +47,14 @@ export async function POST(request: Request) {
     .eq('workspace_id', body.workspaceId).maybeSingle();
   if (sourceError || !source || source.paused)
     return Response.json({ error: 'Connected API source is unavailable' }, { status: 409, headers: noStore });
-  const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
-    .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
-    .eq('repository_id', repository.id).maybeSingle();
-  if (bindingError || !binding || binding.paused)
-    return Response.json({ error: 'This repository is no longer connected to the API source' },
-      { status: 409, headers: noStore });
+  if (source.repository_id !== repository.id) {
+    const { data: binding, error: bindingError } = await database.from('api_contract_consumers')
+      .select('id,paused').eq('workspace_id', body.workspaceId).eq('source_id', source.id)
+      .eq('repository_id', repository.id).maybeSingle();
+    if (bindingError || !binding || binding.paused)
+      return Response.json({ error: 'This repository is no longer connected to the API source' },
+        { status: 409, headers: noStore });
+  }
   const { data: sourceRepository, error: sourceRepoError } = await database.from('monitored_repositories')
     .select('head_sha,target_sha,paused').eq('id', source.repository_id)
     .eq('workspace_id', body.workspaceId).maybeSingle();
@@ -88,13 +91,41 @@ export async function POST(request: Request) {
     const bytes = Uint8Array.from(atob(file.content.replace(/\s/g, '')), char => char.charCodeAt(0));
     if (bytes.byteLength !== file.size) throw new Error('Consumer file was incomplete');
     const sourceText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    const proposal = proposeRequestFieldRepair({
-      source: sourceText,
-      evidence: call, contract: version.document, missing: evidence.missing,
-    });
+    const { data: existing, error: existingError } = await database.from('repair_jobs')
+      .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field,generation_method,model_id')
+      .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
+      .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
+      .maybeSingle();
+    if (existingError) throw new Error('Could not read the repair job');
+    const repairInput = { source: sourceText, evidence: call,
+      contract: version.document, missing: evidence.missing };
+    let proposal;
+    let generationMethod = existing?.generation_method || 'deterministic';
+    if (existing) {
+      proposal = proposeRequestFieldRepair({ ...repairInput, selectedOldField: existing.old_field });
+    } else if (body.action === 'ai_prepare') {
+      const candidates = repairCandidateProposals(repairInput);
+      if (!candidates.length) throw new Error('No safe request-field repair is available');
+      if (candidates.length === 1) proposal = candidates[0];
+      else {
+        if (!env.ANTHROPIC_API_KEY)
+          return Response.json({ error: 'AI repair is not configured yet' }, { status: 503, headers: noStore });
+        const { data: allowed, error: budgetError } = await database.rpc('claim_ai_repair_budget',
+          { p_workspace_id: body.workspaceId });
+        if (budgetError) throw new Error('Could not check AI repair budget');
+        if (!allowed) return Response.json({ error: 'AI repair daily limit reached' },
+          { status: 429, headers: noStore });
+        const selected = await selectRepairField({ apiKey: env.ANTHROPIC_API_KEY,
+          model: env.ANTHROPIC_MODEL, workspaceId: env.ANTHROPIC_WORKSPACE_ID,
+          endpoint: call.endpoint, missingField: evidence.missing[0],
+          candidates: candidates.map(candidate => candidate.oldField) });
+        proposal = candidates.find(candidate => candidate.oldField === selected)!;
+        generationMethod = 'ai_assisted';
+      }
+    } else proposal = proposeRequestFieldRepair(repairInput);
     const sourceHash = await sha256(sourceText);
     const patchedHash = await sha256(proposal.afterSource);
-    if (body.action === 'prepare') {
+    if (body.action === 'prepare' || body.action === 'ai_prepare') {
       const { error: insertError } = await database.from('repair_jobs').insert({
         workspace_id: body.workspaceId, finding_id: finding.id, repository_id: repository.id,
         created_by: identity.user.id, base_sha: repository.head_sha,
@@ -102,16 +133,18 @@ export async function POST(request: Request) {
         line_number: proposal.line, source_sha256: sourceHash, patched_sha256: patchedHash,
         old_field: proposal.oldField, new_field: proposal.newField,
         before_snippet: proposal.before, after_snippet: proposal.after,
+        generation_method: generationMethod,
+        model_id: generationMethod === 'ai_assisted' ? (env.ANTHROPIC_MODEL || 'claude-sonnet-5') : null,
       });
       if (insertError && insertError.code !== '23505')
         return Response.json({ error: 'Could not save the repair job' }, { status: 502, headers: noStore });
     }
     const { data: saved, error: savedError } = await database.from('repair_jobs')
-      .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field')
+      .select('id,status,pr_url,source_sha256,patched_sha256,file_path,old_field,new_field,generation_method,model_id')
       .eq('finding_id', finding.id).eq('workspace_id', body.workspaceId)
       .eq('base_sha', repository.head_sha).eq('contract_sha256', version.content_sha256)
       .maybeSingle();
-    if (savedError || (body.action === 'prepare' && !saved))
+    if (savedError || (body.action && !saved))
       return Response.json({ error: 'Could not read the repair job' }, { status: 502, headers: noStore });
     if (saved && (saved.source_sha256 !== sourceHash || saved.patched_sha256 !== patchedHash
       || saved.file_path !== proposal.file || saved.old_field !== proposal.oldField
@@ -124,6 +157,8 @@ export async function POST(request: Request) {
       file: proposal.file, line: proposal.line, oldField: proposal.oldField,
       newField: proposal.newField, before: proposal.before, after: proposal.after,
       sourceSha256: sourceHash, patchedSha256: patchedHash, repairJob,
+      generationMethod: saved?.generation_method || generationMethod,
+      modelId: saved?.model_id || undefined,
       prUrl: saved?.pr_url || undefined,
       validation: 'static_only', runtimeVerified: false, note: proposal.note }, { headers: noStore });
   } catch (error) {

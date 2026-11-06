@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Preview = { file: string; line: number; oldField: string; newField: string;
   before: string; after: string; validation: 'static_only'; runtimeVerified: false; note: string;
+  generationMethod?: 'deterministic' | 'ai_assisted'; modelId?: string;
   repairJob: { id: string; status: string } | null; prUrl?: string };
 
 export default function RepairPreview({ database, workspaceId, findingId }: {
@@ -13,12 +14,13 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [aiEligible, setAiEligible] = useState(false);
   const [proofMessage, setProofMessage] = useState('');
   const jobId = preview?.repairJob?.id;
   const jobStatus = preview?.repairJob?.status;
 
   useEffect(() => {
-    if (!jobId || !['proof_pending', 'proof_failed'].includes(jobStatus || '')) return;
+    if (!jobId || !['proof_pending', 'proof_failed', 'validated'].includes(jobStatus || '')) return;
     let active = true;
     async function refreshSavedProof() {
       const { data, error: readError } = await database.from('repair_jobs')
@@ -33,6 +35,8 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
         setProofMessage('Customer CI proof passed. The draft PR still needs human review.');
       else if (data.status === 'proof_failed')
         setProofMessage('Customer CI failed. Review the check before retrying.');
+      else if (data.proof?.error)
+        setProofMessage(`Previous CI proof is no longer current: ${data.proof.error}.`);
       else if (data.proof?.url)
         setProofMessage('Customer CI is running. This repair will update when the check finishes.');
     }
@@ -41,7 +45,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
     return () => { active = false; window.clearInterval(timer); };
   }, [database, workspaceId, jobId, jobStatus]);
 
-  async function load(action?: 'prepare') {
+  async function load(action?: 'prepare' | 'ai_prepare') {
     setBusy(true); setError(''); setProofMessage(''); setPreview(null);
     try {
       const { data } = await database.auth.getSession();
@@ -53,8 +57,12 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
       });
       const result = await response.json() as Preview & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Could not preview repair');
-      setPreview(result);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not preview repair'); }
+      setPreview(result); setAiEligible(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not preview repair';
+      setError(message);
+      if (/replaced request field is ambiguous/.test(message)) setAiEligible(true);
+    }
     finally { setBusy(false); }
   }
 
@@ -93,6 +101,8 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
     <button disabled={busy} onClick={() => void load()}>{busy ? 'Checking current code…' : 'Preview bounded repair'}</button>
     {preview && <div className="live-muted" role="status">
       <p>{preview.file}:{preview.line} · Replace <code>{preview.oldField}</code> with <code>{preview.newField}</code></p>
+      {preview.generationMethod === 'ai_assisted' &&
+        <p>AI selected this field mapping. The patch was checked against the pinned code and API contract.</p>}
       <pre><code>{`- ${preview.before}\n+ ${preview.after}`}</code></pre>
       <p>{preview.note} {preview.prUrl
         ? 'The proposed change is in a draft PR for review; it has not been merged.'
@@ -115,5 +125,8 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
         : <button disabled={busy} onClick={() => void load('prepare')}>Save repair job</button>}
     </div>}
     {error && <p role="alert">{error}</p>}
+    {aiEligible && !preview && <button disabled={busy} onClick={() => void load('ai_prepare')}>
+      {busy ? 'Checking field mapping…' : 'Try AI field mapping'}
+    </button>}
   </div>;
 }

@@ -77,3 +77,21 @@ test('private scan reads only pinned GitHub blobs using its installation token',
     assert.ok(requests.every(request => request.redirect === 'manual'));
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('public contract source scan reads a pinned commit without an App token', async () => {
+  const originalFetch = globalThis.fetch;
+  const head = 'd'.repeat(40);
+  const tree = 'e'.repeat(40);
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url: String(url), auth: options?.headers?.Authorization });
+    if (String(url).endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: tree } });
+    if (String(url).endsWith(`/git/trees/${tree}?recursive=1`)) return Response.json({ tree: [] });
+    throw new Error(`Unexpected GitHub fetch: ${url}`);
+  };
+  try {
+    const result = await scanInstallationRepository('customer/public-api', head, '');
+    assert.equal(result.head, head);
+    assert.ok(requests.every(request => request.url.startsWith('https://api.github.com/') && !request.auth));
+  } finally { globalThis.fetch = originalFetch; }
+});
