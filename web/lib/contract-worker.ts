@@ -36,7 +36,7 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
       : '';
     const fingerprint = await digest(`request-schema:${source.id}:${consumer.id}:${call.file}:${call.line}:${call.endpoint}:${contract.sha256}:${missing.join(',')}`);
     const codeUrl = `https://github.com/${consumer.full_name}/blob/${consumerHead}/${call.file}#L${call.bodyLine || call.line}`;
-    const { error } = await database.from('findings').upsert({
+    const finding = {
       workspace_id: source.workspace_id, repository_id: consumer.id, source_id: snapshot.id,
       fingerprint, title: `JSON request is missing ${missing.join(', ')}`,
       description: `A literal JSON request body for ${mismatch.operation} omits ${missing.join(', ')}, which the current connected OpenAPI contract requires. This is static evidence; the request has not been run by this scanner.${schemaNote}`,
@@ -46,8 +46,19 @@ async function saveCurrentRequestFindings(database: SupabaseClient, source: Sour
         codeUrl, call: { file: call.file, line: call.line, bodyLine: call.bodyLine, endpoint: call.endpoint, origin: call.origin,
           fields: call.fields, fieldsComplete: true }, required, missing, runtimeVerified: false,
         databaseImpact },
-    }, { onConflict: 'repository_id,fingerprint' });
-    if (error) throw error;
+    };
+    // An upsert with merge-duplicates writes omitted columns as null/default on
+    // conflict. Insert once, then update only scan-owned fields so a rescan
+    // cannot reset a customer's dismissed status or dismissal metadata.
+    const { error: insertError } = await database.from('findings').upsert(finding, {
+      onConflict: 'repository_id,fingerprint', ignoreDuplicates: true, defaultToNull: false,
+    });
+    if (insertError) throw insertError;
+    const { workspace_id, repository_id, fingerprint: findingFingerprint, ...scanFields } = finding;
+    const { error: updateError } = await database.from('findings').update(scanFields)
+      .eq('workspace_id', workspace_id).eq('repository_id', repository_id)
+      .eq('fingerprint', findingFingerprint);
+    if (updateError) throw updateError;
   }
   return mismatches.length;
 }
@@ -161,7 +172,7 @@ export async function processContractSources(database: SupabaseClient, repositor
     }, { onConflict: 'workspace_id,source_url,sha256' }).select('id').single();
     if (snapshotError || !snapshot) throw snapshotError || new Error('Contract snapshot was not saved');
     const fingerprint = await digest(`${source.id}:${head}:${current.sha256}`);
-    const { error: findingError } = await database.from('findings').upsert({
+    const finding = {
       workspace_id: repository.workspace_id, repository_id: repository.id, source_id: snapshot.id,
       fingerprint, title: report.headline,
       description: `The connected OpenAPI contract changed. Schema comparison found a possible break.${tracedWrites ? ` ${tracedWrites} direct static response-to-database write${tracedWrites === 1 ? '' : 's'} matched changed fields.` : ''} Consumer applicability and runtime behavior are not yet verified.`,
@@ -171,8 +182,16 @@ export async function processContractSources(database: SupabaseClient, repositor
         report, consumerCandidates,
         candidateLimitReached: (consumers || []).length > 50 || consumerCandidates.length === 50,
         note: 'Static HTTP call matches are candidates only. Schema sample checks are not live API tests or proof of consumer impact.' },
-    }, { onConflict: 'repository_id,fingerprint' });
-    if (findingError) throw findingError;
+    };
+    const { error: insertError } = await database.from('findings').upsert(finding, {
+      onConflict: 'repository_id,fingerprint', ignoreDuplicates: true, defaultToNull: false,
+    });
+    if (insertError) throw insertError;
+    const { workspace_id, repository_id, fingerprint: findingFingerprint, ...scanFields } = finding;
+    const { error: updateError } = await database.from('findings').update(scanFields)
+      .eq('workspace_id', workspace_id).eq('repository_id', repository_id)
+      .eq('fingerprint', findingFingerprint);
+    if (updateError) throw updateError;
     changed++;
   }
   return { checked: (sources || []).length, changed };

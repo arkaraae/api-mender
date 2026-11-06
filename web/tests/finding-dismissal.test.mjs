@@ -36,9 +36,10 @@ test('a finding from another workspace reads as not found, and database errors s
   await assert.rejects(setFindingDismissed(fakeDatabase({ data: null, error: new Error('down') }), { ...ids, dismissed: true }), /down/);
 });
 
-test('scan upserts leave status alone so a rescan cannot undo a dismissal', () => {
+test('scan insert ignores existing findings and refreshes only scan-owned fields', () => {
   const source = readFileSync(new URL('../lib/contract-worker.ts', import.meta.url), 'utf8');
-  const upserts = source.match(/from\('findings'\)\.upsert\(\{[\s\S]*?onConflict/g);
-  assert.equal(upserts.length, 2);
-  for (const upsert of upserts) assert.doesNotMatch(upsert, /\bstatus:/);
+  assert.equal((source.match(/from\('findings'\)\.upsert\(finding/g) || []).length, 2);
+  assert.equal((source.match(/ignoreDuplicates: true, defaultToNull: false/g) || []).length, 2);
+  assert.equal((source.match(/from\('findings'\)\.update\(scanFields\)/g) || []).length, 2);
+  assert.doesNotMatch(source, /\bstatus: 'Action required'/);
 });
