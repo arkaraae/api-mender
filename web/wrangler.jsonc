@@ -29,10 +29,11 @@
         "SITE_ORIGIN": "https://api-mender-staging.amorales8.workers.dev"
       }
     },
-    // Isolated preview in the owner's account; no production domain routes or cron triggers.
+    // Isolated preview in the owner's account; no production domain routes.
     "owner_preview": {
       "name": "api-mender-owner-preview",
       "account_id": "7612d5858e401cec8307c5e25c486494",
+      "triggers": { "crons": ["* * * * *"] },
       "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "5ca5d7069f5f44629b1c10e2c921e744" }],
       "d1_databases": [{ "binding": "MENDER_DB", "database_name": "api-mender-owner-preview", "database_id": "12c4a387-1f52-4917-9698-2b46da64c871", "migrations_dir": "migrations" }],
       "vars": {
