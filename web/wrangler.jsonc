@@ -48,8 +48,8 @@
         "SITE_ORIGIN": "https://api-mender-owner-preview.amorales8.workers.dev"
       }
     },
-    // Customer backend candidate on the owner's account. No custom domain until
-    // installation, webhook, scan, and repair checks pass against production data.
+    // Owner-account live Worker. Custom domains activate only after the zone
+    // moves to this account and the OAuth/Auth redirects are ready.
     "owner_live": {
       "name": "api-mender-live",
       "account_id": "7612d5858e401cec8307c5e25c486494",
@@ -59,6 +59,8 @@
         { "pattern": "www.apimender.com", "custom_domain": true }
       ],
       "triggers": { "crons": ["* * * * *"] },
+      "kv_namespaces": [{ "binding": "MENDER_WATCH", "id": "647309a3aa774e7b957fe5662d4c2efc" }],
+      "d1_databases": [{ "binding": "MENDER_DB", "database_name": "api-mender-owner-live", "database_id": "26c55314-6c37-4ddf-808e-42155a76befd", "migrations_dir": "migrations" }],
       "vars": {
         "NEXT_PUBLIC_SUPABASE_URL": "https://eeejqyvtdvahofwoiicv.supabase.co",
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_0d4jwkggGOYRbJqEpbWAvQ_2mFYAQDC",
