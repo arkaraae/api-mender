@@ -71,6 +71,7 @@ function matchingBody(node: Node, evidence: CallEvidence, method: string, path: 
 /** Make one bounded, reviewable request-key suggestion. No repository code is executed here. */
 export function proposeRequestFieldRepair(input: {
   source: string; evidence: CallEvidence; contract: object; missing: string[];
+  selectedOldField?: string;
 }) {
   const { source, evidence } = input;
   if (source.length > 64_000 || evidence.file.length > 512
@@ -86,9 +87,12 @@ export function proposeRequestFieldRepair(input: {
   if (newField.length > 120 || !/^[A-Za-z_$][\w$]*$/.test(newField))
     throw new Error('The new field cannot be edited safely');
   const oldFields = evidence.fields.filter(name => !Object.hasOwn(schema.properties, name));
-  if (oldFields.length !== 1 || schema.required.includes(oldFields[0]) || oldFields[0] === newField)
+  if ((!input.selectedOldField && oldFields.length !== 1)
+    || (input.selectedOldField && !oldFields.includes(input.selectedOldField)))
     throw new Error('The replaced request field is ambiguous');
-  const oldField = oldFields[0];
+  const oldField = input.selectedOldField ?? oldFields[0];
+  if (schema.required.includes(oldField) || oldField === newField)
+    throw new Error('The replaced request field is ambiguous');
   if (oldField.length > 120 || !/^[A-Za-z_$][\w$]*$/.test(oldField))
     throw new Error('The old field cannot be edited safely');
   const beforeCalls = parseStaticHttpCalls(evidence.file, source);
@@ -140,4 +144,18 @@ export function proposeRequestFieldRepair(input: {
     oldField, newField, before: source.slice(key.start, key.end), after: replacement,
     afterSource, staticVerified: true as const, runtimeVerified: false as const,
     note: 'The edited request contains the current operation’s required field names. Field meaning and runtime behavior still need a customer test.' };
+}
+
+/** Enumerate only edits that pass the same AST and contract checks as a published repair. */
+export function repairCandidateProposals(input: {
+  source: string; evidence: CallEvidence; contract: object; missing: string[];
+}) {
+  const schema = requestSchema(input.contract, input.evidence.endpoint);
+  const unknownFields = [...new Set(input.evidence.fields)].filter(name =>
+    !Object.hasOwn(schema.properties, name) && !schema.required.includes(name));
+  if (unknownFields.length > 12) throw new Error('Too many possible request fields');
+  return unknownFields.flatMap(oldField => {
+    try { return [proposeRequestFieldRepair({ ...input, selectedOldField: oldField })]; }
+    catch { return []; }
+  });
 }

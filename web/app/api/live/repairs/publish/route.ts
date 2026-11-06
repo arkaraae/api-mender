@@ -114,7 +114,8 @@ export async function POST(request: Request) {
     if (bytes.byteLength !== file.size) return reply(409, 'Consumer file is incomplete');
     const sourceText = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const proposal = proposeRequestFieldRepair({ source: sourceText, evidence: call,
-      contract: version.document, missing: evidence.missing });
+      contract: version.document, missing: evidence.missing,
+      selectedOldField: job.old_field });
     if (await sha256(sourceText) !== job.source_sha256
       || await sha256(proposal.afterSource) !== job.patched_sha256
       || proposal.file !== job.file_path || proposal.line !== job.line_number

@@ -14,6 +14,9 @@ declare namespace Cloudflare {
     GITHUB_WEBHOOK_SECRET?: string;
     GITHUB_APP_ID?: string;
     GITHUB_APP_PRIVATE_KEY?: string;
+    ANTHROPIC_API_KEY?: string;
+    ANTHROPIC_MODEL?: string;
+    ANTHROPIC_WORKSPACE_ID?: string;
     GITHUB_APP_CLIENT_ID?: string;
     GITHUB_APP_CLIENT_SECRET?: string;
     GITHUB_APP_SLUG?: string;

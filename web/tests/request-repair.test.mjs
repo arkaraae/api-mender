@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { proposeRequestFieldRepair } from '../lib/request-repair.ts';
+import { proposeRequestFieldRepair, repairCandidateProposals } from '../lib/request-repair.ts';
 import { parseStaticHttpCalls } from '../lib/static-http-calls.ts';
 
 const file = 'src/client.mjs';
@@ -50,4 +50,13 @@ test('ambiguous or dynamic request bodies fail closed', () => {
   assert.throws(() => proposeRequestFieldRepair(input(ambiguous)), /ambiguous/);
   const dynamic = source.replace('{ customerId, sku }', '{ ...payload, customerId, sku }');
   assert.throws(() => proposeRequestFieldRepair(input(dynamic)), /Unsupported|no longer matches/);
+});
+
+test('AI-selected mapping is still a bounded patch with the correct request shape', async () => {
+  const ambiguous = source.replace('{ customerId, sku }', '{ customerId, metadata, sku }');
+  const candidates = repairCandidateProposals(input(ambiguous));
+  assert.deepEqual(candidates.map(candidate => candidate.oldField), ['customerId', 'metadata']);
+  const selected = proposeRequestFieldRepair({ ...input(ambiguous), selectedOldField: 'customerId' });
+  assert.match(selected.afterSource, /JSON\.stringify\(\{ accountId: customerId, metadata, sku \}\)/);
+  assert.throws(() => proposeRequestFieldRepair({ ...input(ambiguous), selectedOldField: 'sku' }), /ambiguous/);
 });
