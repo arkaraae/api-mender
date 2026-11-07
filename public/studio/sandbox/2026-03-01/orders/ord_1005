@@ -1,0 +1,15 @@
+{
+  "id": "ord_1005",
+  "object": "order",
+  "customer_name": "Amara Okafor",
+  "amount": 41.98,
+  "currency": "usd",
+  "status": "refunded",
+  "created": 1767803348,
+  "items": [
+    {
+      "sku": "SKU-204",
+      "qty": 2
+    }
+  ]
+}

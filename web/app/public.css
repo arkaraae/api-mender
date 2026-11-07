@@ -1,0 +1,52 @@
+/* The look of the public pages. The homepage is black with a field of blue and teal light behind
+   the 3D gateway, like the big motion sites (Vercel, Raycast, Stripe); the tool pages (check,
+   watch, pricing, gateway) stay light so results are easy to read, with the same blue as their
+   accent. Green means a call that works, red one that breaks. The team's workspace pages
+   (/demo, /live) keep their own styles. */
+:root{
+  --m-font:"DM Sans",Arial,Helvetica,sans-serif;
+  --m-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --m-black:#050607;
+  --m-black-surface:#101216;
+  --m-black-line:#23262c;
+  --m-white:#ffffff;
+  --m-grey:#9aa0a8;
+  --m-ink:#0a0b0d;
+  --m-muted:#5f6672;
+  --m-paper:#f6f7f9;
+  --m-line:#e1e4ea;
+  --m-accent:#a6439e;
+  --m-accent-hover:#b854b0;
+  --m-accent-deep:#8a3384;
+  --m-accent-light:#d98fd3;
+  --m-glow-1:#1d7cff;
+  --m-glow-2:#17c9a2;
+  --m-pass:#35e08f;
+  --m-pass-deep:#1b9a5f;
+  --m-fail:#ff5f57;
+  --m-fail-deep:#c9302a;
+}
+.marketing-page,.mender-page{font-family:var(--m-font);color:var(--m-ink);background:var(--m-paper)}
+.marketing-nav{font-family:var(--m-font)}
+.marketing-page h1,.marketing-page h2,.marketing-page h3,.mender-page h1,.mender-page h2,.mender-page h3{font-family:var(--m-font)}
+.marketing-page .pill-dark{background:var(--m-ink);border-color:var(--m-ink)}
+.marketing-page .pill-outline{color:var(--m-ink);border-color:var(--m-ink)}
+.marketing-page .pill-button{border-radius:10px;font-family:var(--m-font)}
+.marketing-page .pill-button:hover{transform:none;box-shadow:none}
+.marketing-page .pill-dark:hover{background:#2a2d33}
+.marketing-page a:focus-visible,.marketing-page button:focus-visible,.marketing-page input:focus-visible,.marketing-page select:focus-visible,.marketing-page textarea:focus-visible{outline:3px solid var(--m-accent);outline-offset:2px}
+.marketing-page .marketing-nav nav a[aria-current="page"]{text-decoration:underline;text-decoration-color:var(--m-accent);text-decoration-thickness:2px;text-underline-offset:6px}
+
+/* The check, watch and pricing pages (app/check/check.css), in the same colors. */
+.check-hero h1{letter-spacing:-.035em;font-weight:600}
+.check-card,.pricing-plan{border-color:var(--m-line)}
+.check-link{color:var(--m-ink);text-decoration-color:var(--m-accent);text-decoration-thickness:2px;text-underline-offset:3px}
+/* Purple means Mender did something: a change it can translate. */
+.verdict-bridged{background:#f7eaf6;border-color:#dcb0d8;color:#5a1f55}
+.verdict-bridged .check-verdict-mark{background:var(--m-accent-deep)}
+.pricing-plan-dark{position:relative;background:var(--m-black);border-color:var(--m-black);color:#fff;overflow:hidden}
+.pricing-plan-dark::before{content:"";position:absolute;left:-20%;top:-60%;width:140%;height:90%;background:radial-gradient(closest-side,rgba(166,67,158,.6),transparent 70%),radial-gradient(closest-side at 70% 60%,rgba(94,106,210,.5),transparent 70%);filter:blur(40px);pointer-events:none}
+.pricing-plan-dark>*{position:relative}
+.pricing-plan-dark .pill-outline{background:#fff;border-color:#fff;color:var(--m-ink)}
+.pricing-plan-dark .pill-outline:hover{background:#e9ecf2}
+.pricing-note{background:rgba(53,224,143,.18);color:#9ff2c9}

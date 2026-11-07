@@ -1,0 +1,52 @@
+'use client';
+
+// The homepage's top bar: the Mend logo, the links, and on phones a menu button that turns into a cross and opens a full-screen menu.
+import { useEffect, useState } from 'react';
+import BrandLogo from '@/components/brand-logo';
+
+const LINKS = [
+  { href: '/check', label: 'Check a change' },
+  { href: '/watch', label: 'Watch an API' },
+  { href: '/mender', label: 'Gateway' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/docs', label: 'Setup guide' },
+  { href: '/live', label: 'Sign in' },
+];
+
+export default function HeroNav() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', close);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', close);
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  return (
+    <>
+      <nav className="hero-nav" aria-label="Main navigation">
+        <a className="hero-brand" href="/"><BrandLogo label="Mend home" /></a>
+        <div className="hero-links">
+          {LINKS.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
+        </div>
+        <a className={`hero-join${open ? ' is-menu-open' : ''}`} href="/#join" aria-hidden={open} tabIndex={open ? -1 : undefined}>Join us</a>
+        <button type="button" className={`hero-menu-button ${open ? 'is-open' : ''}`} onClick={() => setOpen((on) => !on)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
+          <svg className="icon-menu" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" /></svg>
+          <svg className="icon-x" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
+      </nav>
+      <div className={`hero-menu ${open ? 'is-open' : ''}`} aria-hidden={!open}>
+        <div className="hero-menu-content">
+          {LINKS.map((link) => <a key={link.href} href={link.href} onClick={() => setOpen(false)}>{link.label}</a>)}
+          <span className="hero-menu-rule" />
+          <a href="/#join" className="hero-menu-join" onClick={() => setOpen(false)}>Join us</a>
+        </div>
+      </div>
+    </>
+  );
+}

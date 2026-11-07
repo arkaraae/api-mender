@@ -2,6 +2,8 @@ import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmS
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { proveWithSchemas, rulesFromOpenApi } from '../mender/src/openapi.js';
+import { fixConsumer } from '../mender/src/codefix.js';
 
 const root = resolve(import.meta.dirname, '..');
 const consumer = join(root, 'examples/quote-api-consumer');
@@ -53,6 +55,17 @@ function noSecrets(text) {
   return !/sk_(?:live|test|proj)_[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9_]+|(?:api[_-]?key|secret|token)\s*[:=]\s*['"][^'"]+/i.test(text);
 }
 
+// First choice: read the change out of the two contracts and rewrite the request from those
+// rules. This needs no model and no key. It returns null whenever the rules are not proven or
+// do not cover the whole change, and the AI path below takes over.
+function menderFix(oldSpec, newSpec, before) {
+  const found = rulesFromOpenApi(oldSpec, newSpec);
+  if (!found.rules.length || !proveWithSchemas(oldSpec, newSpec, found.rules).ok) return null;
+  const fix = fixConsumer(before, found.rules, { paths: ['/api/managed/quotes'] });
+  if (fix.after === before || fix.needsDecision) return null;
+  return { after: fix.after, summary: fix.summary, needsDecision: null, model: 'Mender rules (no AI)' };
+}
+
 async function generateFix(oldSpec, newSpec, before, failure) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { needsDecision: 'Add OPENAI_API_KEY to this repository’s Actions secrets.' };
@@ -102,17 +115,17 @@ try {
     report('needs_review', { version, removed, added, baselineTest: failing, reason: 'The old consumer did not fail with the expected contract error.' });
     process.exit(0);
   }
-  const proposal = await generateFix(previous.body, latest.body, before, failing.output);
+  const proposal = menderFix(previous.body, latest.body, before) ?? await generateFix(previous.body, latest.body, before, failing.output);
   if (proposal.needsDecision) { report('needs_review', { version, removed, added, baselineTest: failing, reason: proposal.needsDecision }); process.exit(0); }
   if (proposal.after === before || proposal.after.length > 30000 || !noSecrets(proposal.after)) {
-    report('needs_review', { version, removed, added, reason: 'The model response was empty, unchanged, too large, or contained a possible secret.' });
+    report('needs_review', { version, removed, added, reason: 'The proposed fix was empty, unchanged, too large, or contained a possible secret.' });
     process.exit(0);
   }
   const fixed = runConsumer(proposal.after);
   if (!fixed.passed) { report('validation_failed', { version, removed, added, baselineTest: failing, patchedTest: fixed, model: proposal.model }); process.exitCode = 1; }
   else {
     writeFileSync(join(reportDir, 'client.mjs'), proposal.after);
-    writeFileSync(join(reportDir, 'pull-request.md'), `## Managed Quote API fix\n\nPublished API contract v${version} changed required request fields: removed ${removed.join(', ') || 'none'}; added ${added.join(', ') || 'none'}.\n\nThe existing consumer failed against the live database-backed API with HTTP 422. The proposed client passed the same live test.\n\nAI model: ${proposal.model}. Summary: ${proposal.summary}\n\nReview the field mapping before merging. No tests or API server files were changed.\n`);
+    writeFileSync(join(reportDir, 'pull-request.md'), `## Managed Quote API fix\n\nPublished API contract v${version} changed required request fields: removed ${removed.join(', ') || 'none'}; added ${added.join(', ') || 'none'}.\n\nThe existing consumer failed against the live database-backed API with HTTP 422. The proposed client passed the same live test.\n\nFix written by: ${proposal.model}. Summary: ${proposal.summary}\n\nReview the field mapping before merging. No tests or API server files were changed.\n`);
     report('fix_ready', { version, removed, added, branch, baselineTest: { passed: false, exitCode: failing.exitCode }, patchedTest: { passed: true, exitCode: fixed.exitCode }, model: proposal.model, summary: proposal.summary });
     output('fix_ready', 'true');
   }

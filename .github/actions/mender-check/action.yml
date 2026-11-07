@@ -1,0 +1,40 @@
+name: API Mender check
+description: Explains, in plain words, what a change to an OpenAPI description means for the people who call the API.
+inputs:
+  specs:
+    description: Paths of the OpenAPI or Swagger files to check, separated by spaces or new lines.
+    required: true
+  fail-on:
+    description: "breaks: fail the check when old callers lose something. never: only report."
+    default: never
+  comment:
+    description: Comment the report on the pull request.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Prepare
+      shell: bash
+      run: npm install --no-save --no-audit --no-fund --prefix "$GITHUB_ACTION_PATH" js-yaml@4.1.0 > /dev/null
+    - name: Compare each description with the base branch
+      shell: bash
+      env:
+        SPECS: ${{ inputs.specs }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        REPO: ${{ github.repository }}
+        OUTPUT: ${{ runner.temp }}/api-mender.md
+      run: |
+        set -o pipefail
+        node "$GITHUB_ACTION_PATH/check.mjs" | tee -a "$GITHUB_STEP_SUMMARY"
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+        BODY: ${{ runner.temp }}/api-mender.md
+      run: |
+        [ -s "$BODY" ] || exit 0
+        gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY" --edit-last 2>/dev/null || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$BODY"

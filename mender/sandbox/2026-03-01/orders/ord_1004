@@ -1,0 +1,15 @@
+{
+  "id": "ord_1004",
+  "object": "order",
+  "customer_name": "Kenji Watanabe",
+  "amount": 34.61,
+  "currency": "usd",
+  "status": "pending",
+  "created": 1767715611,
+  "items": [
+    {
+      "sku": "SKU-203",
+      "qty": 1
+    }
+  ]
+}
