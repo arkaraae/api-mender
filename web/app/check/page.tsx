@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
 import ChangeCheck from '@/components/change-check';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import WindowBand from '@/components/home-v2/window-band';
 import './check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Check an API change · API Mender',
@@ -11,10 +14,13 @@ export const metadata: Metadata = {
 
 export default function CheckPage() {
   return (
+    <div className="mv2">
+    <SiteHeader current="/check" />
     <main className="marketing-page">
-      <SiteNav current="/check" />
+      <WindowBand scene="check" />
       <ChangeCheck />
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/mender">See the gateway ↗</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }

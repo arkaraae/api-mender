@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
 import SalesForm from '@/components/sales-form';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import WindowBand from '@/components/home-v2/window-band';
 import '../check/check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Pricing · API Mender',
@@ -68,8 +71,10 @@ const QUESTIONS = [
 
 export default function PricingPage() {
   return (
+    <div className="mv2">
+    <SiteHeader current="/pricing" />
     <main className="marketing-page">
-      <SiteNav current="/pricing" />
+      <WindowBand scene="pricing" />
       <div className="check-page">
         <section className="check-hero">
           <p className="hero-kicker">PRICING</p>
@@ -104,7 +109,8 @@ export default function PricingPage() {
           </dl>
         </section>
       </div>
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/check">Check a change ↗</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }

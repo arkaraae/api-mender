@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import WindowBand from '@/components/home-v2/window-band';
 import '../check/check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Alpha setup guide · API Mender',
@@ -28,8 +31,10 @@ const LIMITS = [
 
 export default function DocsPage() {
   return (
+    <div className="mv2">
+    <SiteHeader current="/docs" />
     <main className="marketing-page">
-      <SiteNav current="/docs" />
+      <WindowBand scene="docs" />
       <div className="check-page">
         <section className="check-hero">
           <p className="hero-kicker">ALPHA SETUP GUIDE</p>
@@ -53,7 +58,8 @@ export default function DocsPage() {
           <p className="check-hint">Open an <a href="https://github.com/arkaraae/api-mender/issues" target="_blank" rel="noopener noreferrer">issue on GitHub</a>. Issues are public, so leave out private code and repository details. For anything private, use the <a href="/#join">Join us form</a>.</p>
         </section>
       </div>
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/privacy">Alpha data notice</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }

@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import WindowBand from '@/components/home-v2/window-band';
 import WatchForm from '@/components/watch-form';
 import '../check/check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Watch an API · API Mender',
@@ -11,8 +14,10 @@ export const metadata: Metadata = {
 
 export default function WatchPage() {
   return (
+    <div className="mv2">
+    <SiteHeader current="/watch" />
     <main className="marketing-page">
-      <SiteNav current="/watch" />
+      <WindowBand scene="watch" />
       <div className="check-page">
         <section className="check-hero">
           <p className="hero-kicker">FREE · NO SIGN-UP</p>
@@ -21,7 +26,8 @@ export default function WatchPage() {
         </section>
         <WatchForm />
       </div>
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/check">Check a change ↗</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }

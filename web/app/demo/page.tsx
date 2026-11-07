@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import BrandLogo from '@/components/brand-logo';
+import ThemeSync from '@/components/home-v2/theme-sync';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 type View = 'board' | 'repositories' | 'findings' | 'sources';
 type AwsRelease = { version: string; publishedAt: string; url: string; summary: string };
@@ -97,9 +99,9 @@ export default function DemoPage() {
     finally { setQuotesBusy(false); }
   }
 
-  return <main className="demo-app">
+  return <div className="mv2"><ThemeSync /><main className="demo-app">
     <aside className="demo-sidebar" aria-label="Demo workspace navigation">
-      <a className="demo-logo" href="/" aria-label="API Mender home"><BrandLogo /></a>
+      <a className="demo-logo" href="/" aria-label="mend home"><img className="only-light" src="/home/mend_logo.svg" alt="mend" width={1641} height={471} /><img className="only-dark" src="/home/mend_logo_white.svg" alt="mend" width={1641} height={471} /></a>
       <div className="demo-workspace-name"><span className="demo-workspace-avatar">A</span><div><strong>Acme engineering</strong><small>Sample workspace</small></div></div>
       <p className="demo-nav-label">WORKSPACE</p>
       <nav>{([['board', '▦', 'Change board'], ['repositories', '≡', 'Repositories'], ['findings', '◈', 'Findings'], ['sources', '⌁', 'Sources']] as const).map(([id, icon, label]) => <button key={id} type="button" className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={() => navigate(id)}><span aria-hidden="true">{icon}</span>{label}{id === 'findings' && <em>1</em>}</button>)}</nav>
@@ -124,5 +126,5 @@ export default function DemoPage() {
         <footer className="demo-footer"><span>API Mender sample workspace</span><a href="/live">Ready for real data? Open the live workspace ↗</a></footer>
       </div>
     </div>
-  </main>;
+  </main></div>;
 }

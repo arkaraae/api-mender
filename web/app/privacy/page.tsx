@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import WindowBand from '@/components/home-v2/window-band';
 import '../check/check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Alpha data notice · API Mender',
@@ -22,8 +25,10 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   return (
+    <div className="mv2">
+    <SiteHeader />
     <main className="marketing-page">
-      <SiteNav />
+      <WindowBand scene="privacy" />
       <div className="check-page">
         <section className="check-hero">
           <p className="hero-kicker">ALPHA DATA NOTICE</p>
@@ -36,7 +41,8 @@ export default function PrivacyPage() {
           </dl>
         </section>
       </div>
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/docs">Alpha setup guide</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }
