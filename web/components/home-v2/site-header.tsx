@@ -11,7 +11,7 @@ const LINKS = [
 ];
 
 // Transparent over the hero; fills in once the page scrolls. Also owns the light/dark switch.
-export default function SiteHeader() {
+export default function SiteHeader({ current }: { current?: string }) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -27,9 +27,9 @@ export default function SiteHeader() {
 
   function toggleTheme() {
     const root = document.documentElement;
-    const current = root.getAttribute('data-theme')
+    const active = root.getAttribute('data-theme')
       ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    const next = current === 'dark' ? 'light' : 'dark';
+    const next = active === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
     try { localStorage.setItem('am-theme', next); } catch {}
   }
@@ -42,9 +42,10 @@ export default function SiteHeader() {
           <img className="only-dark" src="/home/mend_logo_white.svg" alt="mend" width={1641} height={471} />
         </a>
         <ul className="mv2-links">
-          {LINKS.map((link) => <li key={link.href}><a href={link.href}>{link.label}</a></li>)}
+          {LINKS.map((link) => <li key={link.href}><a href={link.href} aria-current={current === link.href ? 'page' : undefined}>{link.label}</a></li>)}
         </ul>
         <div className="mv2-actions">
+          <a className="mv2-signin" href="/live">Sign in</a>
           <button className="mv2-theme" type="button" onClick={toggleTheme} aria-label="Switch light or dark mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />

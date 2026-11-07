@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 type Probe = { status: number; ms: number; body: unknown };
 type Step = { from: string; to: string; inWords: string[]; notes: string[]; proof: { ok: boolean; samples: number; failures: string[] }; changelog: string };
@@ -72,8 +75,8 @@ export default function MenderPage() {
   useEffect(() => { void load(false); }, [load]);
 
   return (
-    <>
-    <SiteNav current="/mender" />
+    <div className="mv2">
+    <SiteHeader current="/mender" />
     <main className="mender-page">
       <style>{css}</style>
       <p className="kicker">Mender gateway</p>
@@ -144,6 +147,7 @@ export default function MenderPage() {
         </section>
       )}
     </main>
-    </>
+    <SiteFooter />
+    </div>
   );
 }
