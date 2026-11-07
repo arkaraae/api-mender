@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import SiteFooter from '@/components/home-v2/site-footer';
 import SiteHeader from '@/components/home-v2/site-header';
-import WindowBand from '@/components/home-v2/window-band';
 import '../home-v2.css';
 import '../mv2-pages.css';
 
@@ -78,7 +77,6 @@ export default function MenderPage() {
   return (
     <div className="mv2">
     <SiteHeader current="/mender" />
-    <WindowBand scene="mender" />
     <main className="mender-page">
       <style>{css}</style>
       <p className="kicker">Mender gateway</p>

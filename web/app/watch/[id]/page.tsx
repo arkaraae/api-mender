@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import SiteFooter from '@/components/home-v2/site-footer';
 import SiteHeader from '@/components/home-v2/site-header';
-import WindowBand from '@/components/home-v2/window-band';
 import WatchView from '@/components/watch-view';
 import '../../check/check.css';
 import '../../home-v2.css';
@@ -15,7 +14,6 @@ export default async function WatchedApiPage({ params }: { params: Promise<{ id:
     <div className="mv2">
     <SiteHeader />
     <main className="marketing-page">
-      <WindowBand scene="watch" />
       <div className="check-page check-page-top"><WatchView id={id} /></div>
     </main>
     <SiteFooter />

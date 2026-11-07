@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import SiteFooter from '@/components/home-v2/site-footer';
 import SiteHeader from '@/components/home-v2/site-header';
-import WindowBand from '@/components/home-v2/window-band';
+import { PageHead } from '@/components/home-v2/page-parts';
 import '../check/check.css';
 import '../home-v2.css';
 import '../mv2-pages.css';
@@ -34,29 +34,36 @@ export default function DocsPage() {
     <div className="mv2">
     <SiteHeader current="/docs" />
     <main className="marketing-page">
-      <WindowBand scene="docs" />
-      <div className="check-page">
-        <section className="check-hero">
-          <p className="hero-kicker">ALPHA SETUP GUIDE</p>
-          <h1>From first repository to first draft repair.</h1>
-          <p className="hero-subtitle">API Mender is in alpha. Expect rough edges, and read <a href="/privacy">what it reads and stores</a> before connecting a private repository.</p>
-        </section>
-        <section className="check-card" aria-labelledby="steps-title">
-          <h2 id="steps-title">Steps</h2>
-          <ol className="docs-steps">
-            {STEPS.map(([title, body]) => <li key={title}><b>{title}.</b> {body}</li>)}
+      <PageHead kicker="Alpha setup guide" title="From first repository to first draft repair." cta={{ href: '/live', label: 'Open the workspace' }}>
+        API Mender is in alpha. Expect rough edges, and read <a href="/privacy">what it reads and stores</a> before connecting a private repository.
+      </PageHead>
+
+      <div className="mv2-split">
+        <section aria-labelledby="steps-title">
+          <p className="mv2-list-label" id="steps-title"><span aria-hidden="true">✚</span> Setup steps</p>
+          <ol className="mv2-rows">
+            {STEPS.map(([title, body], i) => (
+              <li key={title}>
+                <span className="mv2-row-n">{String(i + 1).padStart(2, '0')}</span>
+                <div>
+                  <h2>{title}</h2>
+                  <p>{body}</p>
+                </div>
+              </li>
+            ))}
           </ol>
         </section>
-        <section className="check-card" aria-labelledby="limits-title">
+
+        <aside className="mv2-aside" aria-labelledby="limits-title">
           <h2 id="limits-title">What the alpha can and can&apos;t do</h2>
-          <dl className="pricing-questions">
+          <dl className="mv2-defs">
             {LIMITS.map(([term, detail]) => <div key={term}><dt>{term}</dt><dd>{detail}</dd></div>)}
           </dl>
-        </section>
-        <section className="check-card" aria-labelledby="help-title">
-          <h2 id="help-title">Report a problem</h2>
-          <p className="check-hint">Open an <a href="https://github.com/arkaraae/api-mender/issues" target="_blank" rel="noopener noreferrer">issue on GitHub</a>. Issues are public, so leave out private code and repository details. For anything private, use the <a href="/#join">Join us form</a>.</p>
-        </section>
+          <div className="mv2-dark-card">
+            <h2>Report a problem <span aria-hidden="true">→</span></h2>
+            <p>Open an <a href="https://github.com/arkaraae/api-mender/issues" target="_blank" rel="noopener noreferrer">issue on GitHub</a>. Issues are public, so leave out private code and repository details. For anything private, use the <a href="/#join">Join us form</a>.</p>
+          </div>
+        </aside>
       </div>
     </main>
     <SiteFooter />

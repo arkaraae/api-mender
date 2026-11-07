@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import ChangeCheck from '@/components/change-check';
 import SiteFooter from '@/components/home-v2/site-footer';
 import SiteHeader from '@/components/home-v2/site-header';
-import WindowBand from '@/components/home-v2/window-band';
 import './check.css';
 import '../home-v2.css';
 import '../mv2-pages.css';
@@ -17,7 +16,6 @@ export default function CheckPage() {
     <div className="mv2">
     <SiteHeader current="/check" />
     <main className="marketing-page">
-      <WindowBand scene="check" />
       <ChangeCheck />
     </main>
     <SiteFooter />
