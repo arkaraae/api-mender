@@ -73,19 +73,101 @@ function jsonBody(options: Node | undefined) {
 // that already contains it is refused, so it can only come from an expression.
 const dynamicMarker = 'mender-dynamic-segment';
 
-// A template URL is read only when its literal prefix fixes scheme, host and
-// port and ends the authority with `/`: `https://api.example.com${rest}` could
-// resolve to another host. An expression after `?` or `#` is refused as well.
-function templateAddress(node: Node | undefined): string | null {
+// Same-file string constants a URL may be built from, e.g.
+//   const API = 'https://api.github.com';  fetch(`${API}/repos/${o}/${r}`)
+// A name counts only when the file binds it exactly once, as a `const` with a
+// literal string value: any other binding of the name (a parameter, a `let`,
+// a shadowing declaration elsewhere) makes it ambiguous, so it stays dynamic.
+type Constants = Map<string, string>;
+
+function bindingNames(node: Node | undefined, names: string[]) {
   node = unwrap(node);
-  if (node?.type !== 'TemplateLiteral' || !node.expressions?.length || node.expressions.length > 32) return null;
-  const parts: unknown[] = (node.quasis || []).map((quasi: Node) => quasi?.value?.cooked);
-  if (parts.length !== node.expressions.length + 1) return null;
-  if (!parts.every((part): part is string => typeof part === 'string' && !part.includes(dynamicMarker))) return null;
-  if (!/^https:\/\/[^/?#@\\\s]+\//.test(parts[0])) return null;
+  if (!node) return;
+  if (node.type === 'Identifier') names.push(node.name);
+  else if (node.type === 'AssignmentPattern') bindingNames(node.left, names);
+  else if (node.type === 'RestElement') bindingNames(node.argument, names);
+  else if (node.type === 'ArrayPattern') for (const item of node.elements || []) bindingNames(item, names);
+  else if (node.type === 'ObjectPattern') for (const item of node.properties || []) bindingNames(item.type === 'RestElement' ? item : item.value, names);
+}
+
+function collectConstants(nodes: Node[]): Constants {
+  const bindings = new Map<string, number>();
+  const values = new Map<string, string>();
+  const count = (name: string) => bindings.set(name, (bindings.get(name) || 0) + 1);
+  for (const node of nodes) {
+    const names: string[] = [];
+    if (node.type === 'VariableDeclarator') {
+      bindingNames(node.id, names);
+      const value = literal(node.init);
+      if (node.id?.type === 'Identifier' && node.__kind === 'const' && value !== null && value.length <= 2048) values.set(node.id.name, value);
+    } else if (['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ObjectMethod', 'ClassMethod'].includes(node.type || '')) {
+      for (const param of node.params || []) bindingNames(param, names);
+      if (node.type === 'FunctionDeclaration') bindingNames(node.id, names);
+    } else if (node.type === 'CatchClause') bindingNames(node.param, names);
+    else if (node.type === 'ClassDeclaration') bindingNames(node.id, names);
+    else if (['ImportSpecifier', 'ImportDefaultSpecifier', 'ImportNamespaceSpecifier'].includes(node.type || '')) bindingNames(node.local, names);
+    names.forEach(count);
+  }
+  return new Map([...values].filter(([name]) => bindings.get(name) === 1));
+}
+
+type Piece = { text: string } | { dynamic: true };
+
+// Flatten a URL expression into literal text and dynamic pieces, inlining
+// unambiguous constants. Anything else (calls, members, conditionals) is a
+// dynamic piece; the caller decides whether the origin is still fixed.
+function urlPieces(node: Node | undefined, constants: Constants, depth = 0): Piece[] | null {
+  node = unwrap(node);
+  if (!node || depth > 20) return null;
+  const text = literal(node);
+  if (text !== null) return [{ text }];
+  if (node.type === 'Identifier') return constants.has(node.name) ? [{ text: constants.get(node.name)! }] : [{ dynamic: true }];
+  if (node.type === 'TemplateLiteral') {
+    const pieces: Piece[] = [];
+    const quasis = node.quasis || [];
+    if (quasis.length !== (node.expressions || []).length + 1 || quasis.length > 33) return null;
+    for (let index = 0; index < quasis.length; index++) {
+      const cooked = quasis[index]?.value?.cooked;
+      if (typeof cooked !== 'string') return null;
+      if (cooked) pieces.push({ text: cooked });
+      if (index < node.expressions.length) {
+        const inner = urlPieces(node.expressions[index], constants, depth + 1);
+        if (!inner) return null;
+        pieces.push(...inner);
+      }
+    }
+    return pieces;
+  }
+  if (node.type === 'BinaryExpression' && node.operator === '+') {
+    const left = urlPieces(node.left, constants, depth + 1);
+    const right = urlPieces(node.right, constants, depth + 1);
+    return left && right ? [...left, ...right] : null;
+  }
+  return [{ dynamic: true }];
+}
+
+// A built URL is read only when, after constants are inlined, its literal
+// prefix fixes scheme, host and port and ends the authority with `/` before
+// anything dynamic (`https://api.example.com${rest}` could resolve to another
+// host), and nothing dynamic sits in a query string or fragment. The literal
+// prefix must fix scheme, host and port and end the authority with
+// `/` before anything dynamic, and nothing dynamic may sit in a query string.
+function resolvedAddress(node: Node | undefined, constants: Constants): { address: string; dynamic: boolean } | null {
+  const pieces = urlPieces(node, constants);
+  if (!pieces?.length || pieces.length > 64) return null;
+  const parts: string[] = [''];
+  let dynamic = false;
+  for (const piece of pieces) {
+    if ('text' in piece) {
+      if (piece.text.includes(dynamicMarker)) return null;
+      parts[parts.length - 1] += piece.text;
+    } else { dynamic = true; parts.push(''); }
+  }
+  if (!dynamic) return { address: parts[0], dynamic: false };
+  if (parts.length > 33 || !/^https:\/\/[^/?#@\\\s]+\//.test(parts[0])) return null;
   const query = parts.findIndex(part => /[?#]/.test(part));
   if (query !== -1 && query < parts.length - 1) return null;
-  return parts.join(dynamicMarker);
+  return { address: parts.join(dynamicMarker), dynamic: true };
 }
 
 // A segment that is wholly or partly an expression is written `{}`.
@@ -121,7 +203,7 @@ function literalHeaders(node: Node | undefined): { headers?: Record<string, stri
   return { headers: Object.fromEntries(headers), complete };
 }
 
-function asCall(file: string, node: Node, templates: boolean): HttpCallDetail | null {
+function asCall(file: string, node: Node, templates: boolean, constants: Constants = new Map()): HttpCallDetail | null {
   if (node.type !== 'CallExpression') return null;
   const callee = unwrap(node.callee);
   const isFetch = callee?.type === 'Identifier' && callee.name === 'fetch' || member(callee, 'globalThis', 'fetch');
@@ -129,8 +211,10 @@ function asCall(file: string, node: Node, templates: boolean): HttpCallDetail | 
     && callee.object?.type === 'Identifier' && callee.object.name === 'axios'
     && ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(callee.property?.name);
   if (!isFetch && !isAxios) return null;
-  const fixed = literal(node.arguments?.[0]);
-  const address = fixed ?? (templates ? templateAddress(node.arguments?.[0]) : null);
+  // The legacy path (templates false) reads only literal URLs; its stored output must not change.
+  const resolved = templates ? resolvedAddress(node.arguments?.[0], constants) : null;
+  const fixed = templates ? (resolved && !resolved.dynamic ? resolved.address : null) : literal(node.arguments?.[0]);
+  const address = templates ? resolved?.address ?? null : fixed;
   if (!address || address.length > 2048) return null;
   let url: URL;
   try { url = new URL(address); } catch { return null; }
@@ -190,13 +274,15 @@ function collectCalls(file: string, source: string, templates: boolean): HttpCal
   let syntax: Node;
   try { syntax = parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'] }) as Node; }
   catch { return []; }
-  const calls: HttpCallDetail[] = [];
+  // Two passes over the same bounded node list: bindings first (a constant
+  // may be declared after the function that uses it), then calls.
+  const nodes: Node[] = [];
   const stack: Node[] = [syntax];
-  let visited = 0;
-  while (stack.length && visited++ < 100_000 && calls.length < 200) {
+  while (stack.length && nodes.length < 100_000) {
     const node = stack.pop()!;
-    const call = asCall(file, node, templates);
-    if (call) calls.push(call);
+    nodes.push(node);
+    if (node.type === 'VariableDeclaration')
+      for (const declarator of node.declarations || []) if (declarator) declarator.__kind = node.kind;
     for (const [key, value] of Object.entries(node)) {
       if (key === 'loc' || key === 'tokens' || key === 'comments' || key === 'extra') continue;
       if (Array.isArray(value)) {
@@ -205,6 +291,13 @@ function collectCalls(file: string, source: string, templates: boolean): HttpCal
         stack.push(value);
       }
     }
+  }
+  const constants = templates ? collectConstants(nodes) : new Map<string, string>();
+  const calls: HttpCallDetail[] = [];
+  for (const node of nodes) {
+    if (calls.length >= 200) break;
+    const call = asCall(file, node, templates, constants);
+    if (call) calls.push(call);
   }
   return calls.sort((a, b) => a.call.line - b.call.line);
 }
