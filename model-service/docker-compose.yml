@@ -1,0 +1,209 @@
+# API Mender private model service.
+#
+#   docker compose --profile weights run --rm fetch-weights   # once, needs internet
+#   docker compose --profile gpu up -d                        # vLLM + gateway
+#   docker compose --profile cpu up -d                        # llama.cpp + gateway
+#
+# Run exactly ONE of the gpu / cpu profiles at a time: both inference services
+# answer to the name `inference` on the internal network.
+#
+# Network layout (this is the privacy boundary, read it before changing it):
+#
+#   host 127.0.0.1:8787 ── front ── gateway ── model-internal ── inference
+#
+#   * model-internal is `internal: true`: containers on it have no route to the
+#     internet and nothing on it is published. The inference server can be
+#     reached only by the gateway and can reach nothing.
+#   * The gateway is the only container on both networks and is published on
+#     the host's loopback interface only. Put TLS (reverse proxy, Cloudflare
+#     Tunnel, WireGuard) in front of that loopback port; never change the
+#     binding to 0.0.0.0.
+#   * fetch-weights is the only container with internet access. It runs once,
+#     writes the weights volume, and exits. It never sees a request.
+
+name: mender-model-service
+
+services:
+  gateway:
+    profiles: [gpu, cpu]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mender-model-gateway:local
+    restart: unless-stopped
+    environment:
+      # Inside the container the gateway must listen on all interfaces to be
+      # reachable through the published port; exposure is limited by `ports`.
+      MENDER_GATEWAY_LISTEN: 0.0.0.0:8787
+      MENDER_UPSTREAM_URL: http://inference:8000/v1
+      MENDER_UPSTREAM_API_KEY: ${MENDER_UPSTREAM_API_KEY:-}
+      MENDER_GATEWAY_TOKENS_SHA256: ${MENDER_GATEWAY_TOKENS_SHA256:?mint a token with `node gateway/token.mjs new <name>` and set MENDER_GATEWAY_TOKENS_SHA256}
+      MENDER_ALLOWED_MODELS: ${MENDER_MODEL_NAME:?set MENDER_MODEL_NAME}
+      MENDER_MAX_BODY_BYTES: ${MENDER_MAX_BODY_BYTES:-65536}
+      MENDER_MAX_OUTPUT_TOKENS: ${MENDER_MAX_OUTPUT_TOKENS:-1024}
+      MENDER_MAX_PROMPT_CHARS: ${MENDER_MAX_PROMPT_CHARS:-49152}
+      MENDER_REQUEST_TIMEOUT_MS: ${MENDER_REQUEST_TIMEOUT_MS:-120000}
+      MENDER_RATE_LIMIT_PER_MINUTE: ${MENDER_RATE_LIMIT_PER_MINUTE:-60}
+      MENDER_MAX_CONCURRENCY: ${MENDER_MAX_CONCURRENCY:-4}
+    ports:
+      - "127.0.0.1:${MENDER_GATEWAY_PORT:-8787}:8787"
+    networks:
+      - front
+      - model-internal
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    # No volumes and no tmpfs: the gateway writes nothing, anywhere.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- gpu profile: vLLM -----------------------------------------------------
+  inference:
+    profiles: [gpu]
+    # Pin a version or digest you have tested; `latest` is only a placeholder.
+    image: ${MENDER_VLLM_IMAGE:-vllm/vllm-openai:latest}
+    restart: unless-stopped
+    # Explicit entrypoint so the command below does not depend on which
+    # entrypoint a given image version ships.
+    entrypoint: ["vllm", "serve"]
+    command:
+      # Not `:?`-required: compose interpolates every service, and a CPU-only
+      # install has no MENDER_MODEL. An unset value fails loudly at startup.
+      - /models/${MENDER_MODEL:-MENDER_MODEL-is-not-set}
+      - --served-model-name
+      - ${MENDER_MODEL_NAME:?set MENDER_MODEL_NAME}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --max-model-len
+      - "${MENDER_CONTEXT_TOKENS:-8192}"
+      # Truncate any prompt text the server would log to zero characters.
+      # Request logging must ALSO stay off (it is opt-in via
+      # --enable-log-requests on current vLLM; older releases need
+      # --disable-log-requests). Verify for the version you pin: README.
+      - --max-log-len
+      - "0"
+    environment:
+      # The weights are local files; forbid any attempt to reach the Hub.
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      # No usage telemetry (there is no egress either; this is belt and braces).
+      VLLM_NO_USAGE_STATS: "1"
+      DO_NOT_TRACK: "1"
+    volumes:
+      - ${MENDER_WEIGHTS_DIR:-mender-weights}:/models:ro
+    networks:
+      model-internal:
+        aliases: [inference]
+    # No `ports:` on purpose.
+    shm_size: "8gb"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # --- cpu profile: llama.cpp ------------------------------------------------
+  inference-cpu:
+    profiles: [cpu]
+    # Pin a dated tag or digest you have tested; `server` is a rolling tag.
+    image: ${MENDER_LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    restart: unless-stopped
+    # String form so MENDER_LLAMA_EXTRA_ARGS can carry several flags.
+    #   --no-webui   no browser UI on the inference port
+    #   --no-slots   no /slots endpoint (it exposes the prompts held in slots)
+    command: >-
+      --model /models/${MENDER_GGUF:-MENDER_GGUF-is-not-set}
+      --alias ${MENDER_MODEL_NAME:?set MENDER_MODEL_NAME}
+      --ctx-size ${MENDER_CONTEXT_TOKENS:-8192}
+      --host 0.0.0.0
+      --port 8000
+      --no-webui
+      --no-slots
+      ${MENDER_LLAMA_EXTRA_ARGS:-}
+    volumes:
+      - ${MENDER_WEIGHTS_DIR:-mender-weights}:/models:ro
+    networks:
+      model-internal:
+        aliases: [inference]
+    # No `ports:` on purpose.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  # --- weights profile: one-shot download -------------------------------------
+  fetch-weights:
+    profiles: [weights]
+    image: ${MENDER_FETCH_IMAGE:-python:3.12-slim}
+    restart: "no"
+    environment:
+      MENDER_FETCH_TARGET: ${MENDER_FETCH_TARGET:-gpu}
+      MENDER_MODEL: ${MENDER_MODEL:-}
+      MENDER_MODEL_REVISION: ${MENDER_MODEL_REVISION:-main}
+      MENDER_GGUF_REPO: ${MENDER_GGUF_REPO:-}
+      MENDER_GGUF: ${MENDER_GGUF:-}
+      MENDER_GGUF_REVISION: ${MENDER_GGUF_REVISION:-main}
+      # Only needed for gated or private model repositories.
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # `$$` is a literal `$` for the container's shell; compose does not
+    # interpolate it. The <1.0 pin keeps the `huggingface-cli` entry point.
+    command:
+      - sh
+      - -ec
+      - |
+        pip install --quiet --no-cache-dir "huggingface_hub[cli]>=0.34,<1.0"
+        case "$$MENDER_FETCH_TARGET" in
+          gpu)
+            : "$${MENDER_MODEL:?set MENDER_MODEL}"
+            huggingface-cli download "$$MENDER_MODEL" \
+              --revision "$$MENDER_MODEL_REVISION" \
+              --local-dir "/models/$$MENDER_MODEL"
+            ;;
+          cpu)
+            : "$${MENDER_GGUF_REPO:?set MENDER_GGUF_REPO}" "$${MENDER_GGUF:?set MENDER_GGUF}"
+            huggingface-cli download "$$MENDER_GGUF_REPO" "$$MENDER_GGUF" \
+              --revision "$$MENDER_GGUF_REVISION" \
+              --local-dir /models
+            ;;
+          *)
+            echo "MENDER_FETCH_TARGET must be gpu or cpu" >&2
+            exit 2
+            ;;
+        esac
+        echo "Weights are in the volume. Record their checksums:"
+        find /models -type f \( -name '*.safetensors' -o -name '*.gguf' \) -exec sha256sum {} +
+    volumes:
+      - ${MENDER_WEIGHTS_DIR:-mender-weights}:/models
+    networks:
+      - weights-egress
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  # Published loopback port lives here.
+  front: {}
+  # No egress, nothing published: gateway <-> inference only.
+  model-internal:
+    internal: true
+  # Internet access for the one-shot weight download only.
+  weights-egress: {}
+
+volumes:
+  mender-weights: {}

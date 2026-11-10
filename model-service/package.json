@@ -1,0 +1,17 @@
+{
+  "name": "@api-mender/model-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private model gateway and test double for API Mender. Zero dependencies.",
+  "main": "run-tests.mjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node gateway/server.mjs",
+    "token": "node gateway/token.mjs",
+    "standin": "node standin/server.mjs"
+  }
+}

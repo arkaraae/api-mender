@@ -1,0 +1,306 @@
+{
+  "providerId": "github-rest",
+  "version": "2026-03-10",
+  "operation": "PATCH /repos/{owner}/{repo}/issues/{issue_number}",
+  "document": {
+    "openapi": "3.0.3",
+    "info": {
+      "title": "GitHub v3 REST API",
+      "version": "1.1.4"
+    },
+    "servers": [
+      {
+        "url": "https://api.github.com"
+      }
+    ],
+    "paths": {
+      "/repos/{owner}/{repo}/issues/{issue_number}": {
+        "patch": {
+          "operationId": "issues/update",
+          "parameters": [
+            {
+              "name": "owner",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "repo",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "issue_number",
+              "in": "path",
+              "required": true
+            }
+          ],
+          "requestBody": {
+            "required": false,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ],
+                      "description": "The title of the issue.",
+                      "nullable": true
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "The contents of the issue.",
+                      "nullable": true
+                    },
+                    "state": {
+                      "type": "string",
+                      "description": "The open or closed state of the issue.",
+                      "enum": [
+                        "open",
+                        "closed"
+                      ]
+                    },
+                    "state_reason": {
+                      "type": "string",
+                      "enum": [
+                        "completed",
+                        "not_planned",
+                        "duplicate",
+                        "reopened"
+                      ],
+                      "nullable": true,
+                      "description": "The reason for the state change. Ignored unless `state` is changed.",
+                      "example": "not_planned"
+                    },
+                    "duplicate_issue_id": {
+                      "type": "integer",
+                      "description": "The ID of the issue that this issue duplicates, used when marking this issue as a duplicate with `status: Duplicate` or `state_reason: duplicate`. The issue must exist and be accessible to the authenticated user."
+                    },
+                    "milestone": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer",
+                          "description": "The `number` of the milestone to associate this issue with or use `null` to remove the current milestone. Only users with push access can set the milestone for issues. Without push access to the repository, milestone changes are silently dropped."
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "labels": {
+                      "type": "array",
+                      "description": "Labels to associate with this issue. Pass one or more labels to _replace_ the set of labels on this issue. Send an empty array (`[]`) to clear all labels from the issue. Only users with push access can set labels for issues. Without push access to the repository, label changes are silently dropped.",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "color": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "rationale": {
+                                "type": "string",
+                                "description": "Optional reasoning for selecting this label."
+                              },
+                              "suggest": {
+                                "type": "boolean",
+                                "description": "If `true`, the change is stored as a pending suggestion for human review rather than applied directly."
+                              },
+                              "confidence": {
+                                "type": "string",
+                                "description": "The confidence level for this label choice.",
+                                "enum": [
+                                  "low",
+                                  "medium",
+                                  "high"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "assignees": {
+                      "type": "array",
+                      "description": "Usernames to assign to this issue. Pass one or more user logins to _replace_ the set of assignees on this issue. Send an empty array (`[]`) to clear all assignees from the issue. Only users with push access can set assignees for new issues. Without push access to the repository, assignee changes are silently dropped.",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "login": {
+                                "type": "string"
+                              },
+                              "rationale": {
+                                "type": "string",
+                                "description": "Optional reasoning for selecting this assignee."
+                              },
+                              "suggest": {
+                                "type": "boolean",
+                                "description": "If `true`, the change is stored as a pending suggestion for human review rather than applied directly."
+                              },
+                              "confidence": {
+                                "type": "string",
+                                "description": "The confidence level for this assignee choice.",
+                                "enum": [
+                                  "low",
+                                  "medium",
+                                  "high"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "issue_field_values": {
+                      "type": "array",
+                      "description": "An array of issue field values to set on this issue. Each field value must include the field ID and the value to set. Only users with push access can set field values for issues",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field_id": {
+                            "type": "integer",
+                            "description": "The ID of the issue field to set"
+                          },
+                          "value": {
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            ],
+                            "description": "The value to set for the field. For multi-select fields, provide an array of option names."
+                          },
+                          "rationale": {
+                            "type": "string",
+                            "description": "Optional reasoning for setting this field value."
+                          },
+                          "suggest": {
+                            "type": "boolean",
+                            "description": "If `true`, the change is stored as a pending suggestion for human review rather than applied directly."
+                          },
+                          "confidence": {
+                            "type": "string",
+                            "description": "The confidence level for this field value choice.",
+                            "enum": [
+                              "low",
+                              "medium",
+                              "high"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "field_id",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "type": {
+                      "description": "The issue type to associate with this issue. Only users with push access can set the type for issues. Without push access to the repository, type changes are silently dropped.",
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "description": "The name of the issue type.",
+                          "example": "Epic"
+                        },
+                        {
+                          "type": "object",
+                          "description": "The issue type with optional metadata.",
+                          "properties": {
+                            "value": {
+                              "type": "string",
+                              "description": "The name of the issue type to associate with this issue, or `null` to remove the current issue type.",
+                              "nullable": true,
+                              "example": "Epic"
+                            },
+                            "rationale": {
+                              "type": "string",
+                              "description": "Optional reasoning for selecting this type."
+                            },
+                            "suggest": {
+                              "type": "boolean",
+                              "description": "If `true`, the change is stored as a pending suggestion for human review rather than applied directly."
+                            },
+                            "confidence": {
+                              "type": "string",
+                              "description": "The confidence level for this type choice.",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": ""
+            },
+            "301": {
+              "description": ""
+            },
+            "403": {
+              "description": ""
+            },
+            "404": {
+              "description": ""
+            },
+            "410": {
+              "description": ""
+            },
+            "422": {
+              "description": ""
+            },
+            "503": {
+              "description": ""
+            }
+          }
+        }
+      }
+    }
+  },
+  "sha256": "4d191b654362d21701552e33cd9bbf5b25de359e2e8cde30a33d3b130d1d58b0",
+  "sourceUrl": "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.2026-03-10.json"
+}
