@@ -1,0 +1,80 @@
+{
+  "providerId": "github-rest",
+  "version": "2022-11-28",
+  "operation": "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+  "document": {
+    "openapi": "3.0.3",
+    "info": {
+      "title": "GitHub v3 REST API",
+      "version": "1.1.4"
+    },
+    "servers": [
+      {
+        "url": "https://api.github.com"
+      }
+    ],
+    "paths": {
+      "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches": {
+        "post": {
+          "operationId": "actions/create-workflow-dispatch",
+          "parameters": [
+            {
+              "name": "owner",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "repo",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "workflow_id",
+              "in": "path",
+              "required": true
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "string",
+                      "description": "The git reference for the workflow. The reference can be a branch or tag name."
+                    },
+                    "inputs": {
+                      "type": "object",
+                      "description": "Input keys and values configured in the workflow file. The maximum number of properties is 25. Any default properties configured in the workflow file will be used when `inputs` are omitted.",
+                      "additionalProperties": true,
+                      "maxProperties": 25
+                    },
+                    "return_run_details": {
+                      "type": "boolean",
+                      "description": "Whether the response should include the workflow run ID and URLs."
+                    }
+                  },
+                  "required": [
+                    "ref"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": ""
+            },
+            "204": {
+              "description": ""
+            }
+          }
+        }
+      }
+    }
+  },
+  "sha256": "6c4514e71b5a3226d5dd8be2403610fbed02700097e2681f7a02983552f3fd83",
+  "sourceUrl": "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.2022-11-28.json"
+}

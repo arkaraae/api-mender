@@ -1,0 +1,10 @@
+{
+  "name": "github-issues-consumer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pilot consumer for Mender: files GitHub issues through the REST API.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}

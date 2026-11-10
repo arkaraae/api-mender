@@ -17,3 +17,5 @@ web/.vinext/
 web/.wrangler/
 web/node_modules
 web/next-env.d.ts
+.mender/
+.mender-acceptance/

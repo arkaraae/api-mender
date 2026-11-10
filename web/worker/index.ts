@@ -7,6 +7,8 @@ import { runDue } from '../lib/mender/watch.js';
 import { processRepositoryScanJobs } from '../lib/repository-scan-worker';
 import { processRepairProofJobs } from '../lib/repair-proof-worker';
 import { reportFailure } from '../lib/failure-alert';
+import { backendAdmin } from '../lib/backend-admin';
+import { recheckProviderFindings } from '../lib/provider-recheck';
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
@@ -33,6 +35,15 @@ export default {
     if (env.SUPABASE_SECRET_KEY && env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY) {
       background('repository-scan-cron', processRepositoryScanJobs(env));
       background('repair-proof-cron', processRepairProofJobs(env));
+    }
+    if (controller.cron === '17 * * * *' && env.SUPABASE_SECRET_KEY) {
+      // Bounded retention for CLI reports, audit events and usage counters.
+      background('retention-cron', (async () => {
+        const { error } = await backendAdmin(env).rpc('apply_retention');
+        if (error) throw error;
+      })());
+      // Check every connected repository against the latest provider catalog.
+      background('provider-recheck-cron', recheckProviderFindings(backendAdmin(env)));
     }
     if (controller.cron === '17 * * * *') {
       if (env.MENDER_WATCH) background('watch-cron', runDue(env.MENDER_WATCH, { origin: env.SITE_ORIGIN ?? 'https://apimender.com' }));

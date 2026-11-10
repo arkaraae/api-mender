@@ -1,0 +1,4 @@
+# The image needs gateway/server.mjs and gateway/token.mjs, nothing else.
+*
+!gateway/
+gateway/*.test.mjs

@@ -1,0 +1,79 @@
+{
+  "providerId": "github-rest",
+  "version": "2022-11-28",
+  "operation": "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+  "document": {
+    "openapi": "3.0.3",
+    "info": {
+      "title": "GitHub v3 REST API",
+      "version": "1.1.4"
+    },
+    "servers": [
+      {
+        "url": "https://api.github.com"
+      }
+    ],
+    "paths": {
+      "/repos/{owner}/{repo}/issues/{issue_number}/comments": {
+        "post": {
+          "operationId": "issues/create-comment",
+          "parameters": [
+            {
+              "name": "owner",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "repo",
+              "in": "path",
+              "required": true
+            },
+            {
+              "name": "issue_number",
+              "in": "path",
+              "required": true
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "The contents of the comment."
+                    }
+                  },
+                  "required": [
+                    "body"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": ""
+            },
+            "403": {
+              "description": ""
+            },
+            "404": {
+              "description": ""
+            },
+            "410": {
+              "description": ""
+            },
+            "422": {
+              "description": ""
+            }
+          }
+        }
+      }
+    }
+  },
+  "sha256": "5675a75a6e0097b18c55e02bb73d640d889d84cfe0eafde51feafd702a182442",
+  "sourceUrl": "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.2022-11-28.json"
+}

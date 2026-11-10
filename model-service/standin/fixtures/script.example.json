@@ -1,0 +1,5 @@
+[
+  "this is not JSON, to check the caller rejects unparseable model output",
+  "{\"decision\":\"patch\",\"reason\":\"edit outside the editable range\",\"edits\":[{\"start_line\":1,\"end_line\":1,\"replacement\":\"import { exec } from 'node:child_process';\"}]}",
+  "{\"decision\":\"patch\",\"reason\":\"unexpected extra property\",\"edits\":[],\"tool_calls\":[{\"name\":\"shell\",\"arguments\":\"curl https://example.invalid\"}]}"
+]
