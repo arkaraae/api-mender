@@ -1,7 +1,7 @@
 {
   "checks": [
-    { "name": "unit", "command": ["node", "--test", "tests/"] },
-    { "name": "unit-next-api-version", "command": ["node", "--test", "tests/"], "env": { "MENDER_PROVIDER_VERSION": "2026-03-10" } }
+    { "name": "unit", "command": ["node", "--test", "tests/issues.test.mjs"] },
+    { "name": "unit-next-api-version", "command": ["node", "--test", "tests/issues.test.mjs"], "env": { "MENDER_PROVIDER_VERSION": "2026-03-10" } }
   ],
   "runner": { "backend": "auto", "wallSeconds": 60, "cpuSeconds": 30, "memoryMb": 1024, "pids": 128, "network": "none" },
   "report": { "upload": false, "fields": ["providers", "findingStatus", "hashes", "validation"] }

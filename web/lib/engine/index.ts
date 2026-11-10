@@ -16,4 +16,18 @@ export type { ImpactInput } from './impact.ts';
 export { findProviderImpact } from './pipeline.ts';
 export type { FindInput, FindResult } from './pipeline.ts';
 
-// --- repair/ exports go here (owned by the repair module) ---
+
+// Repair half: bounded proposals checked by deterministic gates.
+export { deterministicRename, proposeRepair } from './repair/index.ts';
+export type { ProposeRepairInput } from './repair/index.ts';
+export {
+  HOSTED_AI_PROVIDER_DOMAINS, POLICY_GATES, RESPONSE_SCHEMA, SYSTEM_PROMPT, applyLineEdits, applyUnifiedDiff,
+  assertPrivateModelEndpoint, buildMessages, buildRepairTask, evaluatePatch, excerptContainsSecret, findSecrets,
+  isHostedAiProviderHost, parseModelDecision, requestStructuredCompletion, unifiedDiff,
+} from './repair/index.ts';
+export type { RepairContract, RepairTask, SupportedRepairTask } from './repair/index.ts';
+export { repairContractFor } from './repair/contract.ts';
+
+// Customer-managed boundary: the only report that may leave the customer.
+export { REPORT_FIELD_GROUPS, buildMetadataReport, isReportRejection, validateMetadataReport } from './boundary.ts';
+export type { MetadataReport, ReportFieldGroup } from './boundary.ts';
