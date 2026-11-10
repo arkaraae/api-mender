@@ -12,6 +12,8 @@ import { hostedModel, selectRepairFieldSelfHosted } from '../lib/hosted-model.ts
 import { asApiCalls, plannedComparisons, processProviderFindings } from '../lib/provider-findings.ts';
 import { loadProviderRepairContext, recheckSavedEdits, RepairConflict, repairJobColumns } from '../lib/provider-repair.ts';
 import { deriveProviderServices } from '../lib/provider-services.ts';
+import { recheckProviderFindings } from '../lib/provider-recheck.ts';
+import { summarizeActivity } from '../lib/activity-summary.ts';
 import { extractCalls } from '../lib/public-scan.ts';
 import { fakeModel } from './fixtures/repair/reference.mjs';
 
@@ -63,6 +65,7 @@ function fakeDatabase(tables) {
       eq(column, value) { filters.push(row => row[column] === value); return builder; },
       in(column, values) { filters.push(row => values.includes(row[column])); return builder; },
       is(column, value) { filters.push(row => row[column] === value); return builder; },
+      not(column, operator, value) { filters.push(row => !(operator === 'is' && value === null ? row[column] === null || row[column] === undefined : row[column] === value)); return builder; },
       upsert(row, options) { operation = 'upsert'; payload = row; writes.push({ table, operation, row, options }); return builder; },
       update(row) { operation = 'update'; payload = row; writes.push({ table, operation, row }); return builder; },
       insert(row) { operation = 'insert'; payload = row; writes.push({ table, operation, row }); return builder; },
@@ -226,4 +229,51 @@ test('buildMetadataReport reports operation templates, never literal request pat
   assert.equal(report.unrecognizedOriginCount, 1);
   const text = JSON.stringify(report);
   for (const leak of ['secret-repo', 'secret-file', 'internal.example']) assert.ok(!text.includes(leak), leak);
+});
+
+test('the hourly recheck flags a newly published change on a repository nobody pushed to', async () => {
+  const calls = extractCalls('src/issues.mjs', consumer);
+  const repositories = [
+    { id: 'r1', workspace_id: 'w1', full_name: 'acme/checkout', head_sha: HEAD, target_sha: HEAD, paused: false, call_sites: calls },
+    // A scan in flight (target moved) and a paused repository are skipped.
+    { id: 'r2', workspace_id: 'w1', full_name: 'acme/moving', head_sha: HEAD, target_sha: 'd'.repeat(40), paused: false, call_sites: calls },
+    { id: 'r3', workspace_id: 'w2', full_name: 'other/paused', head_sha: HEAD, target_sha: HEAD, paused: true, call_sites: calls },
+  ];
+  // Before the catalog has the change: the repository is checked (and counted), nothing is flagged.
+  const empty = fakeDatabase({ monitored_repositories: repositories, provider_contract_versions: [], provider_contract_slices: [] });
+  assert.deepEqual(await recheckProviderFindings(empty), { workspaces: 1, failures: 0 });
+  assert.equal(empty.writes.filter(w => w.table === 'findings').length, 0);
+  assert.equal(empty.writes.find(w => w.table === 'audit_events').row[0].detail.findings, 0);
+  // The sync job publishes the change; the next hourly run flags it with no push and no GitHub access.
+  const database = fakeDatabase({ monitored_repositories: repositories, ...catalog() });
+  const now = new Date('2026-11-10T20:17:00Z');
+  assert.deepEqual(await recheckProviderFindings(database, now), { workspaces: 1, failures: 0 });
+  const flagged = database.writes.filter(w => w.table === 'findings' && w.operation === 'upsert').map(w => w.row);
+  assert.deepEqual(flagged.map(row => [row.repository_id, row.evidence.finding.change.fields[0]]), [['r1', 'assignee']]);
+  const audit = database.writes.find(w => w.table === 'audit_events').row;
+  assert.deepEqual(audit, [{ workspace_id: 'w1', actor_type: 'system', action: 'provider.recheck',
+    detail: { repositories: 1, findings: 1, at: now.toISOString() } }]);
+});
+
+test('activity summary counts real scans, checks and flagged changes per day and month', () => {
+  const now = new Date('2026-11-10T20:00:00Z');
+  const summary = summarizeActivity({ now, days: 3,
+    scans: [
+      { created_at: '2026-11-10T09:00:00Z', finished_at: '2026-11-10T09:01:00Z', status: 'succeeded' },
+      { created_at: '2026-11-09T09:00:00Z', finished_at: null, status: 'dead' },
+      { created_at: '2026-10-20T09:00:00Z', finished_at: '2026-10-20T09:01:00Z', status: 'succeeded' },
+    ],
+    rechecks: [{ created_at: '2026-11-09T17:17:00Z', detail: { repositories: 4 } }],
+    findings: [{ created_at: '2026-11-10T09:01:00Z', evidence: { kind: 'provider-change' } }],
+    repairs: [{ created_at: '2026-11-10T10:00:00Z', status: 'validated' }, { created_at: '2026-11-10T11:00:00Z', status: 'proposed' }],
+    repositories: [{ scanned_at: '2026-11-10T09:01:00Z' }, { scanned_at: null }] });
+  assert.deepEqual(summary.days, [
+    { date: '2026-11-08', scans: 0, checks: 0, flagged: 0 },
+    { date: '2026-11-09', scans: 0, checks: 4, flagged: 0 },
+    { date: '2026-11-10', scans: 1, checks: 0, flagged: 1 },
+  ]);
+  assert.deepEqual(summary.totals, { scans: 1, checks: 4, flagged: 1 });
+  assert.deepEqual(summary.thisMonth, { changesChecked: 5, changesFlagged: 1, repairsProposed: 2, repairsValidated: 1,
+    previousMonthChangesChecked: 1 });
+  assert.deepEqual(summary.repositories, { connected: 2, lastScanAt: '2026-11-10T09:01:00Z' });
 });

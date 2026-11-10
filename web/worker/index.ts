@@ -8,6 +8,7 @@ import { processRepositoryScanJobs } from '../lib/repository-scan-worker';
 import { processRepairProofJobs } from '../lib/repair-proof-worker';
 import { reportFailure } from '../lib/failure-alert';
 import { backendAdmin } from '../lib/backend-admin';
+import { recheckProviderFindings } from '../lib/provider-recheck';
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
@@ -41,6 +42,8 @@ export default {
         const { error } = await backendAdmin(env).rpc('apply_retention');
         if (error) throw error;
       })());
+      // Check every connected repository against the latest provider catalog.
+      background('provider-recheck-cron', recheckProviderFindings(backendAdmin(env)));
     }
     if (controller.cron === '17 * * * *') {
       if (env.MENDER_WATCH) background('watch-cron', runDue(env.MENDER_WATCH, { origin: env.SITE_ORIGIN ?? 'https://apimender.com' }));
