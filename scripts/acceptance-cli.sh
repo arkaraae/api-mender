@@ -13,6 +13,8 @@
 #      via GITHUB_CONTRACTS_DIR)
 #   4. checks from the consumer's mender.config.json in the isolated runner
 #
+# Works with the bash 3.2 that ships with macOS (empty arrays under set -u).
+#
 # Every outbound request made by the CLI and gateway is to 127.0.0.1 or to
 # raw.githubusercontent.com for the public contracts. No hosted AI API is
 # configured anywhere; the gateway refuses to start if pointed at one.
@@ -23,7 +25,7 @@ WORK="$(mktemp -d)"
 GATEWAY_PORT="${GATEWAY_PORT:-18787}"
 STANDIN_PORT="${STANDIN_PORT:-18799}"
 pids=()
-cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; rm -rf "$WORK"; }
+cleanup() { for pid in ${pids[@]+"${pids[@]}"}; do kill "$pid" 2>/dev/null || true; done; rm -rf "$WORK"; }
 trap cleanup EXIT
 
 # 1. Customer repository: a fresh git repo so the run never touches this checkout.
@@ -54,7 +56,7 @@ if [[ -n "${GITHUB_CONTRACTS_DIR:-}" ]]; then
 fi
 set +e
 MENDER_MODEL_API_KEY="$TOKEN" node "$ROOT/cli/bin/mender.mjs" check --repo "$WORK/repo" --out "$WORK/out" \
-  --provider github-rest --from 2022-11-28 --to 2026-03-10 "${contract_flags[@]}" \
+  --provider github-rest --from 2022-11-28 --to 2026-03-10 ${contract_flags[@]+"${contract_flags[@]}"} \
   --model-endpoint "http://127.0.0.1:$GATEWAY_PORT/v1" --model "$MENDER_MODEL_NAME" ${MENDER_CHECK_FLAGS:-}
 status=$?
 set -e
