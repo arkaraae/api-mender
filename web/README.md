@@ -39,7 +39,7 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 
 apimender.com is served by `api-mender-live` in the owner's Cloudflare account. The `apimender` environment in `wrangler.jsonc` targets that existing Worker, its `apimender.com` and `www.apimender.com` custom domains, and its production KV and D1 resources. The default environment remains separate.
 
-The Mend design is served at `/`, `/login`, `/contact`, `/privacy`, and `/workspace`. The workspace page is an interactive sample. `/login` handles Supabase account sign-in directly; after authentication, `/live` opens the connected workspace. Unauthenticated visits to `/live` return to `/login`.
+The Mend design is served at `/`, `/login`, `/contact`, `/privacy`, and `/workspace`. `/workspace` is an interactive sample. `/login` handles Supabase account sign-in directly; after authentication, `/live` opens the same full-screen workspace design with connected repository scans, findings, API tools, and account controls. Unauthenticated visits to `/live` return to `/login`.
 
 Authenticate Wrangler with the owner's Cloudflare account before a manual release. The production KV and D1 resources already exist; keep their IDs in `env.apimender` aligned with the live Worker's bindings.
 

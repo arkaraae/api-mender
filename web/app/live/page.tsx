@@ -3,28 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
-import BrandLogo from '@/components/brand-logo';
 import ManagedApiStudio from '@/components/managed-api-studio';
+import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 
 type Workspace = { id: string; name: string; owner_id: string };
 type Repository = { id: string; full_name: string; branch: string; head_sha: string | null; sdk_version: string | null; api_version: string | null; call_sites: { file: string; line: number; symbol: string }[]; limitations: string[]; scanned_at: string | null; paused: boolean };
 type Finding = { id: string; title: string; description: string; severity: string; confidence: string; status: string; created_at: string; evidence: { sourceUrl?: string; previousVersion?: string; currentVersion?: string; note?: string; runUrl?: string; pullRequestUrl?: string } };
 type AwsRelease = { version: string; publishedAt: string; evidenceUrl: string; summary: string };
 type AwsSnapshot = { retrieved_at: string; metadata: AwsRelease };
-
-function AwsSdkSection({ snapshot, busy, onCheck }: { snapshot: AwsSnapshot | null; busy: boolean; onCheck: () => void }) {
-  const release = snapshot?.metadata;
-  return <section className="live-card">
-    <h2>AWS SDK for JavaScript</h2>
-    <p>Check the official AWS SDK v3 release stream. The first check saves a baseline; later checks detect a new release version. A release alone does not establish an impact on your code.</p>
-    <button disabled={busy} onClick={onCheck}>Check AWS SDK updates</button>
-    {release && <div className="aws-release">
-      <div><strong>Latest observed: {release.version}</strong><span>Checked {new Date(snapshot.retrieved_at).toLocaleString()}</span></div>
-      <p>Published {new Date(release.publishedAt).toLocaleDateString()} · <a href={release.evidenceUrl} target="_blank" rel="noopener noreferrer">Official release notes ↗</a></p>
-      {release.summary && <p className="live-muted">{release.summary}</p>}
-    </div>}
-  </section>;
-}
 
 export default function LiveWorkspace() {
   const supabase = useMemo(() => { try { return browserSupabase(); } catch { return null; } }, []);
@@ -141,10 +127,27 @@ export default function LiveWorkspace() {
   if (!ready) return <main className="live-shell"><p role="status">Opening your workspace…</p></main>;
   if (!supabase) return <main className="live-shell"><a href="/">← Home</a><h1>Live workspace unavailable</h1><p>Set the public Supabase URL and publishable key in the app environment.</p></main>;
   if (!user) return <main className="live-shell"><p role="status">Taking you to sign in…</p></main>;
-  return <main className="live-shell"><header className="live-header"><a href="/">← Home</a><div className="live-brand"><BrandLogo /><span>LIVE WORKSPACE</span></div>{user && <button onClick={() => void supabase.auth.signOut()}>Sign out</button>}</header>
-    <><div className="live-intro"><div><div className="eyebrow">CONNECTED TO SUPABASE</div><h1>{workspace?.name || 'Create a workspace'}</h1><p>Signed in as {user.email}. Repository scans use the current public GitHub commit.</p></div><span className="live-badge">LIVE DATA</span></div>
-        {!workspace ? <section className="live-card"><h2>Your workspace</h2><p>Create a workspace before adding repositories.</p><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => setWorkspaceName(event.target.value)} /></label><button disabled={busy || !workspaceName.trim()} onClick={() => void createWorkspace()}>Create workspace</button></section>
-          : <><section className="live-stats"><div><span>REPOSITORIES</span><strong>{repositories.length}</strong></div><div><span>FINDINGS</span><strong>{findings.length}</strong></div><div><span>SCANNED</span><strong>{repositories.filter(repo => repo.scanned_at).length}</strong></div></section><ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /><AwsSdkSection snapshot={awsSnapshot} busy={busy} onCheck={() => void checkAwsSdk()} /><section className="live-card"><h2>Check official Stripe sources</h2><p>Compares the latest Stripe Node release and OpenAPI file with your workspace baseline. A changed source creates an informational review item for scanned Stripe repositories; it does not claim a breaking API change.</p><button disabled={busy} onClick={() => void checkSources()}>Check Stripe sources</button></section><section className="live-card"><h2>Add a public GitHub repository</h2><p>Public scans read source files only. Private access and pull requests need a GitHub App installation.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => setRepositoryName(event.target.value)} /></label><label>Branch<input value={branch} onChange={event => setBranch(event.target.value)} /></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim()} onClick={() => void addRepository()}>Add repository</button></section><section className="live-card"><h2>Monitored repositories</h2>{repositories.length ? <div className="live-list">{repositories.map(repo => <article key={repo.id}><div><strong><a href={`https://github.com/${repo.full_name}`} target="_blank" rel="noopener noreferrer">{repo.full_name} ↗</a></strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? new Date(repo.scanned_at).toLocaleString() : 'Waiting for first scan'}</small><p>{repo.api_version?.startsWith('quotes-') ? `Quotes API: ${repo.api_version} · Call sites: ${repo.call_sites.length}` : `Stripe SDK: ${repo.sdk_version || 'Unresolved'} · API version: ${repo.api_version || 'Unresolved'} · Call sites: ${repo.call_sites.length}`}</p>{repo.limitations.length > 0 && <p className="live-muted">{repo.limitations.join('; ')}</p>}</div>{repo.api_version?.startsWith('quotes-') ? <a href="/demo">View testbed ↗</a> : <button disabled={busy || repo.paused} onClick={() => void scan(repo.id)}>Scan now</button>}</article>)}</div> : <p className="live-muted">No repositories registered.</p>}</section><section className="live-card"><h2>Findings</h2>{findings.length ? findings.map(finding => <article key={finding.id} className="live-finding"><strong>{finding.title}</strong><p>{finding.description}</p><small>{finding.severity} · {finding.confidence} · {finding.status} · {new Date(finding.created_at).toLocaleString()}</small>{finding.evidence?.sourceUrl && <p><a href={finding.evidence.sourceUrl} target="_blank" rel="noopener noreferrer">API source ↗</a> · {finding.evidence.note}</p>}{finding.evidence?.runUrl && <p><a href={finding.evidence.runUrl} target="_blank" rel="noopener noreferrer">Scan and database artifact ↗</a>{finding.evidence.pullRequestUrl && <> · <a href={finding.evidence.pullRequestUrl} target="_blank" rel="noopener noreferrer">Review proposed fix ↗</a></>}</p>}</article>) : <p className="live-muted">No official source changes have been recorded beyond the baseline. Run a repository scan and source check to begin monitoring.</p>}</section></>}
-      </>{message && <p className="live-message" role="status">{message}</p>}
-  </main>;
+
+  return <LiveWorkspaceShell
+    user={user}
+    workspace={workspace}
+    workspaceName={workspaceName}
+    onWorkspaceNameChange={setWorkspaceName}
+    onCreateWorkspace={() => void createWorkspace()}
+    repositories={repositories}
+    findings={findings}
+    awsSnapshot={awsSnapshot}
+    repositoryName={repositoryName}
+    onRepositoryNameChange={setRepositoryName}
+    branch={branch}
+    onBranchChange={setBranch}
+    onAddRepository={() => void addRepository()}
+    onScan={(repositoryId: string) => void scan(repositoryId)}
+    onCheckSources={() => void checkSources()}
+    onCheckAwsSdk={() => void checkAwsSdk()}
+    studio={workspace ? <ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /> : null}
+    busy={busy}
+    message={message}
+    onSignOut={() => void supabase.auth.signOut()}
+  />;
 }

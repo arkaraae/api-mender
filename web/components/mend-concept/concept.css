@@ -92,3 +92,61 @@ button.heat-cell{backdrop-filter:none;-webkit-backdrop-filter:none}
 @media(min-width:701px){.sidebar-collapsed .sidebar-mini-mark{display:block;width:24px;height:24px}.sidebar-collapsed .sidebar-mini-mark img{width:90px;left:-8px;top:-19px}.sidebar-collapsed .sidebar-wordmark{display:none}}
 @media(min-width:701px){.sidebar-collapsed .sidebar-account-menu button{display:block}}
 
+/* The authenticated product uses the same full-screen workspace shell as the design preview. */
+.live-product .mend-topbar-mark{display:grid;place-items:center;width:19px;height:19px;border-radius:4px;background:#080b11;color:#fff;font-size:20px;line-height:1}
+.live-product .sidebar-heading{min-height:32px}
+.live-product .sidebar-mini-mark{display:none;color:#fff;font-size:27px;line-height:1}
+.live-product .main-nav button>span:not(.nav-count){width:auto;font-size:13px;line-height:1.2;white-space:nowrap}
+.live-product .main-nav button>svg{flex:none}
+.live-product .sidebar-empty{padding:0 12px;color:#8190a5;font-size:11px}
+.live-product .sidebar-bottom-action span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-product .live-search-composer{min-height:116px}
+.live-product .live-search-composer input{display:block;width:100%;height:54px;padding:0 2px;border:0;outline:0;background:transparent;color:#f5f6fa;font-size:14px}
+.live-product .live-search-composer input::placeholder{color:#aeb7c6}
+.live-product .live-search-composer .composer-foot{color:#8996aa;font-size:11px}
+.live-product .live-scan-grid{display:grid;grid-template-columns:repeat(36,minmax(0,1fr));gap:4px;margin:22px 0 15px}
+.live-product .live-scan-cell{display:block;aspect-ratio:1;border:0;border-radius:5px;background:#252d3c}
+.live-product button.live-scan-cell.active{background:#5689e8;box-shadow:0 0 8px #588ff044;cursor:pointer}
+.live-product button.live-scan-cell.active:hover,.live-product button.live-scan-cell.active:focus-visible{background:#88adff;outline:2px solid #dce8ff;outline-offset:1px}
+.live-product .live-empty{margin:15px 0;color:#9ba9bd;font-size:12px;line-height:1.5}
+.live-product .live-result-list{margin-top:12px}
+.live-product .live-result-list article{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid #ffffff1a;color:#dae3f0}
+.live-product .live-result-list article>div{flex:1;min-width:0}
+.live-product .live-result-list strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:500}
+.live-product .live-result-list small{display:block;margin-top:4px;color:#8e9db1;font-size:10px}
+.live-product .live-result-list p{margin:8px 0 0;color:#b6c2d3;font-size:12px}
+.live-product .live-result-list a,.live-product .live-result-list button{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border:0;background:transparent;color:#b8c8dd}
+.live-product .live-section-view{max-width:950px;margin:65px auto}
+.live-product .live-section-view .section-panel{margin-top:17px}
+.live-product .live-section-view .section-panel:first-of-type{margin-top:32px}
+.live-product .live-section-view .live-scan-grid{margin:18px 0}
+.live-product .live-section-view h2,.live-product .live-create h2{margin:0 0 10px;color:#f4f6fa;font-size:19px;font-weight:600}
+.live-product .live-tool-card p,.live-product .live-create p,.live-product .managed-api-studio p{color:#b5c1d1;font-size:12px;line-height:1.55}
+.live-product .live-fields{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.live-product .live-fields label{display:block;margin:14px 0;color:#bac7d9;font-size:11px}
+.live-product .live-fields input{display:block;width:100%;margin-top:7px;padding:11px 12px;border:1px solid #ffffff2b;border-radius:9px;background:#ffffff0e;color:#f4f7fb;font-size:13px}
+.live-product .live-tool-card>button,.live-product .live-create>button,.live-product .managed-api-studio>button,.live-product .live-repo-list button{margin-top:10px;padding:10px 14px;border:0;border-radius:9px;background:#dce8ff;color:#1d2b44;font-size:12px;font-weight:600}
+.live-product button:disabled{opacity:.5;cursor:default}
+.live-product .live-create{max-width:650px;margin:25px auto}
+.live-product .live-repo-list article{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-top:1px solid #ffffff1c}
+.live-product .live-repo-list article>div{min-width:0}
+.live-product .live-repo-list strong{display:block;color:#f1f5fa;font-size:13px}
+.live-product .live-repo-list small{display:block;margin-top:4px;color:#93a2b6;font-size:11px}
+.live-product .live-repo-list p{margin:6px 0 0;color:#acb9ca;font-size:11px}
+.live-product .live-repo-list a{display:flex;align-items:center;gap:6px;color:#bdd2ff;font-size:11px;white-space:nowrap}
+.live-product .managed-api-studio{margin:32px 0 0;padding:26px;border:0;border-radius:18px;background:rgba(13,16,23,.58);color:#f4f6fa;box-shadow:0 18px 42px rgba(0,0,0,.32);backdrop-filter:blur(18px) saturate(1.45)}
+.live-product .managed-api-studio h3{margin-top:26px;color:#f4f6fa;font-size:15px}
+.live-product .managed-api-studio .managed-api-heading{display:flex;justify-content:space-between;gap:18px}
+.live-product .managed-api-studio .live-badge{display:inline-flex;align-items:center;height:26px;margin:0;border-radius:7px;background:#39614d66;color:#b4e8cc}
+.live-product .managed-api-studio a{color:#b9d0ff}
+.live-product .managed-api-studio code{color:#d4dfff}
+.live-product .managed-api-studio .live-list article{border-color:#ffffff1c}
+.live-product .managed-api-studio .live-list strong{color:#e6edf8}
+.live-product .managed-api-studio .live-list small{color:#91a0b5}
+.live-product .managed-api-studio .live-list button{padding:8px 11px;border:0;border-radius:7px;background:#ffffff1c;color:#e4ebf6}
+.live-product .managed-api-studio .live-message{position:static;margin-top:15px;border:0;background:#39745738;color:#c4eed6}
+.live-product .live-workspace-message{position:fixed;z-index:55;right:24px;bottom:24px;max-width:min(460px,calc(100vw - 48px));margin:0;padding:12px 16px;border-radius:10px;background:#233e34ed;color:#d7f8e4;box-shadow:0 15px 40px #0008;font-size:12px}
+.live-product .search-input button{border:0;background:none;color:#aab7ca}
+@media(min-width:701px){.live-product .sidebar-collapsed .sidebar-wordmark{display:none}.live-product .sidebar-collapsed .sidebar-mini-mark{display:block}}
+@media(max-width:700px){.live-product .live-fields{grid-template-columns:1fr}.live-product .live-section-view{margin:54px auto}.live-product .live-scan-grid{gap:3px}}
+
