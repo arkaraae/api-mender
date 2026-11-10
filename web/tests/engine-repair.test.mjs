@@ -67,7 +67,10 @@ test('the model request is narrow: no tools, strict schema, only the excerpt', a
   // Untrusted text never reaches the system prompt.
   assert.equal(SYSTEM_PROMPT.includes('evil.example'), false);
   const user = JSON.parse(body.messages[1].content);
-  assert.deepEqual(Object.keys(user), ['task', 'contract_change', 'editable_lines', 'source_excerpt']);
+  assert.deepEqual(Object.keys(user), ['task', 'contract_change', 'value_moves', 'editable_lines', 'source_excerpt']);
+  // The move is derived from the contract alone: identifiers and fixed phrases.
+  assert.deepEqual(user.value_moves, [{ removed: 'assignee', removed_type: 'string', into: [{ field: 'assignees',
+    type: 'array', items: 'string', shape: 'wrap the value in a one-element array: assignees: [value]' }] }]);
   assert.deepEqual(user.editable_lines, { start: 6, end: 10 });
   assert.deepEqual(user.source_excerpt.map(row => row.line), [4, 5, 6, 7, 8, 9, 10, 11, 12]);
   assert.deepEqual(user.source_excerpt.map(row => row.text), lines.slice(3, 12));
