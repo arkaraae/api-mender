@@ -1,5 +1,7 @@
 # API Mender: API change monitor
 
+> **Private-AI pipeline (branch `mender/private-ai-mvp`):** provider-independent detection and bounded repair of third-party API changes, with an open-weight model on Mender-controlled or customer-controlled infrastructure only. Start with [docs/private-ai-mvp.md](docs/private-ai-mvp.md), the [data boundaries](docs/data-boundaries.md), the [Mender CLI](cli/) and the [model service](model-service/README.md). No code path sends customer source to a hosted AI provider; the OpenAI and Anthropic paths described below were removed.
+
 ## Cloudflare team deployment
 
 The current deployable website and API live in [`web/`](web/). Cloudflare Workers Builds can build that directory from this GitHub repository and publish every merged change on `main`. This lets repository collaborators ship updates through pull requests. The Cloudflare Worker serves the frontend and API routes; Supabase continues to provide Auth and database storage, and GitHub Actions continues to run the managed Quote API monitor and AI repair workflow. See [web deployment instructions](web/README.md) for build settings and the cutover checklist. The older ChatGPT Site remains the current public endpoint until the Cloudflare hostname, authentication redirects, and monitor URL are verified.
