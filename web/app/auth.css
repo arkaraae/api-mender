@@ -1,0 +1,140 @@
+/* The public Mend account gateway. Keep this after the shared site styles. */
+.mend-auth {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #05080d url('/mend-login-particle-vortex.png') center / cover no-repeat;
+  color: #f5f7fa;
+  font-family: var(--m-font), Arial, sans-serif;
+}
+.mend-auth::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: -4%;
+  background: url('/mend-login-particle-vortex.png') center / cover no-repeat;
+  animation: mend-auth-drift 24s ease-in-out infinite alternate;
+  will-change: transform;
+  pointer-events: none;
+}
+.mend-auth::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: radial-gradient(ellipse 32rem 26rem at 50% 47%, rgba(2, 5, 11, .84), rgba(2, 5, 11, .39) 62%, rgba(2, 5, 11, .22));
+  pointer-events: none;
+}
+.mend-auth button, .mend-auth input { font: inherit; }
+.mend-auth button { cursor: pointer; }
+.mend-auth button:disabled { opacity: .55; cursor: wait; }
+.mend-auth-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  width: min(1240px, calc(100% - 80px));
+  height: 78px;
+  margin: auto;
+}
+.mend-auth-header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #bac7d4;
+  font-size: 12px;
+  transition: color .2s ease;
+  animation: mend-auth-rise .65s .08s cubic-bezier(.2,.7,.2,1) both;
+}
+.mend-auth-header a:hover { color: white; }
+.mend-auth-header a span { font-size: 19px; line-height: 1; }
+.mend-auth-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: calc(100svh - 78px);
+  padding: 34px 22px 96px;
+}
+.mend-auth-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 392px);
+  text-align: center;
+}
+.mend-auth-content > * {
+  animation: mend-auth-rise .72s cubic-bezier(.2,.7,.2,1) both;
+}
+.mend-auth-content > :nth-child(1) { animation-delay: .10s; }
+.mend-auth-content > :nth-child(2) { animation-delay: .19s; }
+.mend-auth-content > :nth-child(3) { animation-delay: .27s; }
+.mend-auth-content > :nth-child(4) { animation-delay: .35s; }
+.mend-auth-content > :nth-child(5) { animation-delay: .44s; }
+.mend-auth-content > :nth-child(6) { animation-delay: .52s; }
+.mend-auth-logo { display: block; width: 150px; height: 48px; object-fit: cover; margin-bottom: 25px; }
+.mend-auth-kicker { color: #99b3c8; font-size: 10px; font-weight: 700; letter-spacing: .17em; }
+.mend-auth-content h1 { margin: 16px 0 10px; color: #f9fbff; font-size: clamp(26px, 3vw, 32px); font-weight: 500; line-height: 1.2; letter-spacing: -.05em; text-shadow: 0 6px 25px #000; }
+.mend-auth-intro { margin: 0; color: #adbcca; font-size: 13px; line-height: 1.55; }
+.mend-auth-actions { width: 100%; margin-top: 32px; }
+.mend-auth-primary, .mend-auth-github {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 53px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.mend-auth-primary { background: #f0f2f4; color: #17212b; box-shadow: 0 18px 40px #0008; }
+.mend-auth-primary:hover:not(:disabled) { background: #fff; transform: translateY(-2px); box-shadow: 0 21px 44px #0009; }
+.mend-auth-primary > span:first-child, .mend-auth-github svg { margin-right: auto; }
+.mend-auth-primary > span:last-child, .mend-auth-github > span:last-child { margin-left: auto; }
+.mend-auth-primary > span:first-child { font-size: 18px; font-weight: 400; }
+.mend-auth-divider { display: flex; align-items: center; gap: 14px; width: 100%; margin: 16px 0; color: #8799aa; font-size: 11px; }
+.mend-auth-divider::before, .mend-auth-divider::after { content: ''; height: 1px; flex: 1; background: #ffffff2b; }
+.mend-auth-github { background: rgba(13, 19, 28, .54); color: #eef4f9; box-shadow: 0 18px 38px #0006; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.mend-auth-github:hover:not(:disabled) { background: rgba(29, 41, 55, .69); transform: translateY(-2px); }
+.mend-auth-github img { width: 20px; height: 20px; filter: invert(1); }
+.mend-auth-demo { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; color: #d3dfeb; font-size: 12px; transition: color .2s ease; }
+.mend-auth-demo:hover, .mend-auth-text-link:hover { color: white; }
+.mend-auth-content small { max-width: 345px; margin-top: 25px; color: #93a4b6; font-size: 10px; line-height: 1.55; }
+.mend-auth-email-panel { width: 100%; padding: 18px; border-radius: 14px; background: rgba(11, 17, 27, .65); box-shadow: 0 20px 50px #0007; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); animation: mend-auth-rise .36s cubic-bezier(.2,.7,.2,1) both; }
+.mend-auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 15px; padding: 3px; border-radius: 9px; background: #ffffff14; }
+.mend-auth-tabs button { min-height: 36px; border: 0; border-radius: 7px; background: transparent; color: #9dabbc; font-size: 12px; }
+.mend-auth-tabs button.selected { background: #ffffff23; color: #fff; }
+.mend-auth-form { text-align: left; }
+.mend-auth-form label { display: block; margin: 12px 0 6px; color: #cad5df; font-size: 11px; font-weight: 600; }
+.mend-auth-form input { display: block; width: 100%; height: 44px; padding: 0 12px; border: 1px solid #ffffff30; border-radius: 8px; outline: 0; background: #ffffff12; color: #fff; font-size: 13px; }
+.mend-auth-form input::placeholder { color: #8394a5; }
+.mend-auth-form input:focus-visible { border-color: #a6c9ed; box-shadow: 0 0 0 3px #88bfff27; }
+.mend-auth-form .mend-auth-primary { margin-top: 20px; justify-content: space-between; }
+.mend-auth-text-link { display: inline-block; margin-top: 14px; padding: 4px; border: 0; background: none; color: #b4c5d4; font-size: 11px !important; text-decoration: underline; }
+.mend-auth-confirmation { width: 100%; margin-top: 27px; padding: 22px; border-radius: 14px; background: rgba(11, 17, 27, .65); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.mend-auth-confirmation h2 { margin: 0 0 8px; font-size: 22px; font-weight: 500; }
+.mend-auth-confirmation p { margin: 0 0 20px; color: #b4c3d0; font-size: 12px; line-height: 1.6; }
+.mend-auth-confirmation strong { color: white; overflow-wrap: anywhere; }
+.mend-auth-confirmation .mend-auth-primary { justify-content: space-between; }
+.mend-auth-message { width: 100%; margin: 18px 0 0; padding: 12px 14px; border-radius: 9px; background: #13263aca; color: #d3e7f8; font-size: 12px; line-height: 1.5; }
+.mend-auth-loading { margin: 33px 0 0; color: #d4e2ef; font-size: 13px; }
+.mend-auth :is(a,button):focus-visible { outline: 2px solid #a8cfff; outline-offset: 4px; }
+@keyframes mend-auth-rise { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mend-auth-drift { from { transform: scale(1.025) translate(-.8%, -.4%); } to { transform: scale(1.075) translate(.8%, .5%); } }
+@media (max-width: 640px) {
+  .mend-auth-header { width: calc(100% - 36px); height: 68px; }
+  .mend-auth-stage { min-height: calc(100svh - 68px); padding: 20px 20px 62px; }
+  .mend-auth-logo { width: 135px; height: 43px; margin-bottom: 22px; }
+  .mend-auth-content h1 { font-size: clamp(25px, 7vw, 31px); }
+  .mend-auth-actions { margin-top: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mend-auth::before, .mend-auth-header a, .mend-auth-content > *, .mend-auth-email-panel { animation: none; }
+  .mend-auth-primary, .mend-auth-github { transition: none; }
+}

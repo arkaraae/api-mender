@@ -58,7 +58,7 @@ export default function JoinForm() {
       <label className="join-trap" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off" /></label>
       {state.error && <p className="join-error" role="alert">{state.error}</p>}
       <div className="join-submit">
-        <button type="submit" disabled={state.phase === 'sending'}>{state.phase === 'sending' ? 'Sending…' : 'Join us'}</button>
+        <button type="submit" disabled={state.phase === 'sending'}>{state.phase === 'sending' ? 'Sending…' : 'Send message'}</button>
         <p>No account needed. We will email you only about API Mender.</p>
       </div>
     </form>
