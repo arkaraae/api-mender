@@ -37,17 +37,17 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 
 ## Publishing to apimender.com
 
-apimender.com is served from its own Cloudflare account, as the Worker `apimender-site`, using the `apimender` environment in `wrangler.jsonc` (its account, the apimender.com and www.apimender.com custom domains, the `MENDER_WATCH` KV namespace and the hourly cron). The default environment stays as it was for the team's Workers Builds, without the watch list.
+apimender.com is served by `api-mender-live` in the owner's Cloudflare account. The `apimender` environment in `wrangler.jsonc` targets that existing Worker, its `apimender.com` and `www.apimender.com` custom domains, and its production KV and D1 resources. The default environment remains separate.
 
-Once, in that account: `npx wrangler login`, then `npx wrangler kv namespace create MENDER_WATCH --env apimender`, and put the id it prints in `env.apimender.kv_namespaces` (done for apimender.com: `743c7ff4…`).
+Authenticate Wrangler with the owner's Cloudflare account before a manual release. The production KV and D1 resources already exist; keep their IDs in `env.apimender` aligned with the live Worker's bindings.
 
 The interest form stores contacts in the configured Supabase project's Table Editor → `interest_contacts`. Its Worker secret must be set with `npx wrangler secret put SUPABASE_SECRET_KEY --env apimender`; never put that value in `wrangler.jsonc`, `.env.production`, or GitHub. D1 remains in use for the gateway and daily request limits, but its old `interest_contacts` migration is not required for this form.
 
-Releases are automatic: every push to `mender-demo` that changes `web/` or `mender/` runs `.github/workflows/deploy-apimender.yml`, which checks the code, applies new D1 migrations, builds, deploys and then checks the live site. It needs the repository secret `CLOUDFLARE_API_TOKEN` (a token for the apimender.com account that can edit Workers, KV, D1 and the apimender.com Worker routes); without it the workflow only runs the checks. To release by hand instead, from `web/`:
+Every push to `mender-demo` that changes `web/` or `mender/` runs `.github/workflows/deploy-apimender.yml`, which checks the code, applies new D1 migrations, builds, deploys and checks the live site. The workflow needs a `CLOUDFLARE_API_TOKEN` repository secret scoped to the owner's account; without it, the deployment step is blocked. To release by hand from `web/`:
 
 ```bash
 CLOUDFLARE_ENV=apimender npm run build
-npx wrangler deploy --config dist/server/wrangler.json
+npx wrangler deploy --config dist/server/wrangler.json --keep-vars
 ```
 
 For local development with the watch list, run `CLOUDFLARE_ENV=apimender npm run dev`. Sign-up emails from `/live` need `https://apimender.com/live` in the Supabase Auth redirect URLs.
