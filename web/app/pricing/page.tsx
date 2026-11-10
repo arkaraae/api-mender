@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import BrandLogo from '@/components/brand-logo';
 import SalesForm from '@/components/sales-form';
-import SiteNav from '@/components/site-nav';
+import SiteFooter from '@/components/home-v2/site-footer';
+import SiteHeader from '@/components/home-v2/site-header';
+import { PageHead, SceneStrip } from '@/components/home-v2/page-parts';
 import '../check/check.css';
+import '../home-v2.css';
+import '../mv2-pages.css';
 
 export const metadata: Metadata = {
   title: 'Pricing · API Mender',
@@ -68,14 +71,14 @@ const QUESTIONS = [
 
 export default function PricingPage() {
   return (
+    <div className="mv2">
+    <SiteHeader current="/pricing" />
     <main className="marketing-page">
-      <SiteNav current="/pricing" />
+      <PageHead kicker="Pricing" title="Free to use. Pay only for the APIs you run." cta={{ href: '#contact-sales', label: 'Contact sales' }}>
+        Developers who call APIs never pay. Companies that run an API pay per API, not per seat. Large teams talk to us.
+      </PageHead>
+      <SceneStrip scenes={['pricing', 'check', 'watch']} />
       <div className="check-page">
-        <section className="check-hero">
-          <p className="hero-kicker">PRICING</p>
-          <h1>Free to use. Pay only for the APIs you run.</h1>
-          <p className="hero-subtitle">Developers who call APIs never pay. Companies that run an API pay per API, not per seat. Large teams talk to us.</p>
-        </section>
         <section className="pricing-plans" aria-label="Plans">
           {PLANS.map((plan) => (
             <article key={plan.name} className={`pricing-plan ${plan.look === 'dark' ? 'pricing-plan-dark' : ''}`}>
@@ -91,12 +94,12 @@ export default function PricingPage() {
           ))}
         </section>
         <section className="check-card" id="contact-sales" aria-labelledby="sales-title">
-          <h2 id="sales-title">Contact sales</h2>
-          <p className="check-hint">Tell us about your APIs. We reply within two working days.</p>
+          <h2 id="sales-title" className="mv2-panel-title">Contact sales</h2>
+          <p className="check-hint mv2-panel-sub">Tell us about your APIs. We reply within two working days.</p>
           <SalesForm />
         </section>
         <section className="check-card" aria-labelledby="questions-title">
-          <h2 id="questions-title">Questions</h2>
+          <h2 id="questions-title" className="mv2-panel-title">Questions</h2>
           <dl className="pricing-questions">
             {QUESTIONS.map(([question, answer]) => (
               <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>
@@ -104,7 +107,8 @@ export default function PricingPage() {
           </dl>
         </section>
       </div>
-      <footer className="marketing-footer"><span className="site-brand"><BrandLogo /></span><span>Know what changed. Know what to do.</span><a href="/check">Check a change ↗</a></footer>
     </main>
+    <SiteFooter />
+    </div>
   );
 }
