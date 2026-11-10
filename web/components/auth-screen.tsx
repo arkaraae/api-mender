@@ -65,7 +65,7 @@ export default function AuthScreen({
 
           <span className="mend-auth-divider">or</span>
           <button type="button" className="mend-auth-github" disabled={busy} onClick={() => void onGithubAuthenticate()}><img src="/integrations/github.svg" alt="" /> Continue with GitHub <span aria-hidden="true">→</span></button>
-          <a className="mend-auth-demo" href="/demo">Explore the demo workspace <span aria-hidden="true">→</span></a>
+          <a className="mend-auth-demo" href="/workspace">Explore the demo workspace <span aria-hidden="true">→</span></a>
         </div>}
 
         {message && <p className="mend-auth-message" role="status">{message}</p>}

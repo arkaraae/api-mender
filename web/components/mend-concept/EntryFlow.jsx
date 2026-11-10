@@ -1,21 +1,20 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeftIcon as ArrowLeft,
   ArrowRightIcon as ArrowRight,
   ArrowUpRightIcon as ArrowUpRight,
   ArrowsLeftRightIcon as ArrowsLeftRight,
   CheckCircleIcon as CheckCircle,
   CodeIcon as Code,
-  EnvelopeSimpleIcon as EnvelopeSimple,
-  GithubLogoIcon as GithubLogo,
   GitBranchIcon as GitBranch,
   ShieldCheckIcon as ShieldCheck,
   UsersThreeIcon as UsersThree,
 } from '@phosphor-icons/react';
 import { App as Workspace } from './App.jsx';
 import JoinForm from '../join-form';
+import AuthScreen from '../auth-screen';
+import { browserSupabase } from '../../lib/supabase-browser';
 import './entry.css';
 
 const routeForPath = () => {
@@ -197,23 +196,82 @@ function Privacy({ navigate }) {
   </div>;
 }
 
-function Login({ navigate }) {
-  return <div className="entry-page login-page">
-    <header className="login-header"><button onClick={() => navigate('/')}><ArrowLeft size={17} /> Back to home</button></header>
-    <main className="login-stage">
-      <div className="login-content">
-        <BrandLogo className="login-logo" />
-        <span className="login-kicker">WELCOME TO MEND</span>
-        <h1>The workspace where<br />API changes become safe.</h1>
-        <p>Find the impact. Prove the fix. Move forward together.</p>
-        <a className="login-primary" href="/live"><EnvelopeSimple size={20} /> Sign in with Mend account <ArrowRight size={17} /></a>
-        <span className="login-separator">or</span>
-        <a className="login-provider" href="/live"><GithubLogo size={20} weight="fill" /> Continue with GitHub <ArrowRight size={17} /></a>
-        <button className="login-demo" onClick={() => navigate('/workspace')}>Explore the demo workspace <ArrowRight size={15} /></button>
-        <small>Choose your sign-in method on the account screen. The demo workspace uses sample data.</small>
-      </div>
-    </main>
-  </div>;
+function Login() {
+  const supabase = useMemo(() => { try { return browserSupabase(); } catch { return null; } }, []);
+  const [ready, setReady] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [githubEnabled, setGithubEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) { setReady(true); setMessage('Sign in is unavailable right now.'); return; }
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      setReady(true);
+      if (data.user) window.location.replace('/live');
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active && session?.user) window.location.replace('/live');
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, [supabase]);
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) return;
+    let active = true;
+    fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } })
+      .then(response => response.ok ? response.json() : null)
+      .then(settings => { if (active) setGithubEnabled(settings?.external?.github === true); })
+      .catch(() => { if (active) setGithubEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function authenticate(mode) {
+    if (!supabase) { setMessage('Sign in is unavailable right now.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      const result = mode === 'signin'
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/live` } });
+      const needsConfirmation = mode === 'signup' && !result.error && !result.data.session;
+      if (needsConfirmation) setAwaitingConfirmation(true);
+      setMessage(result.error?.message || (needsConfirmation ? 'Check your inbox for a confirmation link.' : 'Opening your workspace…'));
+      if (result.data.session) window.location.replace('/live');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not sign in.');
+    } finally { setBusy(false); }
+  }
+
+  async function authenticateWithGithub() {
+    if (!supabase) { setMessage('Sign in is unavailable right now.'); return; }
+    if (!githubEnabled) { setMessage('GitHub sign-in is not enabled yet. Use your Mend account or explore the demo.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: `${window.location.origin}/live` } });
+      if (error) setMessage(error.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start GitHub sign in.');
+    } finally { setBusy(false); }
+  }
+
+  async function resendConfirmation() {
+    if (!supabase || !email) return;
+    setBusy(true); setMessage('');
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}/live` } });
+      setMessage(error?.message || 'Confirmation email requested. Check your inbox and spam.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not resend confirmation email.');
+    } finally { setBusy(false); }
+  }
+
+  return <AuthScreen ready={ready} email={email} password={password} message={message} busy={busy} awaitingConfirmation={awaitingConfirmation} onEmailChange={setEmail} onPasswordChange={setPassword} onAuthenticate={authenticate} onGithubAuthenticate={authenticateWithGithub} onResend={resendConfirmation} onBack={() => { setAwaitingConfirmation(false); setMessage(''); }} />;
 }
 
 export function EntryFlow({ initialRoute = 'home' }) {
@@ -234,7 +292,7 @@ export function EntryFlow({ initialRoute = 'home' }) {
   };
 
   if (route === 'workspace') return <Workspace onSignOut={() => navigate('/login')} />;
-  if (route === 'login') return <Login navigate={navigate} />;
+  if (route === 'login') return <Login />;
   if (route === 'privacy') return <Privacy navigate={navigate} />;
   if (route === 'contact') return <Contact navigate={navigate} />;
   return <PublicHome navigate={navigate} />;
