@@ -31,8 +31,22 @@ TUNNEL_LABEL="com.apimender.tunnel"
 AGENTS="$HOME/Library/LaunchAgents"
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die() { printf '\n\033[31mmender: %s\033[0m\n' "$*" >&2; exit 1; }
-unload() { launchctl bootout "gui/$(id -u)/$1" 2>/dev/null || true; }
-load() { launchctl bootstrap "gui/$(id -u)" "$AGENTS/$1.plist"; }
+unload() {
+  launchctl bootout "gui/$(id -u)/$1" 2>/dev/null || launchctl unload "$AGENTS/$1.plist" 2>/dev/null || true
+  # bootout returns before launchd has finished; wait so bootstrap does not hit "Input/output error".
+  for _ in $(seq 20); do launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1 || return 0; sleep 0.5; done
+}
+load() {
+  local plist="$AGENTS/$1"
+  plutil -lint "$plist" >/dev/null || die "$plist is not a valid property list"
+  launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null && return 0
+  sleep 1
+  launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null && return 0
+  # Older loading path; works where bootstrap is refused (e.g. some Terminal sessions).
+  launchctl load -w "$plist" 2>/dev/null && return 0
+  launchctl print "gui/$(id -u)/${1%.plist}" 2>&1 | head -20 || true
+  die "macOS would not start ${1%.plist}. Check System Settings → General → Login Items & Extensions that background items for node/cloudflared are allowed, then rerun"
+}
 
 case "${1:-}" in
   stop)
