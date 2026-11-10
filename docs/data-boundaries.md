@@ -48,13 +48,15 @@ The CLI, model inference, patch generation and the checks all run on the
 customer's machine or CI runner (`cli/`). Model requests go to the endpoint
 the customer configures. In this mode the endpoint must be on loopback or a
 private network unless the operator passes `--allow-remote-model`, and hosted
-AI providers are refused either way.
+AI providers are refused either way. The model key comes only from the
+operator's `MENDER_MODEL_API_KEY`. An endpoint named in the repository's
+config gets no key and must be local or private.
 
 | From → to | What | Kept |
 |---|---|---|
 | Public internet → CLI | Official provider contracts, downloaded from the URL named in the provider adapter (e.g. `raw.githubusercontent.com/github/rest-api-description/...`). Never from a URL found in repository content | Local cache (`~/.cache/mender/contracts`) |
 | CLI → customer's model server | Same narrow task as in hosted mode: contract change + ≤ 4 KB excerpt | The customer's server |
-| CLI → isolated runner | A private copy of the work tree, patched; the checks from `mender.config.json` (argv arrays, never a shell). No network, scrubbed environment, CPU/memory/PID/time limits (`cli/src/runner/`) | Copy deleted after the run |
+| CLI → isolated runner | A private copy of the work tree, patched; the checks from `mender.config.json` (argv arrays, never a shell). No network (including Unix sockets in `/tmp`, `/run`, `/var/run`, `/dev/shm`), scrubbed environment, CPU/memory/PID/time limits. The repository config cannot turn isolation or network on (`cli/src/runner/`, `cli/src/config.mjs`) | Copy deleted after the run |
 | CLI → local disk | `.mender/report.json` (full findings, diffs), `.mender/patches/*.patch`, `.mender/logs/*.log` (check output, redacted), `.mender/metadata-report.json` | The customer's disk |
 | **CLI → API Mender** | **Nothing by default.** Only if `report.upload: true` is in `mender.config.json` **and** the operator passes `--upload` with `MENDER_REPORT_URL` and `MENDER_REPORT_TOKEN`: the metadata report below | 90 days, then deleted by `apply_retention` |
 

@@ -27,7 +27,6 @@ const fail = (detail: string): Verdict => ({ passed: false, detail });
 
 const MAX_CHANGED_LINES = 20;
 const MAX_GROWTH_BYTES = 2048;
-const EQUALITY = ['===', '!==', '==', '!='];
 // Syntax that only shapes data. Any other node type is a potential new
 // capability and may not become more frequent inside the editable lines.
 const DATA_TYPES = new Set(['ObjectExpression', 'ObjectProperty', 'ArrayExpression', 'Identifier', 'StringLiteral',
@@ -280,27 +279,33 @@ function noNewCapabilities(context: Context): Verdict {
   const keys = notIn(now.keys, new Set([...was.keys, ...contractNames(context.input)]));
   if (keys.length) return fail(`The patch adds object key(s) that are not contract property names: ${list(keys)}`);
   if (notIn(now.strings, was.strings).length) return fail('The patch adds a string literal that was not in the original lines');
-  const allowedOperators = new Set([...was.operators, 'UnaryExpression:!', ...EQUALITY.map(operator => `BinaryExpression:${operator}`)]);
+  const allowedOperators = new Set(was.operators);
   if (notIn(now.operators, allowedOperators).length) return fail('The patch introduces a new operator');
   return pass('No new calls, imports, names, strings, literals, operators or comments on the editable lines');
 }
 
-// A value may be re-wrapped (array, object, null check) but nothing else may
-// be mixed in: every leaf must be one of the values being moved.
-function onlyWraps(source: string, node: Node | null | undefined, moved: Set<string>, found: Set<string>): boolean {
+// A value may be re-wrapped in an array or object literal, and nothing else:
+// no conditionals, logic, comparisons, negation or placeholder leaves, which
+// could send something other than the value (`[!login]`, `null ? [login] : null`).
+// Every leaf must be a value being moved, and each occurrence is counted.
+function onlyWraps(source: string, node: Node | null | undefined, moved: Set<string>, found: string[]): boolean {
   if (!node) return false;
   const text = textOf(source, node);
-  if (moved.has(text)) { found.add(text); return true; }
-  const each = (nodes: Array<Node | null | undefined>) => nodes.every(child => onlyWraps(source, child, moved, found));
+  if (moved.has(text)) { found.push(text); return true; }
   switch (node.type) {
-    case 'ArrayExpression': return each(node.elements);
-    case 'ObjectExpression': return (node.properties as Node[]).every(item => keyName(item) !== null && onlyWraps(source, item.value, moved, found));
-    case 'ConditionalExpression': return each([node.test, node.consequent, node.alternate]);
-    case 'LogicalExpression': return each([node.left, node.right]);
-    case 'BinaryExpression': return EQUALITY.includes(node.operator) && each([node.left, node.right]);
-    case 'UnaryExpression': return node.operator === '!' && each([node.argument]);
-    case 'NullLiteral': return true;
-    case 'Identifier': return node.name === 'undefined';
+    // One null guard is allowed: `value ? [value] : []`. The test must be the
+    // moved value itself and the fallback empty, so the value is sent
+    // whenever it exists and nothing else ever is.
+    case 'ConditionalExpression': {
+      const fallback = unwrap(node.alternate);
+      const empty = fallback?.type === 'NullLiteral' || (fallback?.type === 'Identifier' && fallback.name === 'undefined')
+        || (fallback?.type === 'ArrayExpression' && fallback.elements.length === 0)
+        || (fallback?.type === 'ObjectExpression' && fallback.properties.length === 0);
+      const guard = textOf(source, node.test);
+      return moved.has(guard) && empty && onlyWraps(source, node.consequent, new Set([guard]), found) && found.at(-1) === guard;
+    }
+    case 'ArrayExpression': return node.elements.length > 0 && (node.elements as Array<Node | null>).every(child => onlyWraps(source, child, moved, found));
+    case 'ObjectExpression': return node.properties.length > 0 && (node.properties as Node[]).every(item => keyName(item) !== null && onlyWraps(source, item.value, moved, found));
     default: return false;
   }
 }
@@ -323,15 +328,20 @@ function valuesPreserved(context: Context): Verdict {
     if (now.length !== 1) return fail(`Field ${shown(item.name)} is no longer sent exactly once`);
     if (now[0].valueText === item.valueText) continue;
     // A type change keeps the field and re-wraps its own value, nothing more.
-    const carried = new Set<string>();
-    if (!reshapable.includes(item.name) || !onlyWraps(context.patched.source, now[0].value, new Set([item.valueText]), carried) || !carried.size)
+    const carried: string[] = [];
+    if (!reshapable.includes(item.name) || !onlyWraps(context.patched.source, now[0].value, new Set([item.valueText]), carried) || carried.length !== 1)
       return fail(`The value sent as ${shown(item.name)} changed`);
   }
   for (const item of after.filter(entry => !beforeNames.includes(entry.name))) {
-    const carried = new Set<string>();
-    if (!onlyWraps(context.patched.source, item.value, moved, carried) || !carried.size)
+    const carried: string[] = [];
+    if (!onlyWraps(context.patched.source, item.value, moved, carried) || !carried.length)
       return fail(`New field ${shown(item.name)} carries something other than a value moved from a removed field`);
-    carried.forEach(text => found.add(text));
+    for (const text of carried) {
+      // A moved value goes to exactly one place; copying it into a second
+      // field (e.g. the issue body) changes what is sent.
+      if (found.has(text)) return fail(`A moved value is sent more than once (again as ${shown(item.name)})`);
+      found.add(text);
+    }
   }
   const lost = dropped.filter(item => !found.has(item.valueText)).map(item => item.name);
   // Dropping data may be right, but it is a human decision, never an automatic one.

@@ -12,6 +12,7 @@
 // field that is not named in this file cannot cross.
 
 import type { Finding, IntegratedService, RepairResult, ValidationReport } from './types.ts';
+import { getProvider } from './providers/registry.ts';
 
 /** Field groups a customer can enable one by one. */
 export const REPORT_FIELD_GROUPS = ['providers', 'findingStatus', 'filePaths', 'hashes', 'validation'] as const;
@@ -62,7 +63,10 @@ export type MetadataReport = {
 const sha256 = /^[a-f0-9]{64}$/;
 const commit = /^[a-f0-9]{40}$/;
 const token = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
-const label = /^[A-Za-z0-9][A-Za-z0-9 _./:@()-]{0,199}$/;
+// Labels are short names, not prose: no brackets, quotes, colons or semicolons.
+const label = /^[A-Za-z0-9][A-Za-z0-9 _./@-]{0,99}$/;
+// Strict UTC timestamp. Date.parse alone accepts free text in parentheses.
+const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 // A contract template: every dynamic segment must be a `{name}` placeholder.
 const operationTemplate = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \/[A-Za-z0-9_.~{}/-]{0,400}$/;
 const filePath = /^[A-Za-z0-9_@+.()[\]-][A-Za-z0-9_@+.()[\] /-]{0,511}$/;
@@ -191,14 +195,15 @@ export function validateMetadataReport(raw: unknown): MetadataReport {
     .map((group, index) => oneOf(group, `report.fields[${index}]`, REPORT_FIELD_GROUPS));
   if (new Set(fields).size !== fields.length) fail('report.fields', 'has duplicates');
   const enabled = new Set(fields);
-  if (typeof root.generatedAt !== 'string' || root.generatedAt.length > 40 || Number.isNaN(Date.parse(root.generatedAt)))
-    fail('report.generatedAt', 'must be a timestamp');
+  if (typeof root.generatedAt !== 'string' || !isoTimestamp.test(root.generatedAt) || Number.isNaN(Date.parse(root.generatedAt)))
+    fail('report.generatedAt', 'must be an ISO-8601 UTC timestamp');
   const report: MetadataReport = {
     schemaVersion: 1, mode: 'customer-managed',
     cliVersion: text(root.cliVersion, 'report.cliVersion', /^[0-9A-Za-z.+-]{1,32}$/),
     repositoryLabel: text(root.repositoryLabel, 'report.repositoryLabel', label),
     commitSha: root.commitSha === null ? null : text(root.commitSha, 'report.commitSha', commit),
-    generatedAt: root.generatedAt as string, fields,
+    // Stored re-serialised, so only a date can come through.
+    generatedAt: new Date(root.generatedAt as string).toISOString(), fields,
   };
   // A group that is not enabled must be absent. Present-but-disabled data is a
   // sender bug or an attempt to smuggle a field past the customer's setting.
@@ -212,8 +217,12 @@ export function validateMetadataReport(raw: unknown): MetadataReport {
       let origin: URL;
       try { origin = new URL(text(entry.origin, `${path}.origin`, /^https:\/\/[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/)); }
       catch (error) { if (error instanceof Rejected) throw error; fail(`${path}.origin`, 'must be an https origin'); }
-      return { providerId: text(entry.providerId, `${path}.providerId`, /^[a-z0-9][a-z0-9-]{0,62}$/),
-        providerName: text(entry.providerName, `${path}.providerName`, label), origin: origin.origin,
+      // Only catalog providers are reported, so id, name and origin must match the catalog.
+      const provider = getProvider(text(entry.providerId, `${path}.providerId`, /^[a-z0-9][a-z0-9-]{0,62}$/));
+      if (!provider) fail(`${path}.providerId`, 'is not a catalog provider');
+      if (entry.providerName !== provider.name) fail(`${path}.providerName`, 'does not match the catalog');
+      if (!provider.origins.includes(origin.origin)) fail(`${path}.origin`, 'is not an origin of this provider');
+      return { providerId: provider.id, providerName: provider.name, origin: origin.origin,
         operations: list(entry.operations, `${path}.operations`, 100)
           .map((value, at) => text(value, `${path}.operations[${at}]`, operationTemplate)),
         callCount: count(entry.callCount, `${path}.callCount`),
@@ -231,7 +240,8 @@ export function validateMetadataReport(raw: unknown): MetadataReport {
         ['repairMethod', 'file', 'line', 'sourceSha256', 'patchedSha256', 'diffSha256', 'validation']);
       const finding: NonNullable<MetadataReport['findings']>[number] = {
         id: text(entry.id, `${path}.id`, sha256),
-        providerId: text(entry.providerId, `${path}.providerId`, /^[a-z0-9][a-z0-9-]{0,62}$/),
+        providerId: getProvider(text(entry.providerId, `${path}.providerId`, /^[a-z0-9][a-z0-9-]{0,62}$/))?.id
+          ?? fail(`${path}.providerId`, 'is not a catalog provider'),
         operation: text(entry.operation, `${path}.operation`, operationTemplate),
         kind: oneOf(entry.kind, `${path}.kind`, ['request-property-removed', 'request-property-required',
           'request-property-type-changed', 'operation-removed', 'other'] as const),

@@ -120,7 +120,8 @@ npm test && npx tsc --noEmit        # root (legacy prototype)
 | Patch applies (`git apply --check`) and is validated in an isolated runner | Namespace runner, no network: next-version check fails before and passes after; current-version check passes both |
 | Patch + machine-readable report (CLI) | `report.json`, `patches/*.patch`, `metadata-report.json` |
 | Metadata report contains no code | Test asserts no source fragments; validator rejects smuggled fields |
-| Model service security (auth, no tools, limits, no content logs, deny-listed upstreams) | 268 model-service tests |
+| Model service security (auth, no tools, limits, no content logs, deny-listed upstreams) | 388 model-service tests |
+| Independent security review | A separate reviewer tried to break the boundaries and confirmed six issues. All six are fixed and covered by tests (section 8) |
 | Worker builds with the new routes | `npm run build` in `web/` |
 
 ## 7. Not yet verified or not supported
@@ -142,10 +143,22 @@ npm test && npx tsc --noEmit        # root (legacy prototype)
 * Change kinds: request property removed, newly required, type changed, and
   operation removed are detected. Response, auth and behavioural changes are
   not. Only removed and required request properties can be repaired.
-* The namespace runner does not hide the host filesystem from checks (it
-  blocks network and bounds resources on a private copy). Use the container
-  backend for untrusted repositories.
+* The namespace runner blocks network, hides `/tmp`, `/run`, `/var/run`,
+  `/dev/shm`, home dirs and `/mnt` (so Unix sockets there are unreachable),
+  and makes the rest of the host read-only. Other host files stay readable.
+  Use the container backend for untrusted repositories.
 * Model images in `model-service/.env.example` use `:latest` tags. Pin them
   by digest before deploying.
 * The CLI imports engine TypeScript from `web/` and needs Node ≥ 22.18. It is
   not packaged for npm yet.
+
+## 8. Independent security review: findings and fixes
+
+| Severity | Finding | Fix |
+|---|---|---|
+| High | `mender.config.json` (repository content) could select the `process` backend, which has no isolation | The file may no longer set it; only `--unsafe-no-isolation` can (`cli/src/config.mjs`) |
+| High | Namespace runner: Unix sockets under `/tmp` and `/run` (e.g. docker.sock, ssh-agent) were reachable despite the empty network namespace | `/tmp`, `/run`, `/var/run` and `/dev/shm` are covered by tmpfs and the workspace is bind-mounted back on top (`cli/src/runner/sandbox.mjs`) |
+| Medium | The repository could choose which environment variable became the model bearer token, and pair it with a remote endpoint | The key comes only from `MENDER_MODEL_API_KEY`. It is never sent to a repository-chosen endpoint, and `--allow-remote-model` does not apply to one |
+| Medium/low | The `values-preserved` gate accepted `[!login]`, `null ? [login] : null`, or copying the value into a second field | A moved value may only be wrapped in an array or object, or guarded as `value ? [value] : []`, and sent exactly once |
+| Low | `generatedAt` and label fields in the metadata report could carry free text | Strict ISO timestamp (re-serialised), tighter label charset, provider id, name and origin must match the catalog |
+| Low | Deny-list gaps (AI gateways, some providers, `host..` trailing dots) | Added to both lists; every trailing dot is stripped |

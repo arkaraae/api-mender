@@ -32,14 +32,20 @@ async function prepareOut(dir) {
 
 const write = (file, value) => writeFile(file, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 
-/** Model settings: flags, then environment, then the repository config. The key only ever comes from the environment. */
+/**
+ * Model settings: flags, then environment, then the repository config. The
+ * key only ever comes from the operator's MENDER_MODEL_API_KEY. An endpoint
+ * taken from the repository config is repository content: it must be local or
+ * private (--allow-remote-model does not extend to it) and no key is sent to it.
+ */
 export function resolveModel(flags, config, env = process.env) {
-  const endpoint = flags.modelEndpoint ?? env.MENDER_MODEL_ENDPOINT ?? config.model?.endpoint;
+  const operatorEndpoint = flags.modelEndpoint ?? env.MENDER_MODEL_ENDPOINT;
+  const endpoint = operatorEndpoint ?? config.model?.endpoint;
   const model = flags.model ?? env.MENDER_MODEL_NAME ?? config.model?.model;
   if (!endpoint || !model) return null;
-  const keyName = config.model?.apiKeyEnv ?? 'MENDER_MODEL_API_KEY';
-  return { endpoint, model, apiKey: env[keyName] || undefined, mode: 'customer-managed',
-    allowRemote: flags.allowRemoteModel === true, timeoutMs: 120_000 };
+  const fromOperator = operatorEndpoint !== undefined;
+  return { endpoint, model, apiKey: fromOperator ? env.MENDER_MODEL_API_KEY || undefined : undefined,
+    mode: 'customer-managed', allowRemote: fromOperator && flags.allowRemoteModel === true, timeoutMs: 120_000 };
 }
 
 export async function scan({ repo }) {
@@ -124,7 +130,7 @@ export async function check(flags) {
   await write(path.join(out, 'report.json'), report);
 
   const metadata = await buildMetadataReport({
-    cliVersion: CLI_VERSION, repositoryLabel: flags.label ?? (path.basename(repo).replace(/[^A-Za-z0-9 _./:@()-]/g, '-').slice(0, 200) || 'repository'),
+    cliVersion: CLI_VERSION, repositoryLabel: flags.label ?? (path.basename(repo).replace(/[^A-Za-z0-9 _./@-]/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 100) || 'repository'),
     commitSha: report.commitSha, fields: config.report.fields, services: inventory.services,
     operationTemplate: (providerId, endpoint) => {
       const keys = operationKeys.get(providerId);

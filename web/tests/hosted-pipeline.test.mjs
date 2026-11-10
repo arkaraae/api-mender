@@ -204,6 +204,15 @@ test('the metadata boundary accepts exactly the documented report and nothing th
     patchApplied: true, checksPassed: true, breakReproduced: true, checks: [{ name: 'unit', phase: 'after', passed: true,
       exitCode: 0, timedOut: false, output: 'secret test output' }] }; });                       // check output
   rejected(r => { r.__proto__ = { polluted: true }; r.extra = 1; });
+  // Free-text smuggling through loosely checked fields (independent review).
+  rejected(r => { r.generatedAt = '2026 (k="sk-1";\n{x:1}<b>)'; });
+  rejected(r => { r.repositoryLabel = 'const token (process.env.GITHUB_TOKEN) fetch(https://x/y)'; });
+  rejected(r => { r.fields.push('providers'); r.providers = [{ providerId: 'github-rest', providerName: 'GitHub (token=ghs_x)',
+    origin: 'https://api.github.com', operations: [], callCount: 1, pinnedVersions: [] }]; });
+  rejected(r => { r.fields.push('providers'); r.providers = [{ providerId: 'github-rest', providerName: 'GitHub REST API',
+    origin: 'https://collector.example', operations: [], callCount: 1, pinnedVersions: [] }]; });
+  rejected(r => { r.findings[0].providerId = 'made-up'; });
+  assert.equal(validateMetadataReport({ ...baseReport(), generatedAt: '2026-11-09T00:00:00Z' }).generatedAt, '2026-11-09T00:00:00.000Z');
 });
 
 test('buildMetadataReport reports operation templates, never literal request paths', async () => {

@@ -9,7 +9,7 @@ import { ConfigError, loadConfig, resolveRunnerOptions, validateConfig, validate
 const FULL = {
   checks: [{ name: 'unit', command: ['npm', 'test'], env: { GITHUB_API_VERSION: '2026-03-10' } }],
   runner: { backend: 'auto', wallSeconds: 120, cpuSeconds: 60, memoryMb: 1024, pids: 256, network: 'none' },
-  model: { endpoint: 'http://127.0.0.1:8080/v1', model: 'qwen2.5-coder:7b', apiKeyEnv: 'MENDER_MODEL_API_KEY' },
+  model: { endpoint: 'http://127.0.0.1:8080/v1', model: 'qwen2.5-coder:7b' },
   report: { upload: false, fields: ['providers', 'findingStatus', 'filePaths', 'hashes', 'validation'] },
 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -102,7 +102,11 @@ test('checks: env names, sizes and forbidden variables', () => {
 });
 
 test('runner: backend, bounds and network', () => {
-  for (const backend of ['auto', 'container', 'namespace', 'process']) validateConfig({ runner: { backend } });
+  for (const backend of ['auto', 'container', 'namespace']) validateConfig({ runner: { backend } });
+  // No isolation can only come from the operator, never from the repository.
+  rejects({ runner: { backend: 'process' } }, /cannot be set in the config file/);
+  assert.equal(resolveRunnerOptions({ runner: {} }, { backend: 'process' }).backend, 'process');
+  assert.throws(() => resolveRunnerOptions({ runner: { backend: 'process' } }), /cannot be set in the config file/);
   rejects({ runner: { backend: 'vm' } }, /backend must be one of/);
   rejects({ runner: [] }, /runner must be an object/);
   const bounds = { wallSeconds: [1, 1800], cpuSeconds: [1, 1800], memoryMb: [64, 16384], pids: [16, 4096] };
@@ -122,9 +126,10 @@ test('model: endpoint must be a URL and the key must never be in the file', () =
   rejects(withChange((c) => (c.model.endpoint = 'https://user:pw@models.example/v1')), /must not contain credentials/);
   rejects(withChange((c) => delete c.model.endpoint), /endpoint must be a URL string/);
   rejects(withChange((c) => (c.model.model = '')), /model\.model/);
-  rejects(withChange((c) => (c.model.apiKeyEnv = 'sk-live-abc123')), /NAME of an environment variable/);
+  // The repository cannot choose which secret becomes the bearer token.
+  rejects(withChange((c) => (c.model.apiKeyEnv = 'GITHUB_TOKEN')), /not read from the repository/);
   rejects({ model: 'gpt' }, /model must be an object/);
-  assert.equal(validateConfig(withChange((c) => delete c.model.apiKeyEnv)).model.apiKeyEnv, null);
+  assert.equal(validateConfig(clone(FULL)).model.apiKeyEnv, undefined);
 });
 
 test('report: upload defaults to false and fields are a subset of the allowed list', () => {

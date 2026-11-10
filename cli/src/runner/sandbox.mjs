@@ -14,14 +14,20 @@
 // `namespace` (Linux; unshare + prlimit, no daemon needed)
 //   + Network: a new, empty network namespace. No interface is up — not even
 //     loopback — so a check cannot bind or connect to 127.0.0.1 either.
-//     Checks that need a local server must stub `fetch`.
+//     Checks that need a local server must stub `fetch`. A network namespace
+//     does NOT stop connect() on a Unix socket file (docker.sock, ssh-agent,
+//     dbus…), so /tmp, /run, /var/run and /dev/shm are covered by empty tmpfs
+//     and the workspace is bind-mounted back on top. A socket file elsewhere
+//     on a readable path would still be reachable; the enforcement notes say
+//     which directories were actually hidden.
 //   + PIDs/IPC/UTS: new namespaces; the check cannot see or signal host
 //     processes, and when its PID 1 dies the kernel kills every descendant.
 //   + Resource limits: see `enforcement` notes returned with every run; what
 //     can really be enforced depends on the machine (root vs. not, cgroups).
 //   + Filesystem, best effort: every host mount is remounted READ-ONLY in the
 //     sandbox's mount namespace except the workspace copy and its scratch
-//     dir; the caller's home, /root and /home are covered by empty tmpfs; and
+//     dir; the caller's home, /root, /home, /tmp, /run, /var/run and /dev/shm
+//     are covered by empty tmpfs; and
 //     all capabilities are dropped (setpriv) so the check cannot undo this.
 //   - The rest of the host filesystem REMAINS READABLE with the caller's
 //     permissions (/etc, /tmp, other projects outside the hidden dirs…).
@@ -70,21 +76,37 @@ const SETPRIV_ARGS = ['--bounding-set=-all', '--inh-caps=-all', '--no-new-privs'
 // Runs as (user-namespace) root inside fresh mount/pid namespaces, BEFORE the
 // check. Reports what it managed to do on fd 3, which is closed before exec
 // so the check can neither see nor forge it.
-//   $1 cwd  $2 scratch  $3 pid_max (0 = skip)  $4 harden (1/0)
+//   $1 cwd  $2 scratch  $3 pid_max (0 = skip)  $4 harden (1/0)  $5 stash dir (- = none)
 //   then: <n> <cgroup.procs>...   <n> <dir to hide>...   <command>...
+// Hidden dirs may contain the workspace (it lives under /tmp): the workspace
+// and scratch are bind-mounted into a private stash first and put back on
+// top of the fresh tmpfs afterwards.
 const WRAPPER_SCRIPT = `
 status() { echo "$1" >&3; }
-cwd=$1; scratch=$2; pidmax=$3; harden=$4; shift 4
+cwd=$1; scratch=$2; pidmax=$3; harden=$4; stash=$5; shift 5
 n=$1; shift
 while [ "$n" -gt 0 ]; do
   if { echo 0 > "$1"; } 2>/dev/null; then status "cgroup-ok $1"; else status "cgroup-fail $1"; fi
   shift; n=$((n-1))
 done
+if [ "$stash" != - ] && mount -t tmpfs -o size=16k,mode=0700 tmpfs "$stash" 2>/dev/null \
+  && mkdir "$stash/w" "$stash/s" && mount --bind "$cwd" "$stash/w" && mount --bind "$scratch" "$stash/s"; then
+  status stash-ok
+else
+  stash=-
+fi
 n=$1; shift
 while [ "$n" -gt 0 ]; do
-  if mount -t tmpfs -o size=64k,mode=0755 tmpfs "$1" 2>/dev/null; then status "hide-ok $1"; else status "hide-fail $1"; fi
+  case "$cwd/" in "$1"/*) inside=1;; *) case "$scratch/" in "$1"/*) inside=1;; *) inside=0;; esac;; esac
+  if [ "$inside" = 1 ] && [ "$stash" = - ]; then status "hide-fail $1"
+  elif mount -t tmpfs -o size=128m,mode=1777 tmpfs "$1" 2>/dev/null; then status "hide-ok $1"; else status "hide-fail $1"; fi
   shift; n=$((n-1))
 done
+if [ "$stash" != - ]; then
+  mkdir -p "$cwd" "$scratch" 2>/dev/null
+  if mount --bind "$stash/w" "$cwd" 2>/dev/null && mount --bind "$stash/s" "$scratch" 2>/dev/null; then status restore-ok
+  else status restore-fail; exit 125; fi
+fi
 if [ "$pidmax" != 0 ]; then
   if { echo "$pidmax" > /proc/sys/kernel/pid_max; } 2>/dev/null; then status pidmax-ok; else status pidmax-fail; fi
 fi
@@ -340,11 +362,17 @@ function dockerClientEnv() {
 const isInside = (parent, child) => child === parent || child.startsWith(parent.endsWith('/') ? parent : `${parent}/`);
 
 /** Directories to cover with an empty tmpfs, and those we must leave visible (with the reason). */
-function planHiddenDirs(mustStayVisible) {
+// /tmp, /run, /var/run and /dev/shm hold Unix sockets (docker.sock, ssh-agent,
+// dbus, gpg-agent, local proxies). An empty network namespace does not block
+// connect() on a socket FILE, so these are covered too.
+export const SOCKET_DIRS = Object.freeze(['/tmp', '/run', '/var/run', '/dev/shm']);
+const STASH_CANDIDATES = ['/mnt', '/media', '/srv', '/opt'];
+
+function planHiddenDirs(mustStayVisible, restorable = []) {
   const hide = [];
   const kept = [];
   const candidates = new Set();
-  for (const dir of [os.homedir(), '/root', '/home']) {
+  for (const dir of [os.homedir(), '/root', '/home', ...SOCKET_DIRS]) {
     try {
       if (statSync(dir).isDirectory()) candidates.add(realpathSync(dir));
     } catch {
@@ -356,7 +384,16 @@ function planHiddenDirs(mustStayVisible) {
     if (blocker) kept.push(`${dir} (contains ${blocker})`);
     else hide.push(dir);
   }
-  return { hide, kept };
+  // Outer directories first, so a nested one is mounted inside the new tmpfs.
+  hide.sort((a, b) => a.length - b.length);
+  const stash = STASH_CANDIDATES.find((dir) => {
+    try {
+      const real = realpathSync(dir);
+      return statSync(real).isDirectory() && !hide.some((h) => isInside(h, real) || isInside(real, h))
+        && ![...mustStayVisible, ...restorable].some((needed) => isInside(real, needed));
+    } catch { return false; }
+  }) ?? '-';
+  return { hide, kept, stash };
 }
 
 function describeNamespaceRun({ status, limits, network, features, plan, cgroupGroups, useAddressSpace }) {
@@ -367,7 +404,7 @@ function describeNamespaceRun({ status, limits, network, features, plan, cgroupG
 
   notes.push(
     network === 'none'
-      ? 'network: blocked by an empty network namespace (no interface is up, not even loopback)'
+      ? `network: blocked by an empty network namespace (no interface is up, not even loopback; abstract Unix sockets are per namespace). Unix socket FILES are reachable only where the filesystem is visible: ${SOCKET_DIRS.filter((dir) => lines.includes(`hide-ok ${dir}`) || !plan.hide.includes(dir)).length ? 'see the filesystem notes' : 'none'}`
       : 'network: NOT blocked (host network, explicit operator override)',
   );
   notes.push(`wall clock: ${limits.wallSeconds}s per check, enforced by SIGKILL of the process group; the PID namespace takes every descendant with it`);
@@ -401,7 +438,8 @@ function describeNamespaceRun({ status, limits, network, features, plan, cgroupG
       : 'capabilities: NOT dropped (setpriv unavailable) — the check is root inside its user namespace and can undo the read-only mounts and hidden directories below',
   );
 
-  const hidden = withPrefix('hide-ok ');
+  // The stash tmpfs also covers whatever was under it.
+  const hidden = [...withPrefix('hide-ok '), ...(has('stash-ok') ? [plan.stash] : [])];
   const roFailures = withPrefix('ro-fail ').filter((mp) => !hidden.some((dir) => mp !== dir && isInside(dir, mp)));
   if (has('bind-ok')) {
     notes.push(
@@ -425,7 +463,9 @@ async function runNamespace({ cwd, scratchDir, argv, env, limits, network, maxOu
 
   const realCwd = realpathSync(cwd);
   const realScratch = realpathSync(scratchDir);
-  const plan = planHiddenDirs([realCwd, realScratch, realpathSync(path.dirname(process.execPath))]);
+  // The node binary must stay visible; the workspace and scratch are put back
+  // on top of a hidden /tmp through the stash.
+  const plan = planHiddenDirs([realpathSync(path.dirname(process.execPath))], [realCwd, realScratch]);
   const cgroups = createLimitCgroups(limits);
   const useAddressSpace = limits.memoryMb >= MIN_ADDRESS_SPACE_LIMIT_MB;
 
@@ -443,7 +483,7 @@ async function runNamespace({ cwd, scratchDir, argv, env, limits, network, maxOu
     ...(network === 'none' ? ['--net'] : []),
     '--',
     'sh', '-c', WRAPPER_SCRIPT, 'mender-sandbox',
-    realCwd, realScratch, String(Math.max(MIN_PID_MAX, limits.pids + 1)), '1',
+    realCwd, realScratch, String(Math.max(MIN_PID_MAX, limits.pids + 1)), '1', plan.stash,
     String(cgroups.groups.length), ...cgroups.groups.map((g) => g.procsFile),
     String(plan.hide.length), ...plan.hide,
     ...(features.setpriv ? ['setpriv', ...SETPRIV_ARGS] : []),

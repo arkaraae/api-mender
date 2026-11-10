@@ -327,3 +327,25 @@ test('buildMessages is deterministic and bounds provider text', () => {
   assert.deepEqual(buildMessages(task), messages);
   assert.ok(messages.system.length + messages.user.length < 6000);
 });
+
+test('a moved value must be sent as itself, wrapped at most in an array or object, exactly once', async () => {
+  // Each of these passed every other gate in an independent review.
+  const dropped = [
+    "    body: JSON.stringify({ title, assignees: [!login], labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [login === login], labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [login == undefined], labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [login && null], labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: null ? [login] : null, labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [], labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [login], body: login, labels: ['bug'] }),",
+    "    body: JSON.stringify({ title, assignees: [login, login], labels: ['bug'] }),",
+  ];
+  for (const line of dropped) {
+    const model = fakeModel(patch(line));
+    const result = await proposeRepair({ finding: makeFinding(), source, contract, model: model.config });
+    assert.equal(result.stage, 'policy-rejected', line);
+    assert.ok(result.policy.some(check => !check.passed && ['values-preserved', 'no-new-capabilities'].includes(check.name)), line);
+  }
+  const ok = await proposeRepair({ finding: makeFinding(), source, contract, model: fakeModel(patch(FIXED_BODY)).config });
+  assert.equal(ok.method, 'self-hosted-model');
+});

@@ -36,6 +36,10 @@ export const HOSTED_AI_PROVIDER_DOMAINS: readonly string[] = [
   'anyscale.com',
   'lepton.ai',
   'voyageai.com',
+  // AI gateways and proxies that forward to the providers above.
+  'gateway.ai.cloudflare.com', 'helicone.ai', 'portkey.ai', 'ai-gateway.vercel.sh',
+  // Further hosted model APIs.
+  'openai.azure.us', 'dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'moonshot.ai', 'moonshot.cn', 'bigmodel.cn',
 ];
 
 /** Providers whose hostnames embed a region, so a suffix cannot name them. */
@@ -49,7 +53,8 @@ export const HOSTED_AI_PROVIDER_PATTERNS: readonly RegExp[] = [
 
 /** True when `hostname` belongs to a known hosted AI provider. */
 export function isHostedAiProviderHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, '');
+  // Every trailing dot: `api.openai.com..` must not slip past the suffix match.
+  const host = hostname.toLowerCase().replace(/\.+$/, '');
   return HOSTED_AI_PROVIDER_DOMAINS.some(domain => host === domain || host.endsWith(`.${domain}`))
     || HOSTED_AI_PROVIDER_PATTERNS.some(pattern => pattern.test(host));
 }

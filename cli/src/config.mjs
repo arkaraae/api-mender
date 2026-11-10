@@ -20,8 +20,9 @@
 //     the engine, whose egress guard still decides whether that address may
 //     be contacted (loopback/private only in customer-managed mode unless the
 //     operator allows remote). This module only checks that it is a URL.
-//   * The model API key is never in the file; `model.apiKeyEnv` is the NAME of
-//     an environment variable that the operator sets.
+//   * The model API key is never in the file, and neither is the name of the
+//     variable holding it: the CLI reads only the operator's MENDER_MODEL_API_KEY,
+//     and never sends it to an endpoint taken from this file.
 //   * `report.upload` and `report.fields` say what the repository is willing
 //     to share. The upload DESTINATION and TOKEN are never read from this
 //     file — they come from the operator's flags/environment — so a pull
@@ -212,7 +213,7 @@ export function validateChecks(checks) {
   return deepFreeze(out);
 }
 
-function collectRunner(runner, problems, { where = 'runner', allowHostNetwork = false, allowImage = false } = {}) {
+function collectRunner(runner, problems, { where = 'runner', allowHostNetwork = false, allowImage = false, allowProcess = false } = {}) {
   const out = {};
   if (runner === undefined) return out;
   if (!isPlainObject(runner)) {
@@ -224,7 +225,12 @@ function collectRunner(runner, problems, { where = 'runner', allowHostNetwork = 
   rejectUnknownKeys(runner, allowed, where, problems);
 
   if (runner.backend !== undefined) {
-    if (BACKENDS.includes(runner.backend)) out.backend = runner.backend;
+    // 'process' runs repository code with NO isolation (host network and
+    // filesystem). The file is repository content, so a pull request could
+    // otherwise switch isolation off; only the operator's flag can.
+    if (runner.backend === 'process' && !allowProcess) {
+      problems.push(`${where}.backend: "process" (no isolation) cannot be set in the config file; the operator must pass --unsafe-no-isolation`);
+    } else if (BACKENDS.includes(runner.backend)) out.backend = runner.backend;
     else problems.push(`${where}.backend must be one of ${BACKENDS.join(', ')}`);
   }
   for (const key of Object.keys(RUNNER_BOUNDS)) {
@@ -258,7 +264,7 @@ function collectModel(model, problems) {
   }
   if (Object.hasOwn(model, 'apiKey')) {
     problems.push(
-      'model.apiKey: do not put a credential in mender.config.json (it is committed to the repository). Set the key in an environment variable and name that variable in model.apiKeyEnv',
+      'model.apiKey: do not put a credential in mender.config.json (it is committed to the repository). Set it in MENDER_MODEL_API_KEY where the CLI runs',
     );
   }
   rejectUnknownKeys(model, ['endpoint', 'model', 'apiKeyEnv', 'apiKey'], 'model', problems);
@@ -276,7 +282,7 @@ function collectModel(model, problems) {
     if (url && url.protocol !== 'http:' && url.protocol !== 'https:') {
       problems.push('model.endpoint must use http: or https:');
     } else if (url && (url.username || url.password)) {
-      problems.push('model.endpoint must not contain credentials; use model.apiKeyEnv');
+      problems.push('model.endpoint must not contain credentials; set MENDER_MODEL_API_KEY where the CLI runs');
     } else if (url) {
       endpoint = model.endpoint;
     }
@@ -284,17 +290,13 @@ function collectModel(model, problems) {
   if (typeof model.model !== 'string' || model.model.length < 1 || model.model.length > 200) {
     problems.push('model.model must be a string of 1 to 200 characters');
   }
-  let apiKeyEnv = null;
+  // The key always comes from the operator's MENDER_MODEL_API_KEY. Letting the
+  // repository name the variable would let a pull request choose which secret
+  // (GITHUB_TOKEN, cloud keys…) is sent as the bearer token.
   if (model.apiKeyEnv !== undefined) {
-    if (typeof model.apiKeyEnv !== 'string' || !ENV_NAME.test(model.apiKeyEnv)) {
-      problems.push(
-        `model.apiKeyEnv must be the NAME of an environment variable (${ENV_NAME}), not the key itself`,
-      );
-    } else {
-      apiKeyEnv = model.apiKeyEnv;
-    }
+    problems.push('model.apiKeyEnv is not read from the repository; set MENDER_MODEL_API_KEY where the CLI runs');
   }
-  return { endpoint, model: model.model, apiKeyEnv };
+  return { endpoint, model: model.model };
 }
 
 function collectReport(report, problems) {
@@ -412,9 +414,9 @@ export async function loadConfig(repoRoot, { fileName = DEFAULT_CONFIG_FILE } = 
  * request must not be able to grant its own checks network access. An
  * override comes from the person or CI job invoking the CLI.
  *
- * Likewise `backend: 'process'` (no isolation) is accepted from either
- * source here, but `detectBackend('auto')` never selects it; the CLI is
- * expected to require `--unsafe-no-isolation` before passing it on.
+ * Likewise `backend: 'process'` (no isolation) is accepted only from an
+ * override (the CLI's `--unsafe-no-isolation`), never from the file, and
+ * `detectBackend('auto')` never selects it.
  *
  * @param {{ runner?: Partial<RunnerOptions> } | null | undefined} config
  * @param {Partial<RunnerOptions>} [overrides]
@@ -430,6 +432,7 @@ export function resolveRunnerOptions(config, overrides = {}) {
     where: 'overrides',
     allowHostNetwork: true,
     allowImage: true,
+    allowProcess: true,
   });
   if (problems.length > 0) throw new ConfigError(problems, 'runner options');
   return Object.freeze({ ...RUNNER_DEFAULTS, ...fromConfig, ...fromOverrides });
@@ -442,7 +445,7 @@ export function resolveRunnerOptions(config, overrides = {}) {
  * @typedef {{
  *   checks: ReadonlyArray<Check>,
  *   runner: Readonly<RunnerOptions>,
- *   model: Readonly<{ endpoint: string, model: string, apiKeyEnv: string | null }> | null,
+ *   model: Readonly<{ endpoint: string, model: string }> | null,
  *   report: Readonly<{ upload: boolean, fields: ReadonlyArray<string> }>,
  * }} MenderConfig
  */

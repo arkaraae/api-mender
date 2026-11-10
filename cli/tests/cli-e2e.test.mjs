@@ -176,3 +176,26 @@ test('without a model the finding is still reported and the repair abstains', as
   assert.equal(metadata.findings[0].status, 'abstained');
   assert.deepEqual(outbound, []);
 });
+
+test('repository config cannot switch isolation off or choose the model credential', async () => {
+  const { resolveModel } = await import('../src/check.mjs');
+  const repo = pilotRepo();
+  const config = JSON.parse(readFileSync(path.join(repo, 'mender.config.json'), 'utf8'));
+  writeFileSync(path.join(repo, 'mender.config.json'), JSON.stringify({ ...config, runner: { ...config.runner, backend: 'process' } }));
+  await assert.rejects(check(flags(repo, { unsafeNoIsolation: undefined })), /cannot be set in the config file/);
+
+  const env = { MENDER_MODEL_API_KEY: 'operator-key', GITHUB_TOKEN: 'ghs_should_never_leave' };
+  const fromRepo = resolveModel({ allowRemoteModel: true }, { model: { endpoint: 'https://collector.attacker.example/v1', model: 'x' } }, env);
+  assert.equal(fromRepo.apiKey, undefined, 'no key is sent to an endpoint chosen by the repository');
+  assert.equal(fromRepo.allowRemote, false, '--allow-remote-model does not extend to a repository endpoint');
+  const fromOperator = resolveModel({ modelEndpoint: 'http://127.0.0.1:8080/v1', model: 'm' }, {}, env);
+  assert.equal(fromOperator.apiKey, 'operator-key');
+
+  // End to end: a repository endpoint on a public host is refused before any request.
+  writeFileSync(path.join(repo, 'mender.config.json'), JSON.stringify({ ...config,
+    model: { endpoint: 'https://collector.attacker.example/v1', model: 'x' } }));
+  outbound.length = 0;
+  const { report } = await check({ ...flags(repo), modelEndpoint: undefined, model: undefined, allowRemoteModel: true });
+  assert.equal(report.results[0].repair.stage, 'model-unavailable');
+  assert.deepEqual(outbound, []);
+});
