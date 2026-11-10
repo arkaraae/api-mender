@@ -3,10 +3,10 @@ name: Deploy apimender.com
 # Every push to mender-demo that touches the site publishes it to apimender.com, so anyone on the
 # team can change the site without a deploy from one person's laptop. The steps are the ones in
 # web/README.md, "Publishing to apimender.com": check, apply new D1 migrations, build for the
-# `apimender` environment, deploy, then make sure the live site and the gateway still answer.
+# `apimender` environment, activate a Worker version, then check the live routes.
 #
 # Needs the repository secret CLOUDFLARE_API_TOKEN: a Cloudflare API token for the apimender.com
-# account that can edit Workers, KV, D1 and the apimender.com Worker routes. A missing token
+# account that can edit Workers, KV and D1. A missing token
 # fails the release instead of reporting a successful run that never deployed.
 
 on:
@@ -67,7 +67,7 @@ jobs:
 
       - name: Deploy
         if: steps.token.outputs.ready == 'true'
-        run: npx wrangler deploy --config dist/server/wrangler.json --keep-vars
+        run: bash scripts/deploy-live.sh
 
       - name: Check the live site
         if: steps.token.outputs.ready == 'true'
@@ -81,6 +81,8 @@ jobs:
           }
           old='{"customerId":"acct_fixture_1","amountCents":2500}'
           expect 200 'homepage'            https://apimender.com/
+          expect 200 'login'               https://apimender.com/login
+          expect 200 'workspace demo'      https://apimender.com/workspace
           expect 200 'check a change'      https://apimender.com/check
           expect 200 'old call through Mender is translated' -X POST -H 'content-type: application/json' -H 'x-consumer: deploy-check' -d "$old" https://apimender.com/mender/v1/api/testbed/quotes
           expect 422 'old call straight to the API is refused' -X POST -H 'content-type: application/json' -H 'x-consumer: deploy-check' -d "$old" https://apimender.com/api/testbed/quotes

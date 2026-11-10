@@ -1,82 +1,12 @@
-import type { CSSProperties } from 'react';
+import type { Metadata } from 'next';
+import { EntryFlow } from '@/components/mend-concept/EntryFlow';
 import AuthCallbackRedirect from '@/components/auth-callback-redirect';
-import BrandLogo from '@/components/brand-logo';
-import FloatingJoin from '@/components/floating-join';
-import HomeHero from '@/components/home-hero';
-import JoinForm from '@/components/join-form';
-import './home.css';
-import './hero.css';
 
-const STEPS = [
-  {
-    title: 'Read both versions',
-    text: 'Give Mender the old and the new API description. It finds every change, field by field, and says who it breaks.',
-    sample: 'POST /quotes: customerId is now accountId',
-  },
-  {
-    title: 'Prove the rule',
-    text: 'Every old request has to become a valid new one, and every new answer has to turn back into what old callers expect. If Mender cannot prove it, it changes nothing.',
-    sample: 'rename customerId to accountId: proved both ways',
-  },
-  {
-    title: 'Translate on the way in',
-    text: 'Old callers send their requests to /mender/v1/… and get the answers they were built for. A header says what Mender did.',
-    sample: 'Mender-Status: translated',
-  },
-  {
-    title: 'See who still calls version 1',
-    text: 'Every old-version call is counted by caller, so you know whom to remind before you switch version 1 off.',
-    link: { href: '/mender', label: 'See the live list' },
-  },
-];
+export const metadata: Metadata = {
+  title: 'Mend · Make every API change a safe one',
+  description: 'Compare API versions, prove the translation, and keep older callers working through the gateway.',
+};
 
 export default function Home() {
-  return (
-    <main className="marketing-page home">
-      <AuthCallbackRedirect />
-      <FloatingJoin />
-      <div className="home-dark">
-        <HomeHero />
-      </div>
-
-      <section className="home-seam" aria-labelledby="seam-title">
-        <div className="home-seam-intro">
-          <h2 id="seam-title">How Mender mends a breaking change</h2>
-          <p>No AI runs on your traffic. Mender works out the rules once, proves them, and then follows them on every call.</p>
-        </div>
-        <div className="seam-wrap">
-          <ol className="seam">
-          {STEPS.map((step, index) => (
-            <li key={step.title} style={{ '--i': index } as CSSProperties}>
-              <span className="seam-count" aria-hidden="true">0{index + 1} <i>/</i> 0{STEPS.length}</span>
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-              {step.sample && <code>{step.sample}</code>}
-              {step.link && <a href={step.link.href}>{step.link.label}</a>}
-            </li>
-          ))}
-          </ol>
-        </div>
-      </section>
-
-      <section className="home-join" id="join" aria-labelledby="join-title">
-        <div className="home-join-copy">
-          <span className="home-kicker">LET'S CONNECT</span>
-          <h2 id="join-title">Interested in API Mender?</h2>
-          <p>Want to try the product, collaborate, invest, share feedback, or simply follow along? Leave your name and email. We are open to every kind of conversation.</p>
-        </div>
-        <JoinForm />
-      </section>
-
-      <footer className="marketing-footer home-footer">
-        <span className="site-brand"><BrandLogo label="Mend" /></span>
-        <span>Know what changed. Know what to do.</span>
-        <nav aria-label="More">
-          <a href="/watch">Watch an API</a>
-          <a href="/demo">Team demo</a>
-          <a href="/#join">Join us</a>
-        </nav>
-      </footer>
-    </main>
-  );
+  return <div className="mend-concept"><AuthCallbackRedirect /><EntryFlow initialRoute="home" /></div>;
 }

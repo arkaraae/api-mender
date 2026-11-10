@@ -1,0 +1,102 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import './concept.css';
+import { ActivityIcon as Activity, ArrowRightIcon as ArrowRight, ArrowUpIcon as ArrowUp, BellIcon as Bell, CaretDownIcon as CaretDown, CaretLeftIcon as CaretLeft, CheckIcon as Check, CheckCircleIcon as CheckCircle, ClockCounterClockwiseIcon as ClockCounterClockwise, CodeIcon as Code, CommandIcon as Command, DotsThreeIcon as DotsThree, GitBranchIcon as GitBranch, GitPullRequestIcon as GitPullRequest, GlobeIcon as Globe, HouseIcon as House, MagnifyingGlassIcon as MagnifyingGlass, PlusIcon as Plus, PulseIcon as Pulse, SidebarSimpleIcon as SidebarSimple, SparkleIcon as Sparkle, SquaresFourIcon as SquaresFour, XIcon as X } from '@phosphor-icons/react';
+
+const seeds = [
+  { title: 'Review the Quotes API v2 change', detail: 'customerId → accountId', time: '12 minutes ago', status: 'Rule proved', kind: 'check' },
+  { title: 'Keep the checkout client working', detail: 'Request translation · POST /quotes', time: 'Yesterday', status: 'Translated', kind: 'gateway' },
+  { title: 'Trace callers on the older version', detail: '3 active integrations', time: 'Nov 7', status: 'Monitoring', kind: 'watch' },
+  { title: 'Inspect Stripe SDK usage', detail: 'Repository scan', time: 'Nov 6', status: 'Reviewed', kind: 'check' },
+];
+const pulls = [
+  { title: 'Rename customerId in checkout client', repo: 'acme/checkout', time: '8 min ago', number: 42, status: 'Ready to review' },
+  { title: 'Update Quotes API request mapping', repo: 'acme/platform', time: '2 hours ago', number: 118, status: 'Proof passed' },
+  { title: 'Refresh Stripe SDK call sites', repo: 'acme/billing', time: 'Yesterday', number: 27, status: 'Needs review' },
+];
+const nav = [{ id: 'home', label: 'Home', icon: House }, { id: 'activity', label: 'Activity', icon: Activity }, { id: 'apis', label: 'APIs', icon: SquaresFour }, { id: 'pulls', label: 'Pull requests', icon: GitPullRequest }];
+const suggestions = [
+  { icon: Code, label: 'Check an API change', prompt: 'Compare my old and new OpenAPI contracts and tell me what could break.' },
+  { icon: Pulse, label: 'Prove a translation', prompt: 'Prove that my old Quotes API requests can be translated for v2.' },
+  { icon: GitBranch, label: 'Trace affected callers', prompt: 'Show which integrations still call the old Quotes API.' },
+];
+
+function MendMark({ className = '' }) {
+  return <div className={`mend-mark-crop ${className}`} role="img" aria-label="Mend"><img src="/mend-concept/mend-logo-white.png" alt="" /></div>;
+}
+
+const scanRepos = ['acme/checkout', 'acme/platform', 'acme/billing', 'acme/web', 'acme/accounts', 'acme/orders', 'acme/payments', 'acme/mobile', 'acme/gateway'];
+
+function Heatmap({ range, onSelect }) {
+  const columns = range === '30 days' ? 24 : 36;
+  const cells = useMemo(() => Array.from({ length: columns * 7 }, (_, i) => {
+    const order = (i * 37) % (columns * 7);
+    const active = order < (range === '30 days' ? 82 : 248);
+    const flagged = active && (order % 6 === 0 || (range === '90 days' && order > 218 && order < 245 && order % 5 === 1));
+    const date = new Date(2026, 10, 9 - Math.floor(order * (range === '30 days' ? 29 / 81 : 89 / 247)));
+    return { id: order + 1, active, flagged, repo: scanRepos[order % scanRepos.length], date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), level: active ? 1 + order % 3 : 0 };
+  }), [columns, range]);
+  return <div className="heatmap" role="group" aria-label={`${range} of repository scans. Select a square to open its report.`} style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, aspectRatio: `${columns} / 7` }}>{cells.map(scan => scan.active ? <button key={scan.id} type="button" className={`heat-cell heat-${scan.level}`} aria-label={`${scan.repo} scan on ${scan.date}: ${scan.flagged ? 'changes flagged' : 'no changes flagged'}. Open report.`} title={`${scan.repo} · ${scan.date}`} onClick={() => onSelect(scan)}/> : <span key={scan.id} className="heat-cell heat-0" aria-hidden="true" />)}</div>;
+}
+
+function ScanReport({ scan, onClose, bounds }) {
+  if (!scan) return null;
+  return <div className="detail-backdrop" style={bounds || undefined} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><aside className="detail-panel scan-report" role="dialog" aria-modal="true" aria-label={`${scan.repo} scan report`}><button className="detail-close" onClick={onClose} aria-label="Close scan report"><X size={19}/></button><span className="detail-kicker">REPOSITORY SCAN · #{String(scan.id).padStart(4, '0')}</span><h2>{scan.repo}</h2><p>Scanned {scan.date} for API contract and caller changes.</p><div className={`detail-status ${scan.flagged ? 'scan-report--flagged' : ''}`}><CheckCircle size={18}/>{scan.flagged ? 'Changes flagged' : 'No changes flagged'}</div><div className="detail-evidence"><span>SCAN REPORT</span><div><Check size={16}/><strong>Repository scanned</strong><small>{scan.repo} · API definitions and call sites</small></div><div><Check size={16}/><strong>Contracts compared</strong><small>Request and response shapes checked against the prior version</small></div><div><Check size={16}/><strong>{scan.flagged ? 'Review suggested' : 'No follow-up needed'}</strong><small>{scan.flagged ? 'A changed API call may need an updated mapping.' : 'No potentially breaking caller changes were found.'}</small></div></div><small className="detail-disclaimer">Illustrative scan report for this design preview</small></aside></div>;
+}
+function SessionIcon({ kind }) { const Icon = kind === 'gateway' ? GitBranch : kind === 'watch' ? Pulse : Code; return <span className={`session-icon session-icon--${kind}`}><Icon size={17} /></span>; }
+
+export function App({ onSignOut }) {
+  const [section, setSection] = useState('home');
+  const [sessions, setSessions] = useState(seeds);
+  const [detail, setDetail] = useState(null);
+  const [scanReport, setScanReport] = useState(null);
+  const [drawerBounds, setDrawerBounds] = useState(null);
+  const [prompt, setPrompt] = useState('');
+  const [mode, setMode] = useState('Check change');
+  const [modeOpen, setModeOpen] = useState(false);
+  const [range, setRange] = useState('90 days');
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [toast, setToast] = useState('');
+  const input = useRef(null);
+  const shellRef = useRef(null);
+  useEffect(() => { const key = (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(v => !v); } if (e.key === 'Escape') { setSearchOpen(false); setDetail(null); setScanReport(null); setUpdatesOpen(false); setAccountOpen(false); setModeOpen(false); setRangeOpen(false); } }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key); }, []);
+  useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3600); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    if (!detail && !scanReport) return;
+    const updateBounds = () => {
+      const rect = shellRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setDrawerBounds({ top: Math.max(0, rect.top), right: Math.max(0, window.innerWidth - rect.right), bottom: Math.max(0, window.innerHeight - rect.bottom), left: Math.max(0, rect.left) });
+    };
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    window.addEventListener('scroll', updateBounds, { passive: true });
+    return () => { window.removeEventListener('resize', updateBounds); window.removeEventListener('scroll', updateBounds); };
+  }, [detail, scanReport]);
+  const go = id => { setSection(id); setSidebarOpen(false); setDetail(null); };
+  const newSession = () => { go('home'); setPrompt(''); setTimeout(() => input.current?.focus(), 0); };
+  const send = () => { const title = prompt.trim(); if (!title) return input.current?.focus(); const session = { title, detail: `${mode} · draft session`, time: 'Just now', status: 'Ready to explore', kind: 'check' }; setSessions(list => [session, ...list]); setDetail({ ...session, type: 'session' }); setPrompt(''); setToast('Demo session created. Connect Mend to run this against your API.'); };
+  const results = sessions.filter(s => `${s.title} ${s.detail}`.toLowerCase().includes(search.toLowerCase()));
+  return <div className="canvas"><div className="window-shell" ref={shellRef}>
+    <header className="window-topbar"><button className="chrome-button sidebar-toggle" onClick={() => window.innerWidth <= 700 ? setSidebarOpen(v => !v) : setSidebarCollapsed(v => !v)} aria-label="Toggle sidebar"><SidebarSimple size={19}/></button><div className="window-title"><MendMark className="topbar-mark"/> mend <span>/</span> workspace</div><button className="top-search" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={15}/><span>Search Mend</span><kbd>⌘ K</kbd></button></header>
+    <div className={`app-body ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>{sidebarOpen && <button className="sidebar-scrim" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"/>}<aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`} aria-label="Workspace sidebar"><div className="sidebar-heading"><MendMark className="sidebar-mini-mark"/><img className="sidebar-wordmark" src="/mend-concept/mend-logo-white.png" alt="Mend"/><button onClick={() => setToast('Workspace options are available in the full Mend app.')} aria-label="Workspace options"><DotsThree size={20}/></button></div><button className="new-session" onClick={newSession} aria-label="New session"><Plus size={18}/><span>New session</span></button><nav className="main-nav" aria-label="Workspace navigation">{nav.map(({ id, label, icon: Icon }) => <button key={id} className={section === id ? 'active' : ''} onClick={() => go(id)} aria-label={label} title={label} aria-current={section === id ? 'page' : undefined}><Icon size={18} weight={section === id ? 'fill' : 'regular'}/><span>{label}</span>{id === 'pulls' && <span className="nav-count">3</span>}</button>)}</nav><div className="sidebar-rule"/><div className="sidebar-subhead"><span>RECENT</span><ClockCounterClockwise size={15}/></div><div className="sidebar-sessions">{sessions.slice(0,4).map((s,i) => <button key={i} onClick={() => { setDetail({ ...s, type:'session' }); setSidebarOpen(false); }}><span className="session-bullet"/><span>{s.title}<small>{s.time}</small></span></button>)}</div><div className="sidebar-bottom"><button className="sidebar-bottom-action" onClick={() => setUpdatesOpen(v => !v)} aria-label="Updates" aria-expanded={updatesOpen} title="Updates"><Bell size={18}/><span>Updates</span><i className="sidebar-update-dot"/></button><button className="sidebar-bottom-action sidebar-account" onClick={() => setAccountOpen(v => !v)} aria-label="Account: Alex Morgan" aria-expanded={accountOpen} title="Alex Morgan"><span className="sidebar-avatar">AM</span><span>Alex Morgan</span></button>{accountOpen && <div className="sidebar-account-menu"><span>Alex Morgan</span><small>Demo workspace</small><button onClick={onSignOut}>Sign out</button></div>}</div></aside>
+    <main className="workspace"><div className="atmosphere" aria-hidden="true"/><div className="workspace-inner">
+    {section === 'home' ? <><div className="hero"><h1>Make every API change<br/>a safe one.</h1><p>Find what changed. Prove the fix. Keep your callers moving.</p></div><div className="composer-brand"><img className="composer-wordmark" src="/mend-concept/mend-logo-white.png" alt="Mend"/></div><div className="composer"><textarea ref={input} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask Mend to check a change, prove a fix, or trace an integration…" aria-label="Ask Mend" rows={2}/><div className="composer-foot"><div className="composer-actions"><button className="icon-action" onClick={() => setToast('Attach contracts in the full Mend workspace.')} aria-label="Attach files"><Plus size={19}/></button><span className="composer-divider"/><div className="mode-wrapper"><button className="mode-button" onClick={() => setModeOpen(v => !v)} aria-expanded={modeOpen}><Sparkle size={16}/>{mode}<CaretDown size={13}/></button>{modeOpen && <div className="mode-menu">{['Check change','Prove adapter','Trace callers'].map(m => <button key={m} onClick={() => {setMode(m);setModeOpen(false);}}>{m}{mode === m && <Check size={14}/>}</button>)}</div>}</div></div><div className="composer-right"><span>Enter to send</span><button className="send-button" onClick={send} aria-label="Create session" disabled={!prompt.trim()}><ArrowUp size={18} weight="bold"/></button></div></div></div><div className="suggestions">{suggestions.map(({icon:Icon,label,prompt:value}) => <button key={label} onClick={() => {setPrompt(value);input.current?.focus();}}><Icon size={16}/>{label}<ArrowRight size={13}/></button>)}</div>
+    <div className="dashboard-grid"><section className="dashboard-card activity-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> REPOSITORY SCANS</span><h2>Codebase scans, in view.</h2></div><div className="dropdown-wrap"><button className="small-select" onClick={() => setRangeOpen(v => !v)} aria-expanded={rangeOpen}>{range}<CaretDown size={12}/></button>{rangeOpen && <div className="range-menu">{['30 days','90 days'].map(r => <button key={r} onClick={() => {setRange(r);setRangeOpen(false);}}>{r}</button>)}</div>}</div></div><Heatmap range={range} onSelect={setScanReport}/><div className="card-footer"><span><strong>{range === '30 days' ? 82 : 248}</strong> scans run <i/> <strong>{range === '30 days' ? 14 : 47}</strong> changes flagged</span><button onClick={() => go('activity')}>View scans <ArrowRight size={14}/></button></div></section>
+    <section className="dashboard-card recent-card"><div className="card-heading"><div><span className="card-eyebrow"><ClockCounterClockwise size={15}/> RECENT SESSIONS</span><h2>Pick up where you left off.</h2></div></div><div className="recent-list">{sessions.slice(0,3).map((s,i) => <button key={i} onClick={() => setDetail({ ...s, type:'session' })}><SessionIcon kind={s.kind}/><span><strong>{s.title}</strong><small>{s.detail} <i/> {s.time}</small></span><ArrowRight size={15}/></button>)}</div><button className="text-link" onClick={() => setSearchOpen(true)}>All sessions <ArrowRight size={14}/></button></section>
+    <section className="dashboard-card metrics-card"><span className="card-eyebrow"><Pulse size={15}/> THIS MONTH</span><div className="metric-pair"><div><small>API changes checked</small><strong>36</strong><span>+12 from last month</span></div><div><small>Rules proved</small><strong>27</strong><span>75% proved</span></div></div></section>
+    <section className="dashboard-card pulls-card"><div className="card-heading"><div><span className="card-eyebrow"><GitPullRequest size={15}/> PULL REQUESTS</span><h2>Fixes ready for review.</h2></div><span className="count-pill">3 open</span></div><div className="pull-list">{pulls.map(p => <button key={p.number} onClick={() => setDetail({ ...p, type:'pull' })}><GitPullRequest size={17}/><span><strong>{p.title}</strong><small>{p.repo} <i/> {p.time}</small></span><ArrowRight size={14}/></button>)}</div></section></div></> : <div className="section-view"><span className="section-eyebrow">MEND WORKSPACE / {section.toUpperCase()}</span><h1>{section === 'activity' ? 'Scan activity.' : section === 'apis' ? 'APIs in motion.' : 'Fixes in review.'}</h1><p>{section === 'activity' ? 'See when Mend scanned your repositories and codebase for API changes.' : section === 'apis' ? 'Stay close to the contracts and integrations that matter.' : 'Review the small changes that keep your callers current.'}</p>{section === 'activity' ? <div className="section-panel"><Heatmap range="90 days" onSelect={setScanReport}/><div className="section-stats"><strong>248</strong> scans run <strong>47</strong> changes flagged <strong>9</strong> repos monitored</div></div> : <div className={section === 'apis' ? 'section-panel api-grid' : 'section-panel section-list'}>{section === 'apis' ? [{name:'Quotes API',detail:'v2 · 3 older callers protected',health:'Healthy'},{name:'Stripe API',detail:'Monitoring changes',health:'Healthy'},{name:'AWS S3',detail:'Monitoring changes',health:'Monitoring'}].map(api => <button key={api.name} onClick={() => setToast(`${api.name} selected in this preview.`)}><span className="api-card-head"><strong>{api.name}</strong><Globe size={24}/></span><span className="api-card-foot"><span className={`api-health api-health--${api.health.toLowerCase()}`}><i/>{api.health}</span><small>{api.detail}</small></span><ArrowRight size={18} className="api-card-arrow"/></button>) : pulls.map(p => <button key={p.number} onClick={() => setDetail({...p,type:'pull'})}><GitPullRequest size={20}/><span><strong>{p.title}</strong><small>{p.repo} · #{p.number} · {p.status}</small></span><ArrowRight size={18}/></button>)}</div>}<button className="back-home" onClick={() => go('home')}><CaretLeft size={16}/> Back to workspace</button></div>}
+    </div></main></div>
+    {updatesOpen && <div className="notifications-popover"><div><strong>Updates</strong><button onClick={() => setUpdatesOpen(false)} aria-label="Close updates"><X size={16}/></button></div><p><span className="notification-dot"/> Quotes API v2 rule was proved <small>12 min ago</small></p><p><span className="notification-dot"/> 3 callers still use v1 <small>Today</small></p></div>}
+    {searchOpen && <div className="modal-backdrop" onMouseDown={e => {if(e.target===e.currentTarget)setSearchOpen(false);}}><div className="search-modal" role="dialog" aria-modal="true" aria-label="Search sessions"><div className="search-input"><MagnifyingGlass size={19}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search sessions and changes…"/><kbd>ESC</kbd></div><div className="search-results"><span>SESSIONS</span>{results.length ? results.map((s,i) => <button key={i} onClick={() => {setDetail({...s,type:'session'});setSearchOpen(false);}}><SessionIcon kind={s.kind}/><span>{s.title}<small>{s.detail}</small></span><ArrowRight size={16}/></button>) : <p>No sessions match “{search}”.</p>}</div><div className="search-hint"><Command size={15}/> Search your Mend workspace</div></div></div>}
+    {detail && <div className="detail-backdrop" style={drawerBounds || undefined} onMouseDown={e => {if(e.target===e.currentTarget)setDetail(null);}}><aside className="detail-panel" role="dialog" aria-modal="true" aria-label="Details"><button className="detail-close" onClick={() => setDetail(null)} aria-label="Close details"><X size={19}/></button><span className="detail-kicker">{detail.type === 'pull' ? 'PULL REQUEST' : 'SESSION'}</span><h2>{detail.title}</h2><p>{detail.detail || `${detail.repo} · #${detail.number}`}</p><div className="detail-status"><CheckCircle size={18}/>{detail.status}</div><div className="detail-evidence"><span>THE MEND FLOW</span>{(detail.status === 'Ready to explore' ? [['Session drafted','Add contracts or connect an API'],['Check pending','Mend has not analyzed this request yet'],['Proof pending','No rule has been proved yet']] : [['Change detected','Evidence linked to the API contract'],['Rule reviewed','Request and response shapes checked'],['Next action clear','Keep the older caller working while updating code']]).map(([title,desc]) => <div key={title}><Check size={16}/><strong>{title}</strong><small>{desc}</small></div>)}</div><button className="detail-cta" onClick={() => {setDetail(null);setToast('Full evidence opens in the connected Mend workspace.');}}>Open full evidence <ArrowRight size={16}/></button></aside></div>}
+    <ScanReport scan={scanReport} bounds={drawerBounds} onClose={() => setScanReport(null)}/>
+    </div>
+    {toast && <div className="toast" role="status"><CheckCircle size={17}/>{toast}<button onClick={() => setToast('')} aria-label="Dismiss"><X size={14}/></button></div>}
+  </div>;
+}

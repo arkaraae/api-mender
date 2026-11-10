@@ -39,6 +39,8 @@ After the Cloudflare API is verified, set the GitHub Actions repository variable
 
 apimender.com is served by `api-mender-live` in the owner's Cloudflare account. The `apimender` environment in `wrangler.jsonc` targets that existing Worker, its `apimender.com` and `www.apimender.com` custom domains, and its production KV and D1 resources. The default environment remains separate.
 
+The Mend design is served at `/`, `/login`, `/contact`, `/privacy`, and `/workspace`. The workspace page is an interactive sample. Mend account sign-in continues through the Supabase-backed `/live` route; the sign-in choices on `/login` lead there.
+
 Authenticate Wrangler with the owner's Cloudflare account before a manual release. The production KV and D1 resources already exist; keep their IDs in `env.apimender` aligned with the live Worker's bindings.
 
 The interest form stores contacts in the configured Supabase project's Table Editor → `interest_contacts`. Its Worker secret must be set with `npx wrangler secret put SUPABASE_SECRET_KEY --env apimender`; never put that value in `wrangler.jsonc`, `.env.production`, or GitHub. D1 remains in use for the gateway and daily request limits, but its old `interest_contacts` migration is not required for this form.
@@ -47,7 +49,7 @@ Every push to `mender-demo` that changes `web/` or `mender/` runs `.github/workf
 
 ```bash
 CLOUDFLARE_ENV=apimender npm run build
-npx wrangler deploy --config dist/server/wrangler.json --keep-vars
+bash scripts/deploy-live.sh
 ```
 
 For local development with the watch list, run `CLOUDFLARE_ENV=apimender npm run dev`. Sign-up emails from `/live` need `https://apimender.com/live` in the Supabase Auth redirect URLs.

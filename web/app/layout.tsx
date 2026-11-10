@@ -6,6 +6,8 @@ import './demo.css';
 import './brand.css';
 import './public.css';
 import './auth.css';
+import '@/components/mend-concept/concept.css';
+import '@/components/mend-concept/entry.css';
 
 export const metadata: Metadata = { title: 'API Mender · API change monitor', description: 'Review evidence, impact, and patches for integration changes.' };
 // DM Sans for public pages, Fredoka for the homepage headings, and JetBrains Mono for code.
