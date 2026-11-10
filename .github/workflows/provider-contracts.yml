@@ -1,0 +1,47 @@
+name: Provider contract catalog
+
+# Provider change ingestion. Downloads each catalog provider's official
+# contract versions, diffs every operation, and writes the operation index and
+# the slices of changed operations to the catalog tables. Public provider data
+# only; no tenant data is read. Without the Supabase secrets it runs as a dry
+# run and uploads the delta for review.
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-contracts
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'staging' || '' }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Diff provider contracts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CATALOG_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.CATALOG_SUPABASE_SECRET_KEY }}
+        run: |
+          if [ -n "$SUPABASE_SECRET_KEY" ]; then write=--write; else write=; echo "No catalog secret: dry run"; fi
+          node scripts/sync-provider-contracts.mjs --out provider-delta.json $write
+      - uses: actions/upload-artifact@v4
+        with:
+          name: provider-delta-${{ github.run_id }}
+          path: web/provider-delta.json

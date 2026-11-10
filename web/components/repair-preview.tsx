@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 type Preview = { file: string; line: number; oldField: string; newField: string;
   before: string; after: string; validation: 'static_only'; runtimeVerified: false; note: string;
-  generationMethod?: 'deterministic' | 'ai_assisted'; modelId?: string;
+  generationMethod?: 'deterministic' | 'ai_assisted' | 'self_hosted_model'; modelId?: string;
   repairJob: { id: string; status: string } | null; prUrl?: string };
 
 export default function RepairPreview({ database, workspaceId, findingId }: {
@@ -103,6 +103,8 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
       <p>{preview.file}:{preview.line} · Replace <code>{preview.oldField}</code> with <code>{preview.newField}</code></p>
       {preview.generationMethod === 'ai_assisted' &&
         <p>AI selected this field mapping. The patch was checked against the pinned code and API contract.</p>}
+      {preview.generationMethod === 'self_hosted_model' &&
+        <p>Mender&apos;s self-hosted open-weight model{preview.modelId ? ` (${preview.modelId})` : ''} selected this field mapping from field names only; no hosted AI provider was used. The patch was checked against the pinned code and API contract.</p>}
       <pre><code>{`- ${preview.before}\n+ ${preview.after}`}</code></pre>
       <p>{preview.note} {preview.prUrl
         ? 'The proposed change is in a draft PR for review; it has not been merged.'
@@ -126,7 +128,7 @@ export default function RepairPreview({ database, workspaceId, findingId }: {
     </div>}
     {error && <p role="alert">{error}</p>}
     {aiEligible && !preview && <button disabled={busy} onClick={() => void load('ai_prepare')}>
-      {busy ? 'Checking field mapping…' : 'Try AI field mapping'}
+      {busy ? 'Checking field mapping…' : 'Try self-hosted model field mapping'}
     </button>}
   </div>;
 }

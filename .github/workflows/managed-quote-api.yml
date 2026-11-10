@@ -25,11 +25,13 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Check the published contract and validate an AI fix
+      - name: Check the published contract and validate a rules or self-hosted model fix
         id: mend
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          # Self-hosted model gateway (model-service/). No hosted AI provider.
+          MENDER_MODEL_ENDPOINT: ${{ secrets.MENDER_MODEL_ENDPOINT }}
+          MENDER_MODEL_NAME: ${{ vars.MENDER_MODEL_NAME }}
+          MENDER_MODEL_API_KEY: ${{ secrets.MENDER_MODEL_API_KEY }}
           MENDER_TEST_API_URL: ${{ vars.MENDER_TEST_API_URL || 'https://api-mender.aom31905.chatgpt.site' }}
         run: node scripts/managed-api-mender.mjs
       - name: Save evidence

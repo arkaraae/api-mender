@@ -39,6 +39,10 @@
     "node_modules",
     "fixtures/sample-repo",
     "testbed",
-    "supabase/functions"
+    "supabase/functions",
+    "web",
+    "cli",
+    "model-service",
+    "examples"
   ]
 }

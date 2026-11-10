@@ -6,33 +6,42 @@
 -- unified diff for one repair proposal.
 
 -- 1. Provider contract catalog -------------------------------------------------
--- Public provider data, not tenant data. One row is one operation cut out of
--- one provider contract version (a whole document can be tens of megabytes).
-create table public.provider_contract_slices (
+-- Public provider data, not tenant data, written only by the provider sync job
+-- (web/scripts/sync-provider-contracts.mjs). Whole documents are tens of
+-- megabytes, so the job diffs every operation offline and keeps:
+--   * every operation key per version (to match calls to the right operation)
+--   * slices of only the operations whose request contract changed
+-- The job therefore needs no signal about which operations customers call.
+create table public.provider_contract_versions (
   provider_id text not null check (provider_id ~ '^[a-z0-9][a-z0-9-]{0,62}$'),
   version text not null check (char_length(version) between 1 and 64),
+  sha256 text not null check (sha256 ~ '^[a-f0-9]{64}$'),
+  source_url text not null check (source_url ~ '^https://' and char_length(source_url) <= 1024),
+  operation_keys text[] not null check (cardinality(operation_keys) <= 5000),
+  fetched_at timestamptz not null default now(),
+  primary key (provider_id, version)
+);
+
+-- One row is one operation cut out of one provider contract version.
+create table public.provider_contract_slices (
+  provider_id text not null,
+  version text not null,
   operation text not null check (operation ~ '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /' and char_length(operation) <= 512),
   sha256 text not null check (sha256 ~ '^[a-f0-9]{64}$'),
   document jsonb not null check (jsonb_typeof(document) = 'object' and pg_column_size(document) <= 262144),
   source_url text not null check (source_url ~ '^https://' and char_length(source_url) <= 1024),
   fetched_at timestamptz not null default now(),
-  primary key (provider_id, version, operation)
+  primary key (provider_id, version, operation),
+  foreign key (provider_id, version) references public.provider_contract_versions(provider_id, version) on delete cascade
 );
 
--- Which operations any connected code uses. Deliberately tenant-blind: the
--- sync job learns "someone calls POST /repos/{}/{}/issues", never who.
-create table public.provider_operation_requests (
-  provider_id text not null check (provider_id ~ '^[a-z0-9][a-z0-9-]{0,62}$'),
-  endpoint text not null check (endpoint ~ '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /' and char_length(endpoint) <= 512),
-  requested_at timestamptz not null default now(),
-  primary key (provider_id, endpoint)
-);
-
+alter table public.provider_contract_versions enable row level security;
 alter table public.provider_contract_slices enable row level security;
-alter table public.provider_operation_requests enable row level security;
-revoke all on public.provider_contract_slices, public.provider_operation_requests from public, anon, authenticated;
-grant select on public.provider_contract_slices to authenticated;
-grant select, insert, update, delete on public.provider_contract_slices, public.provider_operation_requests to service_role;
+revoke all on public.provider_contract_versions, public.provider_contract_slices from public, anon, authenticated;
+grant select on public.provider_contract_versions, public.provider_contract_slices to authenticated;
+grant select, insert, update, delete on public.provider_contract_versions, public.provider_contract_slices to service_role;
+create policy provider_contract_versions_read on public.provider_contract_versions
+  for select to authenticated using (true);
 create policy provider_contract_slices_read on public.provider_contract_slices
   for select to authenticated using (true);
 
@@ -151,19 +160,16 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_reports integer;
   v_audit integer;
-  v_requests integer;
   v_usage integer;
 begin
   delete from public.cli_reports where expires_at < now();
   get diagnostics v_reports = row_count;
   delete from public.audit_events where created_at < now() - interval '400 days';
   get diagnostics v_audit = row_count;
-  delete from public.provider_operation_requests where requested_at < now() - interval '180 days';
-  get diagnostics v_requests = row_count;
   delete from public.ai_repair_usage where day_utc < (now() at time zone 'UTC')::date - 90;
   get diagnostics v_usage = row_count;
   return jsonb_build_object('cli_reports', v_reports, 'audit_events', v_audit,
-    'provider_operation_requests', v_requests, 'ai_repair_usage', v_usage);
+    'ai_repair_usage', v_usage);
 end;
 $$;
 revoke all on function public.apply_retention() from public, anon, authenticated;

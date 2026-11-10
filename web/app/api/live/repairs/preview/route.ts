@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { proposeRequestFieldRepair, repairCandidateProposals } from '@/lib/request-repair';
-import { selectRepairField } from '@/lib/anthropic-repair';
+import { hostedModel, selectRepairFieldSelfHosted } from '@/lib/hosted-model';
 
 const noStore = { 'Cache-Control': 'no-store' };
 const sourcePath = /^[A-Za-z0-9_./-]+\.(?:m?js|c?js|tsx?)$/;
@@ -108,19 +108,23 @@ export async function POST(request: Request) {
       if (!candidates.length) throw new Error('No safe request-field repair is available');
       if (candidates.length === 1) proposal = candidates[0];
       else {
-        if (!env.ANTHROPIC_API_KEY)
-          return Response.json({ error: 'AI repair is not configured yet' }, { status: 503, headers: noStore });
+        // Mender's own open-weight model; never a hosted AI provider.
+        let model;
+        try { model = hostedModel(env); }
+        catch { return Response.json({ error: 'The self-hosted model endpoint is misconfigured' }, { status: 503, headers: noStore }); }
+        if (!model)
+          return Response.json({ error: 'The self-hosted repair model is not configured yet' }, { status: 503, headers: noStore });
         const { data: allowed, error: budgetError } = await database.rpc('claim_ai_repair_budget',
           { p_workspace_id: body.workspaceId });
         if (budgetError) throw new Error('Could not check AI repair budget');
         if (!allowed) return Response.json({ error: 'AI repair daily limit reached' },
           { status: 429, headers: noStore });
-        const selected = await selectRepairField({ apiKey: env.ANTHROPIC_API_KEY,
-          model: env.ANTHROPIC_MODEL, workspaceId: env.ANTHROPIC_WORKSPACE_ID,
-          endpoint: call.endpoint, missingField: evidence.missing[0],
-          candidates: candidates.map(candidate => candidate.oldField) });
+        const selected = await selectRepairFieldSelfHosted(model, { endpoint: call.endpoint,
+          missingField: evidence.missing[0], candidates: candidates.map(candidate => candidate.oldField) });
+        if (!selected) return Response.json({ error: 'The repair model abstained: the field mapping is ambiguous and needs a person' },
+          { status: 422, headers: noStore });
         proposal = candidates.find(candidate => candidate.oldField === selected)!;
-        generationMethod = 'ai_assisted';
+        generationMethod = 'self_hosted_model';
       }
     } else proposal = proposeRequestFieldRepair(repairInput);
     const sourceHash = await sha256(sourceText);
@@ -134,7 +138,7 @@ export async function POST(request: Request) {
         old_field: proposal.oldField, new_field: proposal.newField,
         before_snippet: proposal.before, after_snippet: proposal.after,
         generation_method: generationMethod,
-        model_id: generationMethod === 'ai_assisted' ? (env.ANTHROPIC_MODEL || 'claude-sonnet-5') : null,
+        model_id: generationMethod === 'self_hosted_model' ? env.MENDER_MODEL_NAME ?? null : null,
       });
       if (insertError && insertError.code !== '23505')
         return Response.json({ error: 'Could not save the repair job' }, { status: 502, headers: noStore });

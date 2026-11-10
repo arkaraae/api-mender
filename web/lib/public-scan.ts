@@ -1,4 +1,4 @@
-import { parseStaticHttpCalls } from './static-http-calls.ts';
+import { parseApiCalls } from './engine/inventory.ts';
 import { traceStaticDatabaseWrites, type DatabaseWriteTrace } from './static-database-flow.ts';
 
 type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
@@ -21,7 +21,11 @@ async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.tr
 }
 
 export function extractCalls(file: string, source: string): CallSite[] {
-  const found: CallSite[] = [...parseStaticHttpCalls(file, source)];
+  // parseApiCalls is a superset of parseStaticHttpCalls: it also reads
+  // template-literal URLs and literal headers (for API version pins).
+  const found: CallSite[] = parseApiCalls(file, source).map(call => ({ ...call, uncertain: true,
+    reason: call.fieldsComplete ? 'Literal JSON request keys parsed; runtime behavior has not been verified'
+      : 'Static HTTP URL found; request body or runtime behavior has not been verified' }));
   const addHttpCall = (offset: number, symbol: string, method: string, address: string) => {
     if (address.includes('${')) return;
     let url: URL;

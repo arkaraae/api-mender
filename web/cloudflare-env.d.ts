@@ -16,9 +16,11 @@ declare namespace Cloudflare {
     GITHUB_WEBHOOK_SECRET?: string;
     GITHUB_APP_ID?: string;
     GITHUB_APP_PRIVATE_KEY?: string;
-    ANTHROPIC_API_KEY?: string;
-    ANTHROPIC_MODEL?: string;
-    ANTHROPIC_WORKSPACE_ID?: string;
+    // Private, authenticated endpoint of Mender's open-weight model service
+    // (model-service/). Secrets. No hosted AI provider is ever configured.
+    MENDER_MODEL_ENDPOINT?: string;
+    MENDER_MODEL_NAME?: string;
+    MENDER_MODEL_API_KEY?: string;
     GITHUB_APP_CLIENT_ID?: string;
     GITHUB_APP_CLIENT_SECRET?: string;
     GITHUB_APP_SLUG?: string;
