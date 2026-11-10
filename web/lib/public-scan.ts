@@ -49,20 +49,6 @@ export function extractCalls(file: string, source: string): CallSite[] {
   for (const match of source.matchAll(/\baxios\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])(https:\/\/[^'"`\s]+)\2/gi)) {
     addHttpCall(match.index, `axios.${match[1].toLowerCase()}`, match[1], match[3]);
   }
-  const pattern = /\.paymentIntents\.create\s*\(/g;
-  for (const match of source.matchAll(pattern)) {
-    const offset = match.index + match[0].length;
-    const argument = source.slice(offset).trimStart();
-    const literal = argument.startsWith('{');
-    const line = source.slice(0, match.index).split('\n').length;
-    found.push({ file, line, symbol: 'paymentIntents.create', endpoint: 'POST /v1/payment_intents', fields: [], uncertain: true, reason: literal ? 'Text scan found a request object; field mapping requires review' : 'Dynamic request body; field mapping unresolved' });
-  }
-  if (/from\s*['"]@aws-sdk\/client-s3['"]|require\s*\(\s*['"]@aws-sdk\/client-s3['"]\s*\)/.test(source)) {
-    for (const match of source.matchAll(/\bnew\s+(PutObject|GetObject)Command\s*\(/g)) {
-      const operation = match[1];
-      found.push({ file, line: source.slice(0, match.index).split('\n').length, symbol: `${operation}Command`, endpoint: `S3 ${operation}`, fields: [], uncertain: true, reason: 'Command construction found; request fields and upstream impact require model comparison' });
-    }
-  }
   const flows = source.includes('supabase') && /\.(insert|upsert)\s*\(/.test(source)
     ? traceStaticDatabaseWrites(file, source) : [];
   for (const call of found) {
@@ -85,7 +71,7 @@ export async function scanPublicRepository(fullName: string, branch: string) {
   if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
   const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`);
   if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
-  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /(^|\/)package(-lock)?\.json$|\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && !file.path.split('/').some(part => part === '.' || part === '..'));
+  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && !file.path.split('/').some(part => part === '.' || part === '..'));
   if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the public scan limit');
   const contents = new Map<string, string>();
   for (let offset = 0; offset < eligible.length; offset += 8) {
@@ -110,7 +96,7 @@ export async function scanInstallationRepository(fullName: string, head: string,
   if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
   const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`, token);
   if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
-  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /(^|\/)package(-lock)?\.json$|\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && /^[a-f0-9]{40}$/.test(file.sha || ''));
+  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && /^[a-f0-9]{40}$/.test(file.sha || ''));
   if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the scan limit');
   const contents = new Map<string, string>();
   for (let offset = 0; offset < eligible.length; offset += 8) {
@@ -125,50 +111,29 @@ export async function scanInstallationRepository(fullName: string, head: string,
   return { head, inventory: inventoryFromContents(contents), scannedAt: new Date().toISOString() };
 }
 
+// Every external API call the parser can attribute to a fixed https origin.
+// No provider is special-cased: the provider catalog decides later which of
+// these APIs have a published contract to check.
 function inventoryFromContents(contents: Map<string, string>) {
-  const declaredVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
-  const lockedVersions: Record<string, Set<string>> = { stripe: new Set(), '@aws-sdk/client-s3': new Set() };
-  for (const [manifest, body] of contents) {
-    if (!/(^|\/)package(-lock)?\.json$/.test(manifest)) continue;
-    try {
-      const parsed = JSON.parse(body);
-      for (const dependency of Object.keys(declaredVersions)) {
-        const declared = parsed.dependencies?.[dependency] || parsed.devDependencies?.[dependency] || parsed.peerDependencies?.[dependency];
-        const locked = parsed.packages?.[`node_modules/${dependency}`]?.version;
-        if (typeof declared === 'string') declaredVersions[dependency].add(declared);
-        if (typeof locked === 'string') lockedVersions[dependency].add(locked);
-      }
-    } catch { throw new Error(`Could not read ${manifest}`); }
-  }
-  let apiVersion: string | null = null;
   const calls: CallSite[] = [];
   const files: string[] = [];
   const tests: string[] = [];
   for (const [file, source] of contents) {
     if (!/\.[cm]?[jt]sx?$/.test(file) || file.endsWith('.d.ts')) continue;
     if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) { tests.push(file); continue; }
-    if (!/stripe|paymentIntents|@aws-sdk\/client-s3|\bfetch\s*\(|\baxios\./.test(source)) continue;
+    if (!/\bfetch\s*\(|\baxios\./.test(source)) continue;
     const found = extractCalls(file, source);
     if (!found.length) continue;
     files.push(file);
-    if (!apiVersion && found.some(call => call.endpoint.startsWith('POST /v1/'))) apiVersion = source.match(/apiVersion\s*:\s*['"`]([^'"`]+)['"`]/)?.[1] || null;
     calls.push(...found);
   }
   const tooManyCalls = calls.length > 200;
   if (tooManyCalls) calls.length = 200;
-  const s3Calls = calls.filter(call => call.endpoint.startsWith('S3 '));
-  const stripeCalls = calls.filter(call => call.endpoint.startsWith('POST /v1/'));
-  const httpCalls = calls.filter(call => Boolean(call.origin));
-  const provider = s3Calls.length && stripeCalls.length ? 'aws-s3+stripe' : s3Calls.length ? 'aws-s3' : stripeCalls.length ? 'stripe' : 'http';
-  const packageName = s3Calls.length ? '@aws-sdk/client-s3' : 'stripe';
-  const sdkVersions = lockedVersions[packageName].size ? lockedVersions[packageName] : declaredVersions[packageName];
-  const sdkVersion = sdkVersions.size === 1 ? [...sdkVersions][0] : null;
-  const limitations = ['Static scan flags possible calls for review; it does not prove runtime API impact', 'Fixture, example, build, and test files are excluded'];
-  if (sdkVersions.size > 1) limitations.push('Multiple SDK versions were found; the version at each call site requires review');
-  else if (!sdkVersion && (s3Calls.length || stripeCalls.length)) limitations.push(`${s3Calls.length ? 'S3' : 'Stripe'} SDK version not found in scanned manifests`);
-  if (stripeCalls.length && !apiVersion) limitations.push('Stripe API version not statically discoverable');
-  if (httpCalls.length) limitations.push('HTTP calls are static candidates; only complete literal JSON request bodies have known field names, and none have been run by the scanner');
+  const limitations = ['Static scan flags possible calls for review; it does not prove runtime API impact', 'Fixture, example, build, and test files are excluded',
+    'Only fetch and axios calls whose URL has a fixed https origin (written out, or a const in the same file) are detected; SDK clients and URLs from other files or the environment are not'];
+  if (calls.length) limitations.push('Only complete literal JSON request bodies have known field names, and no call has been run by the scanner');
   if (tooManyCalls) limitations.push('Only the first 200 call sites were retained');
-  if (!calls.length) limitations.push('No recognizable Stripe, S3, or literal HTTPS call sites found; dynamic calls may exist');
-  return { provider, sdkVersion, apiVersion, files, calls, tests, limitations };
+  if (!calls.length) limitations.push('No external API calls with a fixed https origin were found; dynamic calls may exist');
+  // provider/sdkVersion/apiVersion keep the stored shape; they no longer name an SDK.
+  return { provider: 'http', sdkVersion: null as string | null, apiVersion: null as string | null, files, calls, tests, limitations };
 }
