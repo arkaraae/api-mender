@@ -4,13 +4,16 @@ import { scanPublicRepository } from '../lib/public-scan.ts';
 
 const head = 'a'.repeat(40);
 const treeSha = 'b'.repeat(40);
-const manifest = JSON.stringify({ dependencies: { '@aws-sdk/client-s3': '^3.0.0' } });
-const code = "import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';\nclient.send(new PutObjectCommand({ Bucket: 'demo' }));\nclient.send(new GetObjectCommand({ Bucket: 'demo' }));\n";
+const manifest = JSON.stringify({ dependencies: { '@aws-sdk/client-s3': '^3.0.0', stripe: '^17.0.0' } });
+// An SDK call (no longer special-cased) next to real HTTP API calls, one built from a same-file base URL.
+const code = "import { PutObjectCommand } from '@aws-sdk/client-s3';\nconst API = 'https://api.github.com';\nclient.send(new PutObjectCommand({ Bucket: 'demo' }));\nexport const repo = (o, r) => fetch(`${API}/repos/${o}/${r}`);\nexport const quote = () => fetch('https://api.example.com/v2/quotes', { method: 'POST', body: JSON.stringify({ accountId: 'a' }) });\n";
 
-test('a public repository scan saves S3 call sites and the nested SDK manifest', async () => {
+test('a public repository scan lists every external API call and reads no manifests', async () => {
+  const requested = [];
   const original = globalThis.fetch;
   globalThis.fetch = async input => {
     const url = String(input);
+    requested.push(url);
     if (url.endsWith('/repos/example/customer')) return Response.json({ private: false, archived: false });
     if (url.endsWith('/branches/main')) return Response.json({ commit: { sha: head } });
     if (url.endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: treeSha } });
@@ -25,13 +28,15 @@ test('a public repository scan saves S3 call sites and the nested SDK manifest',
   try {
     const result = await scanPublicRepository('example/customer', 'main');
     assert.equal(result.head, head);
-    assert.equal(result.inventory.provider, 'aws-s3');
-    assert.equal(result.inventory.sdkVersion, '^3.0.0');
-    assert.deepEqual(result.inventory.calls.map(call => [call.symbol, call.line, call.endpoint]), [
-      ['PutObjectCommand', 2, 'S3 PutObject'],
-      ['GetObjectCommand', 3, 'S3 GetObject'],
+    assert.equal(result.inventory.provider, 'http');
+    assert.equal(result.inventory.sdkVersion, null);
+    assert.deepEqual(result.inventory.calls.map(call => [call.symbol, call.line, call.origin, call.endpoint]), [
+      ['fetch', 4, 'https://api.github.com', 'GET /repos/{}/{}'],
+      ['fetch', 5, 'https://api.example.com', 'POST /v2/quotes'],
     ]);
+    assert.deepEqual(result.inventory.calls[1].fields, ['accountId']);
     assert.ok(result.inventory.calls.every(call => call.uncertain));
+    assert.ok(!requested.some(url => url.endsWith('package.json')), 'manifests are no longer read');
   } finally {
     globalThis.fetch = original;
   }

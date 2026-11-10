@@ -60,7 +60,7 @@ test('private scan reads only pinned GitHub blobs using its installation token',
   const head = 'a'.repeat(40);
   const tree = 'b'.repeat(40);
   const blob = 'c'.repeat(40);
-  const source = "import { PutObjectCommand } from '@aws-sdk/client-s3';\nnew PutObjectCommand({ Bucket: 'bucket' });\n";
+  const source = "export const meta = () => fetch('https://api.github.com/meta');\n";
   const requests = [];
   globalThis.fetch = async (url, options) => {
     requests.push({ url: String(url), auth: options?.headers?.Authorization, redirect: options?.redirect });
@@ -72,7 +72,7 @@ test('private scan reads only pinned GitHub blobs using its installation token',
   try {
     const result = await scanInstallationRepository('customer/private-repo', head, 'installation-token');
     assert.equal(result.head, head);
-    assert.equal(result.inventory.calls[0].symbol, 'PutObjectCommand');
+    assert.deepEqual([result.inventory.calls[0].symbol, result.inventory.calls[0].endpoint], ['fetch', 'GET /meta']);
     assert.ok(requests.every(request => request.url.startsWith('https://api.github.com/') && request.auth === 'Bearer installation-token'));
     assert.ok(requests.every(request => request.redirect === 'manual'));
   } finally { globalThis.fetch = originalFetch; }

@@ -162,8 +162,10 @@ test('Integrated Services lists third-party APIs from scans and CLI reports, wit
     [{ id: 'f1', status: 'Detected', title: 'assignee removed', evidence: { kind: 'provider-change', finding: { provider: { id: 'github-rest' } } } },
       { id: 'f2', status: 'Dismissed', title: 'old', evidence: { kind: 'provider-change', finding: { provider: { id: 'github-rest' } } } }],
     [{ repository_label: 'billing', received_at: 'now', report: { providers: [{ providerId: 'github-rest', providerName: 'GitHub REST API', operations: [ISSUES], callCount: 2 }] } }]);
-  assert.equal(services.length, 1, 'unknown hosts are not presented as integrations');
-  assert.deepEqual([services[0].name, services[0].status, services[0].callCount], ['GitHub REST API', 'Needs review', 3]);
+  // Every API the code calls is listed; only catalog APIs are watched for changes.
+  assert.deepEqual(services.map(service => [service.name, service.watched, service.status]),
+    [['GitHub REST API', true, 'Needs review'], ['internal.example', false, 'Detected']]);
+  assert.equal(services[0].callCount, 3);
   assert.deepEqual(services[0].repositories, ['acme/checkout', 'billing (CLI)']);
   assert.deepEqual(services[0].pinnedVersions, ['2022-11-28']);
   assert.deepEqual(services[0].openFindings.map(f => f.id), ['f1']);

@@ -216,9 +216,30 @@ test('template URL rules', () => {
     'fetch(`https://api.github.com/orgs?org=${org}`)',
     'fetch(`https://api.github.com/orgs#${fragment}`)',
     'fetch(`https://api.github.com/mender-dynamic-segment/${x}`)',
-    "fetch('https://api.github.com/' + path)",
+    "fetch('https://api.github.com' + path)",
     'fetch(url)',
   ]) assert.deepEqual(endpoint(rejected), [], rejected);
+  // Concatenation is read when the literal part fixes the origin.
+  assert.deepEqual(endpoint("fetch('https://api.github.com/' + path)"), ['https://api.github.com GET /{}']);
+});
+
+test('base URLs in same-file constants are followed only when unambiguous', () => {
+  const endpoint = source => parseApiCalls('a.ts', source).map(call => `${call.origin} ${call.endpoint}`);
+  // Common real-world shapes: a const base URL, template or concatenation, declared before or after use.
+  assert.deepEqual(endpoint("const API = 'https://api.github.com';\nfetch(`${API}/repos/${o}/${r}/issues`, { method: 'POST' });"),
+    ['https://api.github.com POST /repos/{}/{}/issues']);
+  assert.deepEqual(endpoint("function f(id) { return fetch(BASE + '/v1/customers/' + id); }\nconst BASE = 'https://api.stripe.com';"),
+    ['https://api.stripe.com GET /v1/customers/{}']);
+  assert.deepEqual(endpoint("const URL_ = `https://api.example.com/v2/items`;\naxios.get(URL_);"), ['https://api.example.com GET /v2/items']);
+  assert.deepEqual(endpoint("const HOST = 'https://api.github.com';\nconst PATH = '/meta';\nfetch(HOST + PATH);"), ['https://api.github.com GET /meta']);
+  for (const ambiguous of [
+    "let API = 'https://api.github.com';\nfetch(`${API}/x`);",                                   // reassignable
+    "const API = 'https://api.github.com';\nfunction f(API) { return fetch(`${API}/x`); }",     // shadowed by a parameter
+    "const API = 'https://a.example';\n{ const API = 'https://b.example'; fetch(`${API}/x`); }", // declared twice
+    "import { API } from './config';\nfetch(`${API}/x`);",                                      // other file: unknown
+    'const API = process.env.API_URL;\nfetch(`${API}/x`);',                                      // not a literal
+    "const API = 'https://api.github.com';\nfetch(`${API}${path}`);",                            // host could change
+  ]) assert.deepEqual(endpoint(ambiguous), [], ambiguous);
 });
 
 test('lookalike hosts are never attributed to a catalog provider', () => {
