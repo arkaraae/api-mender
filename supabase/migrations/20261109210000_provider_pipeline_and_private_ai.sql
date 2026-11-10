@@ -48,7 +48,19 @@ create policy provider_contract_slices_read on public.provider_contract_slices
 -- 2. Repair jobs: patches written by the self-hosted model ----------------------
 -- 'ai_assisted' rows predate this migration (a hosted provider chose a field
 -- name). New model repairs are always 'self_hosted_model'.
-alter table public.repair_jobs drop constraint if exists repair_jobs_generation_method_check;
+-- Drop whichever check constraint guards generation_method today (it was
+-- created inline, so its name is generated) before adding the wider one.
+do $$
+declare v_name text;
+begin
+  for v_name in
+    select con.conname from pg_constraint con
+    where con.conrelid = 'public.repair_jobs'::regclass and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) like '%generation_method%'
+  loop
+    execute format('alter table public.repair_jobs drop constraint %I', v_name);
+  end loop;
+end $$;
 alter table public.repair_jobs add constraint repair_jobs_generation_method_check
   check (generation_method in ('deterministic', 'ai_assisted', 'self_hosted_model'));
 alter table public.repair_jobs
