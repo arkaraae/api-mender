@@ -93,6 +93,20 @@ export default function LiveWorkspace() {
     } finally { setBusy(false); }
   }
 
+  async function authenticateWithGithub() {
+    if (!supabase) { setMessage('Sign in is unavailable right now.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: { redirectTo: `${window.location.origin}/live` },
+      });
+      if (error) setMessage(error.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start GitHub sign in.');
+    } finally { setBusy(false); }
+  }
+
   async function resendConfirmation() {
     if (!supabase || !email) return;
     setBusy(true); setMessage('');
@@ -160,8 +174,10 @@ export default function LiveWorkspace() {
     finally { setBusy(false); }
   }
 
+  const authScreen = <AuthScreen ready={ready} email={email} password={password} message={message} busy={busy} awaitingConfirmation={awaitingConfirmation} onEmailChange={setEmail} onPasswordChange={setPassword} onAuthenticate={authenticate} onGithubAuthenticate={authenticateWithGithub} onResend={resendConfirmation} onBack={() => { setAwaitingConfirmation(false); setMessage(''); }} />;
+  if (!ready) return authScreen;
   if (!supabase) return <main className="live-shell"><a href="/">← Home</a><h1>Live workspace unavailable</h1><p>Set the public Supabase URL and publishable key in the app environment.</p></main>;
-  if (!ready || !user) return <AuthScreen ready={ready} email={email} password={password} message={message} busy={busy} awaitingConfirmation={awaitingConfirmation} onEmailChange={setEmail} onPasswordChange={setPassword} onAuthenticate={authenticate} onResend={resendConfirmation} onBack={() => { setAwaitingConfirmation(false); setMessage(''); }} />;
+  if (!user) return authScreen;
   return <main className="live-shell"><header className="live-header"><a href="/">← Home</a><div className="live-brand"><BrandLogo /><span>LIVE WORKSPACE</span></div>{user && <button onClick={() => void supabase.auth.signOut()}>Sign out</button>}</header>
     <><div className="live-intro"><div><div className="eyebrow">CONNECTED TO SUPABASE</div><h1>{workspace?.name || 'Create a workspace'}</h1><p>Signed in as {user.email}. Repository scans use the current public GitHub commit.</p></div><span className="live-badge">LIVE DATA</span></div>
         {!workspace ? <section className="live-card"><h2>Your workspace</h2><p>Create a workspace before adding repositories.</p><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => setWorkspaceName(event.target.value)} /></label><button disabled={busy || !workspaceName.trim()} onClick={() => void createWorkspace()}>Create workspace</button></section>
