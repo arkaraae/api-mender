@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { openSecret, sealSecret } from '../lib/secret-box.ts';
 import { dispatchFindingAlerts, isSlackWebhook, issueBody, slackMessage } from '../lib/finding-alerts.ts';
-import { applyStripeEvent, repositoryLimitMessage, verifyStripeSignature } from '../lib/billing.ts';
+import { AlreadySubscribedError, applyStripeEvent, checkoutUrl, repositoryLimitMessage, verifyStripeSignature } from '../lib/billing.ts';
 
 const KEY = randomBytes(32).toString('base64');
 const WS = '11111111-1111-4111-8111-111111111111';
@@ -11,9 +11,35 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 const HOOK = 'https://hooks.slack.com/services/T000/B000/abcdefXYZ123';
 
 // Minimal Supabase query builder over in-memory tables.
-function fakeDatabase(tables) {
+// The two alert RPCs mirror the SQL in 20261111000000_alerts_and_billing.sql.
+const rankOf = { low: 0, informational: 0, medium: 1, high: 2, critical: 3 };
+function fakeDatabase(tables, clock = () => Date.parse('2026-11-10T15:00:00Z')) {
   const writes = [];
-  return { writes, tables, from(table) {
+  const iso = offset => new Date(clock() + offset).toISOString();
+  const rpcs = {
+    pending_finding_alerts() {
+      const notes = tables.finding_notifications ??= [];
+      const open = (finding, channel) => !notes.some(n => n.finding_id === finding.id && n.channel === channel
+        && (['sent', 'skipped'].includes(n.status) || n.attempts >= 3 || (n.status === 'pending' && n.updated_at > iso(-600_000))));
+      return (tables.findings ?? []).filter(finding => {
+        const s = (tables.workspace_alert_settings ?? []).find(row => row.workspace_id === finding.workspace_id);
+        if (!s || (!s.slack_webhook_ciphertext && !s.github_issues) || finding.dismissed_at) return false;
+        if (finding.created_at < s.alerts_since || finding.created_at < iso(-7 * 86_400_000)) return false;
+        if ((rankOf[finding.severity] ?? 0) < (rankOf[s.min_severity] ?? 1)) return false;
+        return (s.slack_webhook_ciphertext && open(finding, 'slack')) || (s.github_issues && open(finding, 'github-issue'));
+      }).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    },
+    claim_finding_notification({ p_finding, p_channel, p_workspace }) {
+      const notes = tables.finding_notifications ??= [];
+      const row = notes.find(n => n.finding_id === p_finding && n.channel === p_channel);
+      if (!row) { notes.push({ finding_id: p_finding, channel: p_channel, workspace_id: p_workspace, status: 'pending', attempts: 1, updated_at: iso(0) }); return true; }
+      const retry = row.attempts < 3 && ((row.status === 'failed' && row.updated_at < iso(-120_000)) || (row.status === 'pending' && row.updated_at < iso(-600_000)));
+      if (!retry) return false;
+      Object.assign(row, { status: 'pending', attempts: row.attempts + 1, updated_at: iso(0) });
+      return true;
+    },
+  };
+  return { writes, tables, rpc: async (name, args) => ({ data: rpcs[name](args), error: null }), from(table) {
     const filters = [];
     let operation = 'select';
     let payload;
@@ -27,6 +53,7 @@ function fakeDatabase(tables) {
       gte(column, value) { filters.push(row => row[column] >= value); return builder; },
       upsert(row, opts) { operation = 'upsert'; payload = row; options = opts; return builder; },
       insert(row) { operation = 'insert'; payload = row; return builder; },
+      update(row) { operation = 'update'; payload = row; return builder; },
       delete() { operation = 'delete'; return builder; },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       then(resolve, reject) {
@@ -44,6 +71,7 @@ function fakeDatabase(tables) {
           writes.push({ table, operation, row: payload });
         }
         if (operation === 'delete') tables[table] = list.filter(row => !filters.every(test => test(row)));
+        if (operation === 'update') for (const row of rows()) Object.assign(row, payload);
         return Promise.resolve(result).then(resolve, reject);
       },
     };
@@ -101,7 +129,11 @@ test('a failed Slack post is retried a bounded number of times', async () => {
   });
   let calls = 0;
   const fetcher = async () => { calls++; return new Response('no', { status: 500 }); };
-  for (let run = 0; run < 5; run++) await dispatchFindingAlerts(database, { MENDER_SETTINGS_KEY: KEY }, { fetcher, now: Date.parse('2026-11-10T15:00:00Z') });
+  for (let run = 0; run < 5; run++) {
+    await dispatchFindingAlerts(database, { MENDER_SETTINGS_KEY: KEY }, { fetcher, now: Date.parse('2026-11-10T15:00:00Z') });
+    // Retries wait two minutes after a failure.
+    for (const row of database.tables.finding_notifications) row.updated_at = '2026-11-10T14:00:00.000Z';
+  }
   assert.equal(calls, 3);
   assert.equal(database.tables.finding_notifications[0].status, 'failed');
   assert.equal(database.tables.finding_notifications[0].attempts, 3);
@@ -178,4 +210,43 @@ test('the repository-limit database error becomes an upgrade message', () => {
   assert.equal(repositoryLimitMessage({ message: 'repository limit reached: this plan allows 3 repositories' }), 'Your plan allows 3 repositories. Upgrade to Pro to connect more.');
   assert.equal(repositoryLimitMessage({ message: 'duplicate key' }), null);
   assert.equal(repositoryLimitMessage(null), null);
+});
+
+test('two overlapping alert runs send each finding once', async () => {
+  const database = fakeDatabase({
+    workspace_alert_settings: [{ workspace_id: WS, slack_webhook_ciphertext: await sealSecret(KEY, WS, HOOK), github_issues: false, min_severity: 'low', alerts_since: '2026-11-01T00:00:00Z' }],
+    findings: [finding('f1', 'medium'), finding('f2', 'high')], finding_notifications: [], monitored_repositories: [],
+  });
+  let posts = 0;
+  const fetcher = async () => { posts++; await new Promise(resolve => setTimeout(resolve, 5)); return new Response('ok'); };
+  const config = { MENDER_SETTINGS_KEY: KEY };
+  await Promise.all([dispatchFindingAlerts(database, config, { fetcher }), dispatchFindingAlerts(database, config, { fetcher })]);
+  assert.equal(posts, 2);
+});
+
+test('a backlog in one workspace does not hide another workspace’s findings', async () => {
+  const many = Array.from({ length: 250 }, (_, index) => finding(`old${index}`, 'low', `2026-11-09T0${index % 10}:00:00Z`));
+  const database = fakeDatabase({
+    workspace_alert_settings: [
+      { workspace_id: WS, slack_webhook_ciphertext: null, github_issues: true, min_severity: 'high', alerts_since: '2026-11-01T00:00:00Z' },
+      { workspace_id: OTHER, slack_webhook_ciphertext: await sealSecret(KEY, OTHER, HOOK), github_issues: false, min_severity: 'low', alerts_since: '2026-11-01T00:00:00Z' }],
+    findings: [...many, finding('new', 'medium', '2026-11-10T14:00:00Z', { workspace_id: OTHER })], finding_notifications: [], monitored_repositories: [],
+  });
+  const sent = [];
+  await dispatchFindingAlerts(database, { MENDER_SETTINGS_KEY: KEY }, { fetcher: async (url, init) => { sent.push(JSON.parse(init.body)); return new Response('ok'); } });
+  assert.equal(sent.length, 1);
+  assert.match(JSON.stringify(sent[0]), /finding=new/);
+});
+
+test('a workspace with an active subscription cannot start a second checkout', async () => {
+  const database = fakeDatabase({ workspace_billing: [{ workspace_id: WS, plan: 'pro', status: 'active', stripe_customer_id: 'cus_A', stripe_subscription_id: 'sub_1' }] });
+  await assert.rejects(checkoutUrl(database, { STRIPE_SECRET_KEY: 'sk', STRIPE_PRICE_PRO: 'price_PRO' }, WS, 'a@b.c', async () => { throw new Error('no Stripe call expected'); }), AlreadySubscribedError);
+});
+
+test('canceling a second subscription does not downgrade the active one', async () => {
+  const database = fakeDatabase({ workspace_billing: [{ workspace_id: WS, plan: 'pro', status: 'active', stripe_customer_id: 'cus_A', stripe_subscription_id: 'sub_1' }], stripe_events: [] });
+  const fetcher = async () => Response.json({ id: 'sub_2', customer: 'cus_A', status: 'canceled', metadata: { workspace_id: WS }, items: { data: [{ price: { id: 'price_PRO' } }] } });
+  const result = await applyStripeEvent(database, { STRIPE_SECRET_KEY: 'sk', STRIPE_PRICE_PRO: 'price_PRO' }, { id: 'evt_9', type: 'customer.subscription.deleted', data: { object: { id: 'sub_2' } } }, fetcher);
+  assert.deepEqual(result, { applied: false, reason: 'superseded' });
+  assert.equal(database.tables.workspace_billing[0].plan, 'pro');
 });

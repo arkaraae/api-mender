@@ -200,6 +200,9 @@ function chainOf(callee: Node | undefined): { root: string; steps: string[]; ste
   return null;
 }
 
+// Own keys only: a chain such as `hasOwnProperty` must not reach Object.prototype.
+const lookup = (table: Record<string, SdkMethod[]>, key: string) => (Object.hasOwn(table, key) ? table[key] : undefined);
+
 const pascal = (name: string) => name.replace(/_+$/, '').replace(/(^|_)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
 
 export type SdkCallDescription = {
@@ -332,15 +335,15 @@ export function describeSdkCall(node: Node, context: Context): SdkCallDescriptio
       params = args[1];
     } else if (reference && reference.root === found.root) {
       chain = reference.steps.join('.').replace(sdk.prefixes ?? /^$/, '');
-      methods = sdk.methods[chain];
+      methods = lookup(sdk.methods, chain);
       params = args[1];
     } else return null;
   } else {
     const normalized = sdk.prefixes ? chain.replace(sdk.prefixes, '') : chain;
-    methods = sdk.methods[normalized];
+    methods = lookup(sdk.methods, normalized);
     chain = normalized;
   }
-  if (methods?.length) {
+  if (Array.isArray(methods) && methods.length) {
     // Leading string arguments fill path parameters; the next object is the request.
     const positional = args.findIndex(arg => arg?.type === 'ObjectExpression' || (arg?.type === 'Identifier' && !/(id|sid|ID|Id)$/.test(arg.name)));
     const leading = positional < 0 ? args.length : positional;

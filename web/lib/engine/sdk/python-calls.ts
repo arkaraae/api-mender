@@ -94,16 +94,21 @@ function tokenize(source: string): Token[] {
   return tokens;
 }
 
-// Index of the bracket that closes the one at `open`, or -1.
-function closing(tokens: Token[], open: number): number {
-  let depth = 0;
-  for (let k = open; k < tokens.length && k < open + 20_000; k++) {
-    const v = tokens[k].t === 'op' ? tokens[k].v : '';
-    if (v === '(' || v === '[' || v === '{') depth++;
-    else if (v === ')' || v === ']' || v === '}') { depth--; if (depth === 0) return k; }
+// Partner index of every bracket, matched once in a linear pass, so
+// argument and chain lookups never rescan the file.
+function matchBrackets(tokens: Token[]): Int32Array {
+  const partner = new Int32Array(tokens.length).fill(-1);
+  const stack: number[] = [];
+  for (let k = 0; k < tokens.length; k++) {
+    if (tokens[k].t !== 'op') continue;
+    const v = tokens[k].v;
+    if (v === '(' || v === '[' || v === '{') stack.push(k);
+    else if ((v === ')' || v === ']' || v === '}') && stack.length) { const open = stack.pop()!; partner[open] = k; partner[k] = open; }
   }
-  return -1;
+  return partner;
 }
+let partner: Int32Array = new Int32Array(0);
+const closing = (_tokens: Token[], open: number) => partner[open] ?? -1;
 
 type Arg = { name?: string; from: number; to: number; star?: boolean };
 
@@ -180,13 +185,7 @@ function chainBefore(tokens: Token[], end: number): { root: string; steps: strin
     const token = tokens[k];
     if (token.t === 'op' && token.v === ')') {
       // An accessor call such as messages(sid)
-      let depth = 0;
-      let open = -1;
-      for (let m = k; m >= 0 && m > k - 2000; m--) {
-        const v = tokens[m].t === 'op' ? tokens[m].v : '';
-        if (v === ')' || v === ']' || v === '}') depth++;
-        else if (v === '(' || v === '[' || v === '{') { depth--; if (depth === 0) { open = m; break; } }
-      }
+      const open = partner[k] ?? -1;
       if (open < 1 || tokens[open - 1].t !== 'name') return null;
       steps.push(`${tokens[open - 1].v}()`);
       k = open - 2;
@@ -258,6 +257,7 @@ const httpVerbs = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'opt
 export function parsePythonCalls(file: string, source: string): ApiCall[] {
   if (source.length > 300_000) return [];
   const tokens = tokenize(source);
+  partner = matchBrackets(tokens);
   const modules = new Map<string, string>(); // local name → module ('requests', 'httpx', 'openai', 'stripe', 'twilio.rest')
   const constructors = new Map<string, { sdk?: PySdk; http?: boolean }>(); // local class/factory name → what it builds
   for (let k = 0; k < tokens.length; k++) {
@@ -415,9 +415,9 @@ export function parsePythonCalls(file: string, source: string): ApiCall[] {
       lookup = legacyStripeChain(chain.steps);
     }
     if (!sdk || !lookup) continue;
-    const methods = sdk.methods[lookup];
+    const methods = Object.hasOwn(sdk.methods, lookup) ? sdk.methods[lookup] : undefined;
     const provider = getProvider(sdk.provider);
-    if (!methods?.length || !provider) continue;
+    if (!Array.isArray(methods) || !methods.length || !provider) continue;
     const positional = args.filter(arg => !arg.name && !arg.star);
     const method = methods.find(item => item.p === positional.length) ?? (methods.length === 1 ? methods[0] : undefined);
     if (!method) continue;

@@ -2,7 +2,7 @@
 
 ## Database
 Apply `supabase/migrations/20261111000000_alerts_and_billing.sql` (staging first, then production).
-It adds alert settings, notification history, plans (`billing_plans`: Free 3 repositories, Pro 50 —
+It adds alert settings, notification history (with per-send claims so overlapping cron runs never double-send), plans (`billing_plans`: Free 3 repositories, Pro 50 —
 change the rows to change the limits) and a trigger that holds every repository insert to the plan.
 
 ## Worker secrets (per environment)

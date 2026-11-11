@@ -38,6 +38,11 @@ export function isScannableSource(path: string, source: string): boolean {
 // request headers, the last line of the call, calls made through official
 // provider SDKs, and Python files. Shares that parser's bounds.
 export function parseApiCalls(file: string, source: string, shared?: SharedClients): ApiCall[] {
+  // One unreadable file never fails the whole scan.
+  try { return parseFile(file, source, shared); } catch { return []; }
+}
+
+function parseFile(file: string, source: string, shared?: SharedClients): ApiCall[] {
   if (isPythonSource(file)) return mentionsPythonApi(source) ? parsePythonCalls(file, source) : [];
   const sdkCalls = parseSdkCalls(file, source, shared);
   const httpCalls: ApiCall[] = !/\bfetch\s*\(|\baxios\b/.test(source) ? [] : parseHttpCallDetails(file, source).map(({ call, endLine, headers, headersComplete }) => ({
@@ -58,7 +63,8 @@ export function sharedSdkClients(files: Iterable<{ path: string; source: string 
   for (const file of files) {
     if (++examined > 2_000) break;
     if (!file || !/\.[cm]?[jt]sx?$/.test(file.path) || file.source.length > maxFileLength) continue;
-    const exported = sdkClientExports(file.source);
+    let exported: Map<string, string>;
+    try { exported = sdkClientExports(file.source); } catch { continue; }
     if (exported.size) shared.set(moduleKey(file.path), exported);
   }
   return shared;

@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { onboardingDatabase, uuid } from '@/lib/github-onboarding';
 import { readBoundedBody } from '@/lib/github-app';
-import { checkoutUrl } from '@/lib/billing';
+import { AlreadySubscribedError, checkoutUrl } from '@/lib/billing';
 import { authenticatedOwner, noStore, reply } from '../shared';
 
 /** Start Stripe Checkout for the Pro plan. Workspace owners only. */
@@ -17,5 +17,8 @@ export async function POST(request: Request) {
     await onboardingDatabase().from('audit_events').insert({ workspace_id: body.workspaceId, actor_type: 'user', actor_id: identity.user.id,
       action: 'billing.checkout', target: 'pro', detail: {} });
     return Response.json({ url }, { headers: noStore });
-  } catch { return reply(502, 'Could not start checkout'); }
+  } catch (error) {
+    if (error instanceof AlreadySubscribedError) return reply(409, error.message);
+    return reply(502, 'Could not start checkout');
+  }
 }

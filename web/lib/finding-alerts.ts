@@ -17,7 +17,6 @@ type Channel = 'slack' | 'github-issue';
 type Deps = { fetcher?: typeof fetch; token?: (installationId: number, repository: string) => Promise<string>; now?: number };
 
 const rank: Record<string, number> = { low: 0, informational: 0, medium: 1, high: 2, critical: 3 };
-const maxAttempts = 3;
 const maxSendsPerRun = 30;
 const slackWebhook = /^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9]+\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/;
 
@@ -53,28 +52,18 @@ export async function dispatchFindingAlerts(database: SupabaseClient, config: Al
   const fetcher = deps.fetcher ?? fetch;
   const now = deps.now ?? Date.now();
   const site = (config.SITE_ORIGIN ?? 'https://apimender.com').replace(/\/+$/, '');
-  const { data: settingsRows, error } = await database.from('workspace_alert_settings')
-    .select('workspace_id,slack_webhook_ciphertext,github_issues,min_severity,alerts_since')
-    .or('slack_webhook_ciphertext.not.is.null,github_issues.eq.true').limit(500);
+  // Filtered in SQL per workspace (severity, start time, not yet sent), so a
+  // backlog in one workspace never hides another's new findings.
+  const { data: due, error } = await database.rpc('pending_finding_alerts', { p_limit: 100 });
   if (error) throw error;
+  const findings = (due ?? []) as FindingRow[];
+  if (!findings.length) return { sent: 0, failed: 0 };
+  const workspaceIds = [...new Set(findings.map(finding => finding.workspace_id))];
+  const { data: settingsRows, error: settingsError } = await database.from('workspace_alert_settings')
+    .select('workspace_id,slack_webhook_ciphertext,github_issues,min_severity,alerts_since').in('workspace_id', workspaceIds);
+  if (settingsError) throw settingsError;
   const settings = new Map((settingsRows ?? []).map((row: Settings) => [row.workspace_id, row]));
-  if (!settings.size) return { sent: 0, failed: 0 };
-  const since = new Date(now - 7 * 86_400_000).toISOString();
-  const { data: findings, error: findingError } = await database.from('findings')
-    .select('id,workspace_id,repository_id,title,description,severity,status,created_at,dismissed_at,evidence')
-    .in('workspace_id', [...settings.keys()]).gte('created_at', since).is('dismissed_at', null)
-    .order('created_at', { ascending: true }).limit(200);
-  if (findingError) throw findingError;
-  const due = (findings ?? []).filter((finding: FindingRow) => {
-    const setting = settings.get(finding.workspace_id)!;
-    return finding.created_at >= setting.alerts_since && (rank[finding.severity] ?? 0) >= (rank[setting.min_severity] ?? 1);
-  });
-  if (!due.length) return { sent: 0, failed: 0 };
-  const { data: previous, error: previousError } = await database.from('finding_notifications')
-    .select('finding_id,channel,status,attempts').in('finding_id', due.map(finding => finding.id));
-  if (previousError) throw previousError;
-  const prior = new Map((previous ?? []).map(row => [`${row.finding_id}\0${row.channel}`, row]));
-  const repositoryIds = [...new Set(due.map(finding => finding.repository_id).filter((id): id is string => !!id))];
+  const repositoryIds = [...new Set(findings.map(finding => finding.repository_id).filter((id): id is string => !!id))];
   const { data: repositories } = repositoryIds.length
     ? await database.from('monitored_repositories').select('id,full_name,github_installation_id').in('id', repositoryIds)
     : { data: [] };
@@ -83,24 +72,25 @@ export async function dispatchFindingAlerts(database: SupabaseClient, config: Al
   let sent = 0;
   let failed = 0;
   let budget = maxSendsPerRun;
+  // Only the run that claims a (finding, channel) may send it.
+  const claim = async (finding: FindingRow, channel: Channel) => {
+    const { data, error: claimError } = await database.rpc('claim_finding_notification', { p_finding: finding.id, p_channel: channel, p_workspace: finding.workspace_id });
+    if (claimError) throw claimError;
+    return data === true;
+  };
   const record = async (finding: FindingRow, channel: Channel, status: 'sent' | 'failed' | 'skipped', detail: string | null, url: string | null) => {
-    const attempts = ((prior.get(`${finding.id}\0${channel}`)?.attempts as number | undefined) ?? 0) + 1;
-    const { error: writeError } = await database.from('finding_notifications').upsert({ finding_id: finding.id, channel,
-      workspace_id: finding.workspace_id, status, detail: detail?.slice(0, 500) ?? null, url, attempts: Math.min(attempts, 10),
-      updated_at: new Date(now).toISOString() }, { onConflict: 'finding_id,channel' });
+    const { error: writeError } = await database.from('finding_notifications').update({ status, detail: detail?.slice(0, 500) ?? null, url,
+      updated_at: new Date(now).toISOString() }).eq('finding_id', finding.id).eq('channel', channel);
     if (writeError) throw writeError;
     if (status === 'sent') sent++;
     if (status === 'failed') failed++;
   };
-  const pending = (finding: FindingRow, channel: Channel) => {
-    const row = prior.get(`${finding.id}\0${channel}`);
-    return !row || (row.status === 'failed' && (row.attempts as number) < maxAttempts);
-  };
-  for (const finding of due) {
+  for (const finding of findings) {
     if (budget <= 0) break;
-    const setting = settings.get(finding.workspace_id)!;
+    const setting = settings.get(finding.workspace_id);
+    if (!setting || finding.created_at < setting.alerts_since || (rank[finding.severity] ?? 0) < (rank[setting.min_severity] ?? 1)) continue;
     const repository = finding.repository_id ? repositoryOf.get(finding.repository_id) : undefined;
-    if (setting.slack_webhook_ciphertext && pending(finding, 'slack')) {
+    if (setting.slack_webhook_ciphertext && await claim(finding, 'slack')) {
       budget--;
       try {
         const url = await openSecret(config.MENDER_SETTINGS_KEY, finding.workspace_id, setting.slack_webhook_ciphertext);
@@ -112,7 +102,7 @@ export async function dispatchFindingAlerts(database: SupabaseClient, config: Al
         await record(finding, 'slack', 'failed', String((sendError as Error)?.message ?? sendError), null);
       }
     }
-    if (setting.github_issues && pending(finding, 'github-issue')) {
+    if (setting.github_issues && budget > 0 && await claim(finding, 'github-issue')) {
       if (!repository?.github_installation_id || !config.GITHUB_APP_ID || !config.GITHUB_APP_PRIVATE_KEY) {
         await record(finding, 'github-issue', 'skipped', 'The repository is not connected through the GitHub App', null);
         continue;

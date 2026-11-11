@@ -12,7 +12,9 @@ const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|example
 const sourcePattern = /\.([cm]?[jt]sx?|py)$/;
 const testPattern = /(\.(test|spec)\.[cm]?[jt]sx?$)|((^|\/)(test_[^/]*|[^/]*_test|conftest)\.py$)|((^|\/)tests?\/[^/]*\.py$)/;
 // One archive download per scan; these bound what is read from it.
-const archiveLimits = { maxArchiveBytes: 60_000_000, maxFiles: 1_500, maxFileBytes: 300_000, maxTotalBytes: 25_000_000 };
+// The archive is streamed and discarded except for accepted source files, so
+// its decompressed size can be large; what is kept and parsed is bounded tighter.
+const archiveLimits = { maxArchiveBytes: 400_000_000, maxFiles: 800, maxFileBytes: 300_000, maxTotalBytes: 12_000_000 };
 const eligiblePath = (path: string, size: number) => size <= 300_000 && path.length <= 256 && sourcePattern.test(path)
   && !path.endsWith('.d.ts') && !ignoredDirectory.test(path) && !path.split('/').some(part => part === '.' || part === '..');
 

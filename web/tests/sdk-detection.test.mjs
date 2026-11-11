@@ -203,3 +203,11 @@ test('a fix that edits an Octokit path parameter is rejected', async () => {
   assert.ok(result.policy.filter(check => !check.passed).map(check => check.name).includes('call-inventory-stable'));
   assert.match(result.policy.find(check => !check.passed).detail, /path parameter or SDK option/);
 });
+
+test('hostile sources neither crash the scan nor take long', () => {
+  assert.deepEqual(parseApiCalls('a.ts', "import Stripe from 'stripe';\nconst stripe = new Stripe(k);\nstripe.hasOwnProperty('x');\nstripe.constructor(1);\n"), []);
+  assert.deepEqual(parseApiCalls('a.py', 'from openai import OpenAI\nclient = OpenAI()\nclient.constructor(1)\n'), []);
+  const started = performance.now();
+  parseApiCalls('a.py', `import requests\n${'a('.repeat(100_000)}`);
+  assert.ok(performance.now() - started < 2_000, 'bracket matching is linear');
+});

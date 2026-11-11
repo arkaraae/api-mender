@@ -30,6 +30,8 @@ async function stripe<T>(config: BillingConfig, method: 'GET' | 'POST', path: st
 
 const site = (config: BillingConfig) => (config.SITE_ORIGIN ?? 'https://apimender.com').replace(/\/+$/, '');
 
+export class AlreadySubscribedError extends Error {}
+
 export type BillingView = { plan: 'free' | 'pro'; status: string; repositoryLimit: number; repositoriesUsed: number; currentPeriodEnd: string | null; available: boolean };
 
 export async function billingView(database: SupabaseClient, workspaceId: string, config: BillingConfig): Promise<BillingView> {
@@ -60,6 +62,9 @@ async function customerFor(database: SupabaseClient, config: BillingConfig, work
 /** A Stripe Checkout page for the Pro plan. */
 export async function checkoutUrl(database: SupabaseClient, config: BillingConfig, workspaceId: string, email: string | undefined, fetcher: Fetcher = fetch) {
   if (!config.STRIPE_PRICE_PRO || !/^price_[A-Za-z0-9]+$/.test(config.STRIPE_PRICE_PRO)) throw new Error('Billing is not configured');
+  // One subscription per workspace: changes go through the customer portal.
+  const { data: existing } = await database.from('workspace_billing').select('status,stripe_subscription_id').eq('workspace_id', workspaceId).maybeSingle();
+  if (existing?.stripe_subscription_id && paidStatuses.has(existing.status)) throw new AlreadySubscribedError('This workspace already has a subscription; manage it from Billing');
   const customer = await customerFor(database, config, workspaceId, email, fetcher);
   const session = await stripe<{ url?: string }>(config, 'POST', '/v1/checkout/sessions', {
     mode: 'subscription', customer, client_reference_id: workspaceId,
@@ -100,41 +105,46 @@ export async function verifyStripeSignature(payload: string, header: string | nu
 type Subscription = { id: string; customer: string; status: string; metadata?: Record<string, string>; current_period_end?: number;
   items?: { data?: { price?: { id?: string }; current_period_end?: number }[] } };
 
-/** Apply one verified webhook event. Returns what changed, for the audit log. */
+/**
+ * Apply one verified webhook event. The event is recorded as processed only
+ * after the plan is written, so a run killed midway is retried by Stripe.
+ */
 export async function applyStripeEvent(database: SupabaseClient, config: BillingConfig, event: { id?: unknown; type?: unknown; data?: { object?: Record<string, unknown> } }, fetcher: Fetcher = fetch) {
   if (typeof event.id !== 'string' || !/^evt_[A-Za-z0-9]+$/.test(event.id) || typeof event.type !== 'string') throw new Error('Invalid event');
-  const { error: seenError } = await database.from('stripe_events').insert({ id: event.id, type: event.type.slice(0, 100) });
-  if (seenError) {
-    if ((seenError as { code?: string }).code === '23505') return { applied: false, reason: 'duplicate' };
-    throw seenError;
-  }
+  const { data: seen, error: seenError } = await database.from('stripe_events').select('id').eq('id', event.id).maybeSingle();
+  if (seenError) throw seenError;
+  if (seen) return { applied: false, reason: 'duplicate' };
+  const done = async () => {
+    const { error } = await database.from('stripe_events').insert({ id: event.id, type: (event.type as string).slice(0, 100) });
+    // A concurrent delivery may have recorded it first; the plan write is idempotent.
+    if (error && (error as { code?: string }).code !== '23505') throw error;
+  };
   const object = event.data?.object ?? {};
   const subscriptionId = event.type.startsWith('customer.subscription.') ? object.id
     : event.type === 'checkout.session.completed' ? object.subscription : null;
-  if (typeof subscriptionId !== 'string' || !/^sub_[A-Za-z0-9]+$/.test(subscriptionId)) return { applied: false, reason: 'ignored' };
-  try {
-    const subscription = await stripe<Subscription>(config, 'GET', `/v1/subscriptions/${subscriptionId}`, undefined, fetcher);
-    let workspaceId = subscription.metadata?.workspace_id;
-    if (!workspaceId || !/^[a-f0-9-]{36}$/i.test(workspaceId)) {
-      const { data } = await database.from('workspace_billing').select('workspace_id').eq('stripe_customer_id', subscription.customer).maybeSingle();
-      workspaceId = data?.workspace_id;
-    }
-    if (!workspaceId) return { applied: false, reason: 'unknown workspace' };
-    const pro = (subscription.items?.data ?? []).some(item => item.price?.id === config.STRIPE_PRICE_PRO);
-    const status = knownStatuses.has(subscription.status) ? subscription.status : 'incomplete';
-    const periodEnd = subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
-    const row = { workspace_id: workspaceId, plan: pro && paidStatuses.has(status) ? 'pro' : 'free', status,
-      stripe_customer_id: /^cus_[A-Za-z0-9]+$/.test(subscription.customer) ? subscription.customer : null,
-      stripe_subscription_id: subscription.id, current_period_end: typeof periodEnd === 'number' ? new Date(periodEnd * 1000).toISOString() : null,
-      updated_at: new Date().toISOString() };
-    const { error } = await database.from('workspace_billing').upsert(row, { onConflict: 'workspace_id' });
-    if (error) throw error;
-    return { applied: true, workspaceId, plan: row.plan, status };
-  } catch (error) {
-    // Let Stripe retry: forget the event so the retry is not treated as a duplicate.
-    await database.from('stripe_events').delete().eq('id', event.id);
-    throw error;
+  if (typeof subscriptionId !== 'string' || !/^sub_[A-Za-z0-9]+$/.test(subscriptionId)) { await done(); return { applied: false, reason: 'ignored' }; }
+  const subscription = await stripe<Subscription>(config, 'GET', `/v1/subscriptions/${subscriptionId}`, undefined, fetcher);
+  let workspaceId = subscription.metadata?.workspace_id;
+  if (!workspaceId || !/^[a-f0-9-]{36}$/i.test(workspaceId)) {
+    const { data } = await database.from('workspace_billing').select('workspace_id').eq('stripe_customer_id', subscription.customer).maybeSingle();
+    workspaceId = data?.workspace_id;
   }
+  if (!workspaceId) { await done(); return { applied: false, reason: 'unknown workspace' }; }
+  const status = knownStatuses.has(subscription.status) ? subscription.status : 'incomplete';
+  // A different subscription that is not paid never overrides one that is.
+  const { data: current } = await database.from('workspace_billing').select('stripe_subscription_id,status').eq('workspace_id', workspaceId).maybeSingle();
+  if (current?.stripe_subscription_id && current.stripe_subscription_id !== subscription.id
+    && paidStatuses.has(current.status) && !paidStatuses.has(status)) { await done(); return { applied: false, reason: 'superseded' }; }
+  const pro = (subscription.items?.data ?? []).some(item => item.price?.id === config.STRIPE_PRICE_PRO);
+  const periodEnd = subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
+  const row = { workspace_id: workspaceId, plan: pro && paidStatuses.has(status) ? 'pro' : 'free', status,
+    stripe_customer_id: /^cus_[A-Za-z0-9]+$/.test(subscription.customer) ? subscription.customer : null,
+    stripe_subscription_id: subscription.id, current_period_end: typeof periodEnd === 'number' ? new Date(periodEnd * 1000).toISOString() : null,
+    updated_at: new Date().toISOString() };
+  const { error } = await database.from('workspace_billing').upsert(row, { onConflict: 'workspace_id' });
+  if (error) throw error;
+  await done();
+  return { applied: true, workspaceId, plan: row.plan, status };
 }
 
 /** Friendly text for the repository-limit trigger's error. */
