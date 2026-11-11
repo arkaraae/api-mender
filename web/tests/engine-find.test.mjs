@@ -46,7 +46,7 @@ test('canonical JSON ignores key order, treats __proto__ as data and bounds dept
 // ---------- providers ----------
 
 test('provider registry recognises whole origins only', () => {
-  assert.deepEqual(listProviders().map(provider => provider.id), ['github-rest']);
+  assert.deepEqual(listProviders().map(provider => provider.id), ['github-rest', 'stripe', 'openai', 'twilio']);
   assert.equal(providerForOrigin('https://api.github.com')?.id, 'github-rest');
   for (const origin of ['https://api.github.com.evil.example', 'https://evil.example', 'http://api.github.com', 'https://api.github.com:8443', 'https://xapi.github.com']) {
     assert.equal(providerForOrigin(origin), null, origin);

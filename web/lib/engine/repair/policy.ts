@@ -5,12 +5,12 @@
 // Details are shown to reviewers and logged. They name gates, counts,
 // identifiers and field names only, never source text.
 import type { Finding, LineEdit, PolicyCheck } from '../types.ts';
-import { parseStaticHttpCalls } from '../../static-http-calls.ts';
-import { bodyProperties, fetchCallsStartingOn, keyName, parseSource, textOf, unwrap, walk } from './ast.ts';
+import { parseApiCalls } from '../inventory.ts';
+import { bodyProperties, keyName, parseSource, targetCallsStartingOn, textOf, unwrap, walk } from './ast.ts';
 import type { BodyProperty, Node, TargetCall } from './ast.ts';
 import { applyLineEdits, applyUnifiedDiff, countChangedLines, splitLines, unifiedDiff } from './diff.ts';
 import { findSecrets } from './secrets.ts';
-import { locateTargetCall } from './task.ts';
+import { locateTargetCall, sdkRootOf } from './task.ts';
 import type { RepairContract, SupportedRepairTask } from './task.ts';
 
 export const POLICY_GATES = ['edits-in-range', 'bounded-size', 'single-file', 'parses', 'outside-untouched',
@@ -145,7 +145,7 @@ function outsideUntouched(context: Context): Verdict {
 function inventory(file: string, source: string, range: { start: number; end: number }, lineShift: number) {
   const inside: Array<{ origin: string; endpoint: string; symbol: string }> = [];
   const outside: string[] = [];
-  for (const call of parseStaticHttpCalls(file, source)) {
+  for (const call of parseApiCalls(file, source)) {
     if (call.line >= range.start && call.line <= range.end + lineShift) {
       inside.push({ origin: call.origin, endpoint: call.endpoint, symbol: call.symbol });
       continue;
@@ -162,8 +162,17 @@ function sameCallFrame(context: Context, before: TargetCall, after: TargetCall):
   const a = context.before.source;
   const b = context.patched.source;
   if (textOf(a, before.node.callee) !== textOf(b, after.node.callee)) return 'the function being called changed';
-  if (textOf(a, before.node.arguments[0]) !== textOf(b, after.node.arguments[0])) return 'the URL expression changed';
-  const frame = (source: string, call: TargetCall) => (call.options.properties as Node[])
+  if (before.kind === 'sdk' || after.kind === 'sdk') {
+    // SDK call: every argument except the request object, and the request
+    // object's path-parameter and option keys, must be unchanged.
+    if (before.kind !== after.kind) return 'the call changed kind';
+    const others = (source: string, call: TargetCall) => (call.node.arguments as Node[]).map(arg => (unwrap(arg) === call.bodyObject ? '<request>' : textOf(source, arg)));
+    if (others(a, before).join('\0') !== others(b, after).join('\0')) return 'an argument other than the request object changed';
+    const fixed = (source: string, call: TargetCall) => (call.bodyObject.properties as Node[])
+      .filter(item => { const name = keyName(item); return name !== null && call.ignoredKeys.includes(name); }).map(item => textOf(source, item));
+    if (fixed(a, before).join('\0') !== fixed(b, after).join('\0')) return 'a path parameter or SDK option in the request object changed';
+  } else if (textOf(a, before.node.arguments[0]) !== textOf(b, after.node.arguments[0])) return 'the URL expression changed';
+  const frame = (source: string, call: TargetCall) => call.kind === 'sdk' ? [] : (call.options.properties as Node[])
     .map(item => item === call.bodyProperty ? `body:${textOf(source, unwrap(item.value)?.callee)}` : textOf(source, item));
   const options = frame(a, before);
   const patched = frame(b, after);
@@ -365,7 +374,7 @@ function side(finding: Finding, source: string, range: { start: number; end: num
   let call: TargetCall | null = null;
   if (original) call = locateTargetCall(finding, source);
   else if (syntax) {
-    const matches = (fetchCallsStartingOn(syntax, range.start) || [])
+    const matches = (targetCallsStartingOn(syntax, range.start, finding.location.file, sdkRootOf(finding)) || [])
       .filter(item => item.endpoint === evidence.endpoint && item.origin === evidence.origin);
     call = matches.length === 1 ? matches[0] : null;
   }

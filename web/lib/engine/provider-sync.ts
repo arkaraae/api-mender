@@ -8,6 +8,7 @@ import type { ContractChange, OperationSlice, ProviderAdapter } from './types.ts
 import { diffOperation, diffRemovedOperation } from './contract-diff.ts';
 import { listOperations, sliceOperation } from './openapi-slice.ts';
 import { contractSourceFor } from './providers/registry.ts';
+export { latestSnapshotSource, withLatestSnapshot } from './provider-snapshot.ts';
 
 export type CatalogVersion = { providerId: string; version: string; sha256: string; sourceUrl: string; operationKeys: string[] };
 export type CatalogDelta = {

@@ -1,7 +1,8 @@
 // Public API of the provider-independent pipeline (find half).
 export type * from './types.ts';
 export { canonicalJson, sha256Hex } from './hash.ts';
-export { contractSourceFor, getProvider, listProviders, providerForOrigin } from './providers/registry.ts';
+export { contractEndpoint, contractSourceFor, getProvider, listProviders, providerForOrigin } from './providers/registry.ts';
+export { latestSnapshotSource, withLatestSnapshot } from './provider-snapshot.ts';
 export {
   dynamicSegmentsAlign, isTruncated, listOperations, matchOperationKey, parseOperationKey,
   requestSchemaOf, sliceOperation, sliceOperations,

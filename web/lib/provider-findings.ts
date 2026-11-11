@@ -8,7 +8,7 @@ import type { ApiCall, ContractChange, Finding, OperationSlice } from './engine/
 import { diffOperation, diffRemovedOperation } from './engine/contract-diff.ts';
 import { analyzeImpact } from './engine/impact.ts';
 import { matchOperationKey } from './engine/openapi-slice.ts';
-import { providerForOrigin } from './engine/providers/registry.ts';
+import { contractEndpoint, providerForOrigin } from './engine/providers/registry.ts';
 
 type Repository = { id: string; workspace_id: string; full_name: string; target_sha: string | null };
 type SliceRow = { provider_id: string; version: string; operation: string; sha256: string; document: object; source_url: string };
@@ -34,18 +34,22 @@ export function asApiCalls(raw: unknown): ApiCall[] {
 }
 
 /** Pure: decide which (provider, from, to, operation) pairs the calls need. */
-export function plannedComparisons(calls: ApiCall[], versionsByProvider: Map<string, { version: string; operationKeys: string[] }[]>) {
+export function plannedComparisons(calls: ApiCall[], versionsByProvider: Map<string, { version: string; operationKeys: string[]; sourceUrl?: string }[]>) {
   const plans = new Map<string, { providerId: string; from: string; to: string; operation: string; calls: ApiCall[] }>();
   for (const call of calls) {
     const provider = providerForOrigin(call.origin);
     const versions = provider && versionsByProvider.get(provider.id);
     if (!provider || !versions?.length) continue;
+    const ordered = [...versions].sort((a, b) => a.version.localeCompare(b.version));
+    const newest = ordered.at(-1)!;
+    // Dated-header providers: the version the call pins (or the default).
+    // Snapshot providers: the baseline Mend started watching from, so every
+    // change since then is checked against the code as it is now.
     const pinned = provider.versionHeader ? call.headers?.[provider.versionHeader] : undefined;
-    const from = pinned ?? provider.defaultVersion;
-    const newest = [...versions].sort((a, b) => a.version.localeCompare(b.version)).at(-1)!;
+    const from = provider.versioning === 'snapshot' ? ordered[0].version : pinned ?? provider.defaultVersion;
     const fromRow = versions.find(row => row.version === from);
     if (!from || !fromRow || from >= newest.version) continue;
-    const operation = matchOperationKey(fromRow.operationKeys, call.endpoint);
+    const operation = matchOperationKey(fromRow.operationKeys, contractEndpoint(provider, call.endpoint));
     if (!operation) continue;
     const key = `${provider.id}\0${from}\0${operation}`;
     const plan = plans.get(key) ?? { providerId: provider.id, from, to: newest.version, operation, calls: [] };
@@ -61,11 +65,11 @@ export async function processProviderFindings(database: SupabaseClient, reposito
   if (!catalogCalls.length) return { findings: 0 };
   const providerIds = [...new Set(catalogCalls.map(call => providerForOrigin(call.origin)!.id))];
   const { data: versionRows, error } = await database.from('provider_contract_versions')
-    .select('provider_id,version,operation_keys').in('provider_id', providerIds).limit(50);
+    .select('provider_id,version,operation_keys,source_url').in('provider_id', providerIds).order('version', { ascending: false }).limit(200);
   if (error) throw error;
-  const versions = new Map<string, { version: string; operationKeys: string[] }[]>();
+  const versions = new Map<string, { version: string; operationKeys: string[]; sourceUrl?: string }[]>();
   for (const row of versionRows ?? [])
-    versions.set(row.provider_id, [...(versions.get(row.provider_id) ?? []), { version: row.version, operationKeys: row.operation_keys }]);
+    versions.set(row.provider_id, [...(versions.get(row.provider_id) ?? []), { version: row.version, operationKeys: row.operation_keys, sourceUrl: row.source_url }]);
 
   let saved = 0;
   for (const plan of plannedComparisons(catalogCalls, versions).slice(0, 50)) {
@@ -79,7 +83,8 @@ export async function processProviderFindings(database: SupabaseClient, reposito
     const after = rows?.find(row => row.version === plan.to);
     const provider = providerForOrigin(plan.calls[0].origin)!;
     const newKeys = versions.get(plan.providerId)?.find(row => row.version === plan.to)?.operationKeys ?? [];
-    const toUrl = provider.contractSources.find(source => source.version === plan.to);
+    const toUrl = provider.contractSources.find(source => source.version === plan.to)
+      ?? { url: versions.get(plan.providerId)?.find(row => row.version === plan.to)?.sourceUrl ?? '', changelogUrl: provider.contractSources.at(-1)?.changelogUrl };
     const options = { providerName: provider.name, changelogUrl: toUrl?.changelogUrl };
     const changes: ContractChange[] = after ? diffOperation(toSlice(before), toSlice(after), options)
       : newKeys.includes(plan.operation) ? []

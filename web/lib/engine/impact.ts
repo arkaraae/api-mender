@@ -2,6 +2,7 @@ import type { ApiCall, Applicability, Confidence, ContractChange, Finding, Provi
 import { canonicalJson, sha256Hex } from './hash.ts';
 import { dynamicSegmentsAlign, matchOperationKey } from './openapi-slice.ts';
 import { byText, plainName } from './text.ts';
+import { contractEndpoint } from './providers/registry.ts';
 
 // Impact rules. Every finding is static inference: no code was run.
 //
@@ -64,10 +65,12 @@ type Assessment = {
   repairable: boolean;
 };
 
-function assess(change: ContractChange, call: ApiCall): Assessment | null {
+function assess(change: ContractChange, call: ApiCall, provider: ProviderAdapter): Assessment | null {
   const field = `\`${plainName(change.fields[0] ?? '')}\``;
   const names = call.fieldsComplete && change.fields.length === 1 && call.fields.includes(change.fields[0]);
-  const rewritable = call.fieldsComplete && repairableFile.test(call.file) && call.endLine !== undefined;
+  // Providers whose SDKs rename properties (Twilio's to → To) are not rewritten:
+  // the gates compare source keys with contract names.
+  const rewritable = call.fieldsComplete && repairableFile.test(call.file) && call.endLine !== undefined && !provider.fieldCase;
   switch (change.kind) {
     case 'request-property-removed':
       return names ? {
@@ -115,6 +118,11 @@ function pinnedVersionOf(provider: ProviderAdapter, call: ApiCall): string | nul
 }
 
 function applicabilityOf(provider: ProviderAdapter, call: ApiCall, pinned: string | null, toVersion: string): { applicability: Applicability; check: string | null } {
+  // Snapshot providers publish one live contract; see ProviderAdapter.snapshotApplicability.
+  if (provider.versioning === 'snapshot' && provider.snapshotApplicability === 'active')
+    return { applicability: 'active', check: `${plainName(provider.name, 80)} has no version pin for this call, so its published contract dated ${plainName(toVersion)} applies.` };
+  if (provider.versioning === 'snapshot' && provider.snapshotApplicability === 'on-upgrade')
+    return { applicability: 'on-upgrade', check: `${plainName(provider.name, 80)} applies this change when the account or request moves to the API version published on ${plainName(toVersion)}.` };
   if (!provider.versionHeader || !dated.test(toVersion)) return { applicability: 'unknown', check: null };
   const header = `\`${plainName(provider.versionHeader)}\``;
   if (pinned !== null) {
@@ -142,7 +150,7 @@ function titleOf(change: ContractChange, provider: ProviderAdapter) {
 async function findingFor(provider: ProviderAdapter, change: ContractChange, call: ApiCall, verdict: Assessment): Promise<Finding> {
   const pinnedVersion = pinnedVersionOf(provider, call);
   const { applicability, check } = applicabilityOf(provider, call, pinnedVersion, change.toVersion);
-  const aligned = dynamicSegmentsAlign(change.operation, call.endpoint);
+  const aligned = dynamicSegmentsAlign(change.operation, contractEndpoint(provider, call.endpoint));
   const confidence: Confidence = verdict.ceiling === 'high' && (applicability === 'unknown' || !aligned) ? 'medium' : verdict.ceiling;
   return {
     schemaVersion: 1,
@@ -158,7 +166,8 @@ async function findingFor(provider: ProviderAdapter, change: ContractChange, cal
     evidence: {
       call, pinnedVersion, applicability,
       staticChecks: [
-        'The call URL has a literal https origin that belongs to the provider.',
+        call.sdk ? `The call uses ${plainName(provider.name, 80)}'s official SDK method \`${plainName(call.sdk)}\`, which sends this operation.`
+          : 'The call URL has a literal https origin that belongs to the provider.',
         aligned ? 'The method and path match the operation; every dynamic path segment sits on a path parameter.'
           : 'The method and path match the operation only if a dynamic path segment takes a fixed value.',
         verdict.check,
@@ -190,7 +199,7 @@ export async function analyzeImpact(input: ImpactInput): Promise<Finding[]> {
   const keys = input.operationKeys ?? operations;
   // Each distinct endpoint is matched once, however many calls share it.
   const operationOf = new Map<string, string | null>();
-  for (const call of calls) if (!operationOf.has(call.endpoint)) operationOf.set(call.endpoint, matchOperationKey(keys, call.endpoint));
+  for (const call of calls) if (!operationOf.has(call.endpoint)) operationOf.set(call.endpoint, matchOperationKey(keys, contractEndpoint(provider, call.endpoint)));
   const findings: Finding[] = [];
   let pairs = 0;
   for (const change of changes) {
@@ -198,7 +207,7 @@ export async function analyzeImpact(input: ImpactInput): Promise<Finding[]> {
     for (const call of calls) {
       if (++pairs > maxPairs) break;
       if (operationOf.get(call.endpoint) !== change.operation) continue;
-      const verdict = assess(change, call);
+      const verdict = assess(change, call, provider);
       if (verdict) findings.push(await findingFor(provider, change, call, verdict));
     }
   }

@@ -30,6 +30,8 @@ export type ApiCall = {
   headers?: Record<string, string>;
   /** True when the header object was fully literal, so a missing header is known to be missing. */
   headersComplete?: boolean;
+  /** Set when the call goes through a provider's official SDK: the client method chain. */
+  sdk?: string;
 };
 
 /** One external API a codebase uses, as shown under Integrated Services. */
@@ -78,8 +80,25 @@ export type ProviderAdapter = {
   versionHeader?: string;
   /** Version the provider applies when the header is absent. */
   defaultVersion?: string;
-  /** Known contract versions, oldest first. */
+  /** Known contract versions, oldest first. For snapshot providers, the baseline only. */
   contractSources: ContractSource[];
+  /**
+   * 'dated-header' (default): each request selects a dated version.
+   * 'snapshot': the provider publishes one live contract and edits it in
+   * place; each published commit is a version, labelled by its date.
+   */
+  versioning?: 'dated-header' | 'snapshot';
+  /** Snapshot providers: the repository file the contract is published in. */
+  snapshot?: { repository: string; path: string; branch: string };
+  /**
+   * Snapshot providers: whether a contract change reaches existing callers
+   * now ('active') or only when they move to a newer API version ('on-upgrade').
+   */
+  snapshotApplicability?: 'active' | 'on-upgrade';
+  /** Path the contract's server URL adds before every operation (OpenAI: '/v1'). */
+  basePath?: string;
+  /** Casing the contract uses for request properties when SDKs write them differently. */
+  fieldCase?: 'pascal';
 };
 
 /**
