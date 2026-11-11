@@ -4,6 +4,7 @@
 // contract in the provider catalog are watched for changes; any other host is
 // listed as detected. Pure, so it is unit tested.
 import { providerForOrigin } from './engine/providers/registry.ts';
+import { isPublicApiOrigin } from './engine/discovery.ts';
 
 type Call = { origin?: string; endpoint?: string; file?: string; headers?: Record<string, string> };
 type Repository = { id: string; full_name: string; call_sites: Call[]; scanned_at: string | null };
@@ -11,11 +12,16 @@ type FindingRow = { id: string; status: string; title: string; evidence: { kind?
 type CliReport = { repository_label: string; received_at: string;
   report: { providers?: { providerId: string; providerName: string; operations: string[]; callCount: number }[] } };
 
+/** Discovery state of an API that is not built in (workspace_api_watch_status). */
+export type WatchStatus = { origin: string; status: 'pending' | 'watching' | 'not-found' | 'failed'; name: string | null; spec_source: string | null };
+
 export type ProviderService = {
   id: string; name: string; origin: string;
   /** True when Mend has this API's published contract and checks it for changes. */
   watched: boolean;
-  status: 'Needs review' | 'Watching' | 'Detected'; tone: 'alert' | 'good' | 'idle';
+  /** 'built-in', 'discovered' (found automatically), 'searching', or 'none' (no public contract found). */
+  coverage: 'built-in' | 'discovered' | 'searching' | 'none';
+  status: 'Needs review' | 'Watching' | 'Finding contract' | 'Detected'; tone: 'alert' | 'good' | 'idle';
   repositories: string[]; callCount: number; operations: string[]; pinnedVersions: string[];
   openFindings: { id: string; title: string }[]; source: string;
 };
@@ -26,12 +32,19 @@ function hostOf(origin: string) {
   try { return new URL(origin).host; } catch { return null; }
 }
 
-export function deriveProviderServices(repositories: Repository[], findings: FindingRow[], reports: CliReport[] = []): ProviderService[] {
+export function deriveProviderServices(repositories: Repository[], findings: FindingRow[], reports: CliReport[] = [], watch: WatchStatus[] = []): ProviderService[] {
   const services = new Map<string, ProviderService>();
+  const watchOf = new Map(watch.map(row => [row.origin, row]));
   const entry = (id: string, name: string, origin: string, watched: boolean) => {
     const existing = services.get(id);
     if (existing) return existing;
-    const created: ProviderService = { id, name, origin, watched, status: watched ? 'Watching' : 'Detected', tone: watched ? 'good' : 'idle',
+    const discovered = watched ? null : watchOf.get(origin);
+    // Private or internal hosts are never looked up.
+    const coverage: ProviderService['coverage'] = watched ? 'built-in' : discovered?.status === 'watching' ? 'discovered'
+      : !isPublicApiOrigin(origin) || discovered?.status === 'not-found' ? 'none' : 'searching';
+    const isWatched = coverage === 'built-in' || coverage === 'discovered';
+    const created: ProviderService = { id, name: coverage === 'discovered' && discovered?.name ? discovered.name : name, origin, watched: isWatched, coverage,
+      status: isWatched ? 'Watching' : coverage === 'searching' ? 'Finding contract' : 'Detected', tone: isWatched ? 'good' : 'idle',
       repositories: [], callCount: 0, operations: [], pinnedVersions: [], openFindings: [], source: '' };
     services.set(id, created);
     return created;
@@ -42,7 +55,8 @@ export function deriveProviderServices(repositories: Repository[], findings: Fin
       const host = hostOf(call.origin);
       if (!host) continue;
       const provider = providerForOrigin(call.origin);
-      const service = provider ? entry(provider.id, provider.name, call.origin, true) : entry(`host:${host}`, host, call.origin, false);
+      // Discovered APIs use the provider id their findings carry (auto:<host>).
+      const service = provider ? entry(provider.id, provider.name, call.origin, true) : entry(`auto:${host}`, host, call.origin, false);
       service.callCount++;
       if (!service.repositories.includes(repository.full_name)) service.repositories.push(repository.full_name);
       if (call.endpoint && !service.operations.includes(call.endpoint)) service.operations.push(call.endpoint);

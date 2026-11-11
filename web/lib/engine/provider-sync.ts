@@ -57,3 +57,44 @@ export async function buildCatalogDelta(input: {
     slices: [...slices.values()], changes, skipped,
   };
 }
+
+/**
+ * For discovered APIs, whose old descriptions cannot be downloaded again: the
+ * baseline is kept as slices of every operation, and each new snapshot is
+ * diffed against those slices. Returns the new version row and the slices of
+ * operations whose request contract changed.
+ */
+export async function diffSnapshotAgainstSlices(input: {
+  provider: ProviderAdapter; baseline: OperationSlice[]; baselineKeys: string[];
+  toVersion: string; newDocument: unknown; newSha256: string; sourceUrl: string;
+}): Promise<{ version: CatalogVersion; slices: OperationSlice[]; changes: ContractChange[]; skipped: string[] }> {
+  const { provider, toVersion, sourceUrl } = input;
+  const newKeys = new Set(listOperations(input.newDocument));
+  const options = { providerName: provider.name, changelogUrl: sourceUrl };
+  const slices: OperationSlice[] = [];
+  const changes: ContractChange[] = [];
+  const skipped: string[] = [];
+  for (const before of input.baseline) {
+    let found: ContractChange[];
+    if (!newKeys.has(before.operation)) found = [diffRemovedOperation(before, { version: toVersion, sourceUrl, sha256: input.newSha256 }, options)];
+    else {
+      const after = await sliceOperation(input.newDocument, before.operation, { providerId: provider.id, version: toVersion, sourceUrl });
+      if (!after) { skipped.push(before.operation); continue; }
+      found = after.sha256 === before.sha256 ? [] : diffOperation(before, after, options);
+      if (found.length) slices.push(after);
+    }
+    changes.push(...found);
+  }
+  return { version: { providerId: provider.id, version: toVersion, sha256: input.newSha256, sourceUrl, operationKeys: [...newKeys] }, slices, changes, skipped };
+}
+
+/** Slices of every operation, kept as a discovered API's baseline. */
+export async function baselineSlices(provider: ProviderAdapter, version: string, document: unknown, sourceUrl: string, limit = 1_500) {
+  const keys = listOperations(document).slice(0, limit);
+  const slices: OperationSlice[] = [];
+  for (const key of keys) {
+    const slice = await sliceOperation(document, key, { providerId: provider.id, version, sourceUrl });
+    if (slice) slices.push(slice);
+  }
+  return { keys, slices };
+}

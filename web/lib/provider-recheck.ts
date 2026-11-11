@@ -4,6 +4,7 @@
 // already stored by the last scan; no GitHub access, no repository content.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { asApiCalls, processProviderFindings } from './provider-findings.ts';
+import { recordApiHosts } from './api-hosts.ts';
 
 export const RECHECK_BATCH = 200;
 
@@ -21,6 +22,8 @@ export async function recheckProviderFindings(database: SupabaseClient, now = ne
     if (!repository.head_sha || repository.head_sha !== repository.target_sha) continue;
     const calls = asApiCalls(repository.call_sites);
     if (!calls.length) continue;
+    // Repositories scanned before discovery existed get their APIs queued too.
+    await recordApiHosts(database, calls);
     try {
       const { findings } = await processProviderFindings(database, { ...repository, target_sha: repository.target_sha },
         repository.head_sha, calls);

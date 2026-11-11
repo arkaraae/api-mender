@@ -9,6 +9,22 @@ import { diffOperation, diffRemovedOperation } from './engine/contract-diff.ts';
 import { analyzeImpact } from './engine/impact.ts';
 import { matchOperationKey } from './engine/openapi-slice.ts';
 import { contractEndpoint, providerForOrigin } from './engine/providers/registry.ts';
+import { autoProvider, type WatchedHostRow } from './engine/discovery.ts';
+import type { ProviderAdapter } from './engine/types.ts';
+
+type ProviderOf = (origin: string) => ProviderAdapter | null;
+
+/** Built-in providers, then APIs discovered from scans that Mend now watches. */
+export async function catalogProviders(database: SupabaseClient, calls: ApiCall[]): Promise<ProviderOf> {
+  const unknown = [...new Set(calls.map(call => call.origin).filter(origin => !providerForOrigin(origin)))].slice(0, 100);
+  const discovered = new Map<string, ProviderAdapter>();
+  if (unknown.length) {
+    const { data, error } = await database.from('api_hosts').select('origin,provider_id,name,base_path,spec_url').in('origin', unknown).eq('status', 'watching');
+    // An older database without discovery still checks built-in providers.
+    if (!error) for (const row of (data ?? []) as WatchedHostRow[]) { const provider = autoProvider(row); if (provider) discovered.set(row.origin, provider); }
+  }
+  return origin => providerForOrigin(origin) ?? discovered.get(origin) ?? null;
+}
 
 type Repository = { id: string; workspace_id: string; full_name: string; target_sha: string | null };
 type SliceRow = { provider_id: string; version: string; operation: string; sha256: string; document: object; source_url: string };
@@ -34,10 +50,11 @@ export function asApiCalls(raw: unknown): ApiCall[] {
 }
 
 /** Pure: decide which (provider, from, to, operation) pairs the calls need. */
-export function plannedComparisons(calls: ApiCall[], versionsByProvider: Map<string, { version: string; operationKeys: string[]; sourceUrl?: string }[]>) {
+export function plannedComparisons(calls: ApiCall[], versionsByProvider: Map<string, { version: string; operationKeys: string[]; sourceUrl?: string }[]>,
+  providerOf: ProviderOf = providerForOrigin) {
   const plans = new Map<string, { providerId: string; from: string; to: string; operation: string; calls: ApiCall[] }>();
   for (const call of calls) {
-    const provider = providerForOrigin(call.origin);
+    const provider = providerOf(call.origin);
     const versions = provider && versionsByProvider.get(provider.id);
     if (!provider || !versions?.length) continue;
     const ordered = [...versions].sort((a, b) => a.version.localeCompare(b.version));
@@ -61,9 +78,10 @@ export function plannedComparisons(calls: ApiCall[], versionsByProvider: Map<str
 
 export async function processProviderFindings(database: SupabaseClient, repository: Repository, head: string, calls: ApiCall[]) {
   if (repository.target_sha !== head) return { findings: 0 };
-  const catalogCalls = calls.filter(call => providerForOrigin(call.origin)).slice(0, 200);
+  const providerOf = await catalogProviders(database, calls);
+  const catalogCalls = calls.filter(call => providerOf(call.origin)).slice(0, 200);
   if (!catalogCalls.length) return { findings: 0 };
-  const providerIds = [...new Set(catalogCalls.map(call => providerForOrigin(call.origin)!.id))];
+  const providerIds = [...new Set(catalogCalls.map(call => providerOf(call.origin)!.id))];
   const { data: versionRows, error } = await database.from('provider_contract_versions')
     .select('provider_id,version,operation_keys,source_url').in('provider_id', providerIds).order('version', { ascending: false }).limit(200);
   if (error) throw error;
@@ -72,7 +90,7 @@ export async function processProviderFindings(database: SupabaseClient, reposito
     versions.set(row.provider_id, [...(versions.get(row.provider_id) ?? []), { version: row.version, operationKeys: row.operation_keys, sourceUrl: row.source_url }]);
 
   let saved = 0;
-  for (const plan of plannedComparisons(catalogCalls, versions).slice(0, 50)) {
+  for (const plan of plannedComparisons(catalogCalls, versions, providerOf).slice(0, 50)) {
     // Only operations whose request contract changed have slices.
     const { data: rows, error: sliceError } = await database.from('provider_contract_slices')
       .select('provider_id,version,operation,sha256,document,source_url')
@@ -81,7 +99,7 @@ export async function processProviderFindings(database: SupabaseClient, reposito
     const before = rows?.find(row => row.version === plan.from);
     if (!before) continue;
     const after = rows?.find(row => row.version === plan.to);
-    const provider = providerForOrigin(plan.calls[0].origin)!;
+    const provider = providerOf(plan.calls[0].origin)!;
     const newKeys = versions.get(plan.providerId)?.find(row => row.version === plan.to)?.operationKeys ?? [];
     const toUrl = provider.contractSources.find(source => source.version === plan.to)
       ?? { url: versions.get(plan.providerId)?.find(row => row.version === plan.to)?.sourceUrl ?? '', changelogUrl: provider.contractSources.at(-1)?.changelogUrl };

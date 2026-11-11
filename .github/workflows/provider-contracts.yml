@@ -7,7 +7,8 @@ name: Provider contract catalog
 # run and uploads the delta for review.
 on:
   schedule:
-    - cron: '23 6 * * *'
+    # Twice daily: built-in providers plus APIs discovered from scans.
+    - cron: '23 6,18 * * *'
   workflow_dispatch:
 
 permissions:
@@ -43,6 +44,11 @@ jobs:
         run: |
           if [ -n "$SUPABASE_SECRET_KEY" ]; then write=--write; else write=; echo "No catalog secret: dry run"; fi
           node scripts/sync-provider-contracts.mjs --out provider-delta.json $write
+      - name: Discover and watch APIs found by scans
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CATALOG_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.CATALOG_SUPABASE_SECRET_KEY }}
+        run: node scripts/discover-api-contracts.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: provider-delta-${{ github.run_id }}

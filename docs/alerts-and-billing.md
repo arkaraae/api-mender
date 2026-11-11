@@ -35,3 +35,12 @@ each installation. Without it, issue alerts are recorded as failed with that rea
 The nightly `Provider contract catalog` workflow now also syncs Stripe, OpenAI and Twilio from their
 published spec repositories. Run it once by hand after merging (Actions → Provider contract catalog →
 Run workflow) so findings for those providers start immediately.
+
+## Automatic API discovery
+Apply `supabase/migrations/20261111010000_api_auto_discovery.sql`. After that, nothing is added by hand:
+every external API origin a scan finds is queued, and the catalog workflow (twice a day) looks for its
+published OpenAPI description — the APIs.guru directory first, then `/openapi.json`, `/swagger.json` and
+similar addresses on the API's host — keeping the one that matches the most endpoints the code calls.
+Found descriptions are watched from then on; APIs with none are re-checked weekly, then monthly.
+Private or internal hosts (IP addresses, `.internal`, `.local`, ports) are never requested. Which APIs a
+workspace calls is visible only to that workspace's members.

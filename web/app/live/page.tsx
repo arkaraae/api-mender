@@ -12,7 +12,7 @@ import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 import FindingDetail, { type LiveFinding } from '@/components/mend-concept/FindingDetail';
 import { AlertsSettings, PlanCard, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
-import { deriveProviderServices } from '@/lib/provider-services';
+import { deriveProviderServices, type WatchStatus } from '@/lib/provider-services';
 import { repositoryLimitMessage } from '@/lib/billing';
 import type { ActivitySummary } from '@/lib/activity-summary';
 import { deriveWatchedServices, type ContractConsumer, type ContractSnapshot, type ContractSource, type ContractVersion } from '@/lib/live-services';
@@ -44,6 +44,7 @@ export default function LiveWorkspace() {
   const [cliReports, setCliReports] = useState<CliReport[]>([]);
   const [activity, setActivity] = useState<ActivitySummary | null>(null);
   const [billing, setBilling] = useState<BillingView | null>(null);
+  const [watchStatus, setWatchStatus] = useState<WatchStatus[]>([]);
   // Deep links from Slack and GitHub issues: /live?finding=<id>; Checkout returns with ?billing=.
   const [initialFindingId] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('finding'));
   const [workspaceName, setWorkspaceName] = useState('API Mender');
@@ -95,6 +96,9 @@ export default function LiveWorkspace() {
     setContractVersions(versionResult.error ? [] : versionResult.data || []);
     setContractConsumers(consumerResult.error ? [] : consumerResult.data || []);
     setContractSnapshots(snapshotResult.error ? [] : (snapshotResult.data || []) as ContractSnapshot[]);
+    // Discovery state of the APIs this workspace calls (members only; never other workspaces').
+    const watchResult = await supabase.rpc('workspace_api_watch_status', { p_workspace: chosen.id });
+    setWatchStatus(watchResult.error ? [] : (watchResult.data || []) as WatchStatus[]);
     const reportResult = await supabase.from('cli_reports').select('repository_label,received_at,report')
       .eq('workspace_id', chosen.id).order('received_at', { ascending: false }).limit(50);
     setCliReports(reportResult.error ? [] : (reportResult.data || []) as CliReport[]);
@@ -204,12 +208,14 @@ export default function LiveWorkspace() {
 
   // Every external API the connected code calls, plus OpenAPI contracts kept in connected repositories.
   const services: ServiceCard[] = [
-    ...deriveProviderServices(repositories, findings, cliReports).map(service => ({
+    ...deriveProviderServices(repositories, findings, cliReports, watchStatus).map(service => ({
       id: `provider:${service.id}`, name: service.name, origin: service.origin, status: service.status, tone: service.tone,
       note: service.source,
-      detail: service.watched
+      detail: service.coverage === 'built-in'
         ? `Watched against the provider's published contract${service.pinnedVersions.length ? `; pinned to ${service.pinnedVersions.join(', ')}` : ''}.`
-        : 'Detected in your code. Mend does not have this API’s published contract yet, so its changes are not checked.',
+        : service.coverage === 'discovered' ? 'Found automatically: Mend located this API’s published OpenAPI description and checks it for changes twice a day.'
+        : service.coverage === 'searching' ? 'Detected in your code. Mend is looking for this API’s published OpenAPI description; it is watched as soon as one is found.'
+        : 'Detected in your code. This API publishes no OpenAPI description Mend could find, so its changes cannot be checked yet. Mend looks again every week.',
       operations: service.operations, findingIds: service.openFindings.map(finding => finding.id) })),
     ...deriveWatchedServices({ repositories, sources: contractSources, versions: contractVersions,
       consumers: contractConsumers, snapshots: contractSnapshots, findings: findings.map(finding => ({ ...finding, source_id: (finding as { source_id?: string | null }).source_id ?? null })) }).map(service => ({

@@ -4,6 +4,7 @@ import { scanInstallationRepository } from './public-scan.ts';
 import { processBoundContractConsumers, processContractSources } from './contract-worker.ts';
 import { reportFailure, type AlertConfig } from './failure-alert.ts';
 import { asApiCalls, processProviderFindings } from './provider-findings.ts';
+import { recordApiHosts } from './api-hosts.ts';
 
 type Config = AlertConfig & {
   GITHUB_APP_ID?: string; GITHUB_APP_PRIVATE_KEY?: string;
@@ -106,6 +107,8 @@ export async function processRepositoryScanJobs(config: Config) {
       await processBoundContractConsumers(database, repository, job.head_sha, result.inventory.calls);
       // Third-party APIs from the provider catalog (GitHub REST, ...).
       await processProviderFindings(database, repository, job.head_sha, asApiCalls(result.inventory.calls));
+      // Every other API it calls is queued for automatic discovery.
+      await recordApiHosts(database, result.inventory.calls);
       const { data: finished, error: finishError } = await database.rpc('finish_repository_scan_job', {
         p_job_id: job.id, p_lease_token: job.lease_token, p_succeeded: true,
         p_inventory: result.inventory,
