@@ -25,11 +25,11 @@ export default function GitHubReturn() {
         method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(code ? { state, code } : { state, installationId }),
       });
-      const result = await response.json() as { url?: string; account?: string; repositories?: number; scansQueued?: number; error?: string };
+      const result = await response.json() as { url?: string; account?: string; repositories?: number; scansQueued?: number; limitMessage?: string; error?: string };
       if (!response.ok) throw new Error(result.error || 'Could not connect GitHub');
       if (result.url) { window.location.replace(result.url); return; }
       window.history.replaceState(null, '', '/live/github');
-      setMessage(`Connected ${result.repositories || 0} GitHub repositories from ${result.account || 'your account'}; ${result.scansQueued || 0} initial scans queued.`);
+      setMessage(`Connected ${result.repositories || 0} GitHub repositories from ${result.account || 'your account'}; ${result.scansQueued || 0} initial scans queued.${result.limitMessage ? ` ${result.limitMessage}` : ''}`);
       setFinished(true);
     })().catch(error => {
       window.history.replaceState(null, '', '/live/github');

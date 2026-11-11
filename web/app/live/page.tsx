@@ -11,7 +11,9 @@ import GitHubConnections from '@/components/github-connections';
 import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 import FindingDetail, { type LiveFinding } from '@/components/mend-concept/FindingDetail';
+import { AlertsSettings, PlanCard, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
 import { deriveProviderServices } from '@/lib/provider-services';
+import { repositoryLimitMessage } from '@/lib/billing';
 import type { ActivitySummary } from '@/lib/activity-summary';
 import { deriveWatchedServices, type ContractConsumer, type ContractSnapshot, type ContractSource, type ContractVersion } from '@/lib/live-services';
 
@@ -41,6 +43,9 @@ export default function LiveWorkspace() {
   const [contractSnapshots, setContractSnapshots] = useState<ContractSnapshot[]>([]);
   const [cliReports, setCliReports] = useState<CliReport[]>([]);
   const [activity, setActivity] = useState<ActivitySummary | null>(null);
+  const [billing, setBilling] = useState<BillingView | null>(null);
+  // Deep links from Slack and GitHub issues: /live?finding=<id>; Checkout returns with ?billing=.
+  const [initialFindingId] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('finding'));
   const [workspaceName, setWorkspaceName] = useState('API Mender');
   const [repositoryName, setRepositoryName] = useState('');
   const [branch, setBranch] = useState('main');
@@ -57,6 +62,10 @@ export default function LiveWorkspace() {
         { headers: { Authorization: `Bearer ${data.session.access_token}` } });
       if (response.ok) setActivity(await response.json() as ActivitySummary);
     } catch { /* The grid shows empty days; the rest of the workspace still works. */ }
+    try {
+      const response = await fetch(`/api/billing/status?workspaceId=${workspaceId}`, { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+      setBilling(response.ok ? await response.json() as BillingView : null);
+    } catch { setBilling(null); }
   }, [supabase]);
 
   const refresh = useCallback(async () => {
@@ -114,6 +123,18 @@ export default function LiveWorkspace() {
     if (ready && supabase && !user) window.location.replace('/login');
   }, [ready, supabase, user]);
 
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get('billing');
+    if (result === 'success') setMessage('Thanks — your Pro plan is active once Stripe confirms the payment (usually a few seconds).');
+    if (result === 'canceled') setMessage('Checkout canceled. You are still on the Free plan.');
+  }, []);
+
+  const accessToken = useCallback(async () => {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  }, [supabase]);
+
   async function session() {
     const { data } = await supabase!.auth.getSession();
     if (!data.session) { setMessage('Please sign in again.'); return null; }
@@ -133,7 +154,7 @@ export default function LiveWorkspace() {
     if (!supabase || !workspace) return;
     setBusy(true); setMessage('');
     const { error } = await supabase.from('monitored_repositories').insert({ workspace_id: workspace.id, full_name: repositoryName.trim(), branch: branch.trim(), visibility: 'public' });
-    setMessage(error?.message || 'Public repository added. Run a scan to inspect its current commit.');
+    setMessage(repositoryLimitMessage(error) || error?.message || 'Public repository added. Run a scan to inspect its current commit.');
     if (!error) { setRepositoryName(''); await refresh(); }
     setBusy(false);
   }
@@ -218,6 +239,9 @@ export default function LiveWorkspace() {
       <GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} onConnectionsChange={() => void refresh()} />
       {contractSources.length > 0 && <DatabaseEvidenceSetup database={supabase} workspaceId={workspace.id} repositories={repositories} sources={contractSources} consumers={contractConsumers} />}
     </> : null}
+    settings={workspace ? <AlertsSettings workspaceId={workspace.id} token={accessToken} /> : null}
+    plan={workspace ? <PlanCard workspaceId={workspace.id} token={accessToken} billing={billing} onChange={() => void refresh()} /> : null}
+    initialFindingId={initialFindingId}
     studio={workspace ? <ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /> : null}
     renderFinding={(finding: LiveFinding) => workspace && <FindingDetail database={supabase} workspaceId={workspace.id} finding={finding}
       busy={dismissingId === finding.id} onDismiss={dismissed => void setDismissed(finding, dismissed)} />}

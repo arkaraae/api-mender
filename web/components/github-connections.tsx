@@ -80,11 +80,15 @@ export default function GitHubConnections({ database, workspaceId, repositories,
   }
 
   return <section className="live-card">
-    <h2>Connect GitHub and APIs</h2>
-    <p>Install the API Mender GitHub App on the repositories you choose in GitHub. Mender reads their code and checks saved API contracts against the consumer repositories you connect below.</p>
+    <h2>{connected.length ? 'GitHub connected' : 'Step 1 · Connect GitHub'}</h2>
+    <p>{connected.length
+      ? 'Mend scans these repositories on every push and every hour, lists the APIs they call, and flags provider changes that affect them.'
+      : 'Install the API Mender GitHub App on the repositories you choose. Mend scans them right away, lists every API they call, and watches those APIs for breaking changes. Nothing to install in your code.'}</p>
     <button disabled={busy} onClick={() => void connectGitHub()}>{connected.length ? 'Sync GitHub repositories' : 'Connect GitHub App'}</button>
     {installationIds.length === 1 && <p className="live-muted"><a href={`https://github.com/settings/installations/${installationIds[0]}`} target="_blank" rel="noopener noreferrer">Change repository access in GitHub ↗</a>, then return here and sync.</p>}
     {connected.length > 0 && <p className="live-muted">Connected: {connected.map(repo => repo.full_name).join(', ')}</p>}
+    {connected.length > 0 && <details className="live-advanced">
+    <summary>Advanced: watch your own OpenAPI contract and set up CI proof</summary>
     {sourceCandidates.length > 0 && <div className="live-fields">
       <label>API contract repository<select value={sourceRepository} onChange={event => setSourceRepository(event.target.value)}><option value="">Choose repository</option>{sourceCandidates.map(repo => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}</select></label>
       <label>OpenAPI JSON path<input value={path} onChange={event => setPath(event.target.value)} placeholder="openapi.json" /></label>
@@ -97,6 +101,7 @@ export default function GitHubConnections({ database, workspaceId, repositories,
     </div>}
     {consumers.length > 0 && <p className="live-muted">{consumers.filter(consumer => !consumer.paused).length} API-to-consumer connection(s) active.</p>}
     <CustomerProofSetup database={database} workspaceId={workspaceId} repositories={repositories} consumers={consumers} />
+    </details>}
     {message && <p role="status" className="live-message">{message}</p>}
   </section>;
 }

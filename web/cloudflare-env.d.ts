@@ -24,5 +24,12 @@ declare namespace Cloudflare {
     GITHUB_APP_CLIENT_ID?: string;
     GITHUB_APP_CLIENT_SECRET?: string;
     GITHUB_APP_SLUG?: string;
+    // Secret: base64 of 32 random bytes. Encrypts workspace settings such as
+    // Slack webhook URLs (lib/secret-box.ts).
+    MENDER_SETTINGS_KEY?: string;
+    // Stripe billing (secrets, except the price ID).
+    STRIPE_SECRET_KEY?: string;
+    STRIPE_WEBHOOK_SECRET?: string;
+    STRIPE_PRICE_PRO?: string;
   }
 }
