@@ -72,7 +72,7 @@ function FindingList({ findings, onOpen, limit }) {
 export default function LiveWorkspaceShell({
   user, workspace, workspaceName, onWorkspaceNameChange, onCreateWorkspace,
   repositories, findings, services, activity, pullRequests,
-  connections, studio, renderFinding, settings, plan, initialFindingId,
+  connections, renderFinding, settings, plan, initialFindingId,
   repositoryName, onRepositoryNameChange, branch, onBranchChange, onAddRepository, onScan,
   busy, message, onSignOut,
 }) {
@@ -164,7 +164,6 @@ export default function LiveWorkspaceShell({
               {service.operations.length > 0 && <p className="mend-operations">{service.operations.slice(0, 8).map(operation => <code key={operation}>{operation}</code>)}{service.operations.length > 8 && <span>+{service.operations.length - 8} more</span>}</p>}
               {service.findingIds.length > 0 && <p>{service.findingIds.map(id => { const finding = findings.find(item => item.id === id); return finding && <button key={id} className="mend-link-button" onClick={() => openFinding(finding)}>Review: {finding.title}</button>; })}</p>}
             </div></article>)}</div> : <p className="live-empty">No external API calls found yet. Scan a repository and the APIs it calls appear here.</p>}</section>
-            {studio}
           </>}
           {section === 'pulls' && <>
             <section className="section-panel live-tool-card"><div className="mend-panel-heading"><h2>Findings</h2>{findings.length > openFindings.length && <button className="mend-link-button" onClick={() => setShowDismissed(value => !value)}>{showDismissed ? 'Hide dismissed' : `Show ${findings.length - openFindings.length} dismissed`}</button>}</div><FindingList findings={listedFindings} onOpen={openFinding}/></section>
