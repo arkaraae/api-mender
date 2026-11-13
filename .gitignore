@@ -19,3 +19,5 @@ web/node_modules
 web/next-env.d.ts
 .mender/
 .mender-acceptance/
+mcp/node_modules/
+mcp/dist/

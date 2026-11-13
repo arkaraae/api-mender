@@ -5,6 +5,8 @@ on:
     paths:
       - 'web/**'
       - 'mender/**'
+      - 'mcp/**'
+      - 'cli/**'
       - '.github/actions/mender-check/**'
       - '.github/workflows/web-check.yml'
   push:
@@ -12,6 +14,8 @@ on:
     paths:
       - 'web/**'
       - 'mender/**'
+      - 'mcp/**'
+      - 'cli/**'
       - '.github/actions/mender-check/**'
       - '.github/workflows/web-check.yml'
 
@@ -35,3 +39,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The MCP server for coding agents reuses the engine above.
+      - name: MCP server
+        working-directory: mcp
+        run: npm ci && npm test && npm run build
