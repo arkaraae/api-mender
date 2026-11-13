@@ -171,6 +171,20 @@ test('Integrated Services lists third-party APIs from scans and CLI reports, wit
   assert.deepEqual(services[0].openFindings.map(f => f.id), ['f1']);
 });
 
+test('APIs discovered from scans are listed as watched, searching, or without a public contract', () => {
+  const repo = { id: 'r1', full_name: 'acme/app', scanned_at: 'now', call_sites: [
+    { origin: 'https://api.zoom.us', endpoint: 'POST /v2/users/{}/meetings' },
+    { origin: 'https://api.acme-partner.com', endpoint: 'GET /orders' },
+    { origin: 'https://api.no-spec.io', endpoint: 'GET /x' }] };
+  const findings = [{ id: 'z1', status: 'Action required', title: 'Zoom change', evidence: { kind: 'provider-change', finding: { provider: { id: 'auto:api.zoom.us' } } } }];
+  const services = deriveProviderServices([repo], findings, [], [
+    { origin: 'https://api.zoom.us', status: 'watching', name: 'Zoom API', spec_source: 'apis.guru' },
+    { origin: 'https://api.no-spec.io', status: 'not-found', name: null, spec_source: null }]);
+  assert.deepEqual(services.map(service => [service.name, service.coverage, service.status]), [
+    ['Zoom API', 'discovered', 'Needs review'], ['api.acme-partner.com', 'searching', 'Finding contract'], ['api.no-spec.io', 'none', 'Detected']]);
+  assert.deepEqual(services[0].openFindings.map(f => f.id), ['z1']);
+});
+
 test('the self-hosted field selector sends field names only and refuses hosted AI endpoints', async () => {
   assert.equal(hostedModel({}), null);
   assert.throws(() => hostedModel({ MENDER_MODEL_ENDPOINT: 'https://api.anthropic.com/v1', MENDER_MODEL_NAME: 'x', MENDER_MODEL_API_KEY: 'k' }));

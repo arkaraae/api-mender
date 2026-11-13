@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
-import { buildCatalogDelta } from '../lib/engine/provider-sync.ts';
+import { buildCatalogDelta, withLatestSnapshot } from '../lib/engine/provider-sync.ts';
 import { getProvider, listProviders } from '../lib/engine/providers/registry.ts';
 
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -33,12 +33,25 @@ async function load(path, url) {
   return { document: JSON.parse(bytes.toString('utf8')), sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 
-const providers = values.provider ? [getProvider(values.provider)] : listProviders();
-if (providers.includes(null)) throw new Error(`unknown provider ${values.provider}`);
+const selected = values.provider ? [getProvider(values.provider)] : listProviders();
+if (selected.includes(null)) throw new Error(`unknown provider ${values.provider}`);
+// Snapshot providers: the newest commit of their published contract is the
+// newest version; the adapter's baseline is the oldest.
+const providers = [];
+for (const provider of selected) {
+  // --new FILE --to V reviews a downloaded snapshot without asking GitHub for the newest commit.
+  if (provider.versioning === 'snapshot' && values.new && values.to)
+    providers.push({ ...provider, contractSources: [...provider.contractSources, { version: values.to, url: `file:${values.new}`, format: 'openapi-json' }] });
+  else providers.push(await withLatestSnapshot(provider, fetch, process.env.GITHUB_TOKEN));
+}
 const deltas = [];
 for (const provider of providers) {
   const versions = provider.contractSources.map(source => source.version);
   const to = values.to ?? versions.at(-1);
+  if (versions.length < 2 && !values.from) {
+    console.log(`${provider.id}: newest published contract is still the baseline ${versions[0]}`);
+    continue;
+  }
   // Every older version is compared with the newest, so a call pinned to any
   // of them can be checked.
   for (const from of values.from ? [values.from] : versions.slice(0, -1)) {

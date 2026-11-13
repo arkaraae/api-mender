@@ -1,4 +1,6 @@
-import { parseApiCalls } from './engine/inventory.ts';
+import { parseApiCalls, sharedSdkClients } from './engine/inventory.ts';
+import type { SharedClients } from './engine/sdk/js-sdk-calls.ts';
+import { readTarGz } from './repo-archive.ts';
 import { traceStaticDatabaseWrites, type DatabaseWriteTrace } from './static-database-flow.ts';
 
 type GitHubTreeEntry = { path: string; type: string; mode: string; size: number; sha?: string };
@@ -6,7 +8,15 @@ type CallSite = { file: string; line: number; symbol: string; endpoint: string; 
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9_./-]{1,120}$/;
-const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next)\//;
+const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next|\.venv|venv|site-packages|__pycache__)\//;
+const sourcePattern = /\.([cm]?[jt]sx?|py)$/;
+const testPattern = /(\.(test|spec)\.[cm]?[jt]sx?$)|((^|\/)(test_[^/]*|[^/]*_test|conftest)\.py$)|((^|\/)tests?\/[^/]*\.py$)/;
+// One archive download per scan; these bound what is read from it.
+// The archive is streamed and discarded except for accepted source files, so
+// its decompressed size can be large; what is kept and parsed is bounded tighter.
+const archiveLimits = { maxArchiveBytes: 400_000_000, maxFiles: 800, maxFileBytes: 300_000, maxTotalBytes: 12_000_000 };
+const eligiblePath = (path: string, size: number) => size <= 300_000 && path.length <= 256 && sourcePattern.test(path)
+  && !path.endsWith('.d.ts') && !ignoredDirectory.test(path) && !path.split('/').some(part => part === '.' || part === '..');
 
 async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.trim()): Promise<any> {
   const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
@@ -20,12 +30,15 @@ async function githubJson(url: string, token = process.env.GITHUB_READ_TOKEN?.tr
   return response.json();
 }
 
-export function extractCalls(file: string, source: string): CallSite[] {
+export function extractCalls(file: string, source: string, shared?: SharedClients): CallSite[] {
   // parseApiCalls is a superset of parseStaticHttpCalls: it also reads
-  // template-literal URLs and literal headers (for API version pins).
-  const found: CallSite[] = parseApiCalls(file, source).map(call => ({ ...call, uncertain: true,
-    reason: call.fieldsComplete ? 'Literal JSON request keys parsed; runtime behavior has not been verified'
+  // template-literal URLs, literal headers (for API version pins), official
+  // SDK clients and Python.
+  const found: CallSite[] = parseApiCalls(file, source, shared).map(call => ({ ...call, uncertain: true,
+    reason: call.sdk ? `Official SDK method ${call.sdk}; runtime behavior has not been verified`
+      : call.fieldsComplete ? 'Literal request keys parsed; runtime behavior has not been verified'
       : 'Static HTTP URL found; request body or runtime behavior has not been verified' }));
+  if (!/\.[cm]?[jt]sx?$/.test(file)) return found;
   const addHttpCall = (offset: number, symbol: string, method: string, address: string) => {
     if (address.includes('${')) return;
     let url: URL;
@@ -67,73 +80,55 @@ export async function scanPublicRepository(fullName: string, branch: string) {
   const branchInfo = await githubJson(`https://api.github.com/repos/${repositoryPath}/branches/${encodeURIComponent(branch)}`);
   const head = branchInfo.commit?.sha;
   if (typeof head !== 'string' || !/^[a-f0-9]{40}$/.test(head)) throw new Error('GitHub did not return a valid commit');
-  const commit = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/commits/${head}`);
-  if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
-  const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`);
-  if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
-  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && !file.path.split('/').some(part => part === '.' || part === '..'));
-  if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the public scan limit');
-  const contents = new Map<string, string>();
-  for (let offset = 0; offset < eligible.length; offset += 8) {
-    await Promise.all(eligible.slice(offset, offset + 8).map(async file => {
-      const path = file.path.split('/').map(encodeURIComponent).join('/');
-      const response = await fetch(`https://raw.githubusercontent.com/${repositoryPath}/${head}/${path}`, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error(`GitHub file fetch returned ${response.status}`);
-      const body = await response.arrayBuffer();
-      if (body.byteLength > file.size + 1024 || body.byteLength > 300_000) throw new Error('GitHub file exceeded its size limit');
-      contents.set(file.path, new TextDecoder().decode(body));
-    }));
-  }
+  // Public archives come from the codeload host without credentials.
+  const response = await fetch(`https://codeload.github.com/${repositoryPath}/tar.gz/${head}`, { redirect: 'error', signal: AbortSignal.timeout(60_000) });
+  if (!response.ok || !response.body) throw new Error(`GitHub archive returned ${response.status}`);
+  const contents = await readTarGz(response.body, eligiblePath, archiveLimits);
   return { head, inventory: inventoryFromContents(contents), scannedAt: new Date().toISOString() };
 }
 
-// Installation scans read blobs through api.github.com with a short-lived token
-// scoped to this repository. The token is never sent to the raw content host.
+// Installation scans download the commit's archive with a short-lived token
+// scoped to this repository. GitHub answers with a redirect to a signed
+// codeload URL; the token is never sent to that host.
 export async function scanInstallationRepository(fullName: string, head: string, token: string) {
   if (!repositoryPattern.test(fullName) || !/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid repository scan');
   const repositoryPath = fullName.split('/').map(encodeURIComponent).join('/');
-  const commit = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/commits/${head}`, token);
-  if (!/^[a-f0-9]{40}$/.test(commit.tree?.sha || '')) throw new Error('GitHub did not return a valid tree');
-  const tree = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/trees/${commit.tree.sha}?recursive=1`, token);
-  if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('GitHub tree was incomplete');
-  const eligible = (tree.tree as GitHubTreeEntry[]).filter(file => file.type === 'blob' && file.mode === '100644' && Number.isInteger(file.size) && file.size <= 300_000 && file.path.length <= 256 && /\.[cm]?[jt]sx?$/.test(file.path) && !ignoredDirectory.test(file.path) && /^[a-f0-9]{40}$/.test(file.sha || ''));
-  if (eligible.length > 80 || eligible.reduce((total, file) => total + file.size, 0) > 5_000_000) throw new Error('Repository exceeds the scan limit');
-  const contents = new Map<string, string>();
-  for (let offset = 0; offset < eligible.length; offset += 8) {
-    await Promise.all(eligible.slice(offset, offset + 8).map(async file => {
-      const blob = await githubJson(`https://api.github.com/repos/${repositoryPath}/git/blobs/${file.sha}`, token);
-      if (blob.encoding !== 'base64' || typeof blob.content !== 'string' || blob.size !== file.size) throw new Error('GitHub blob was incomplete');
-      const decoded = Uint8Array.from(atob(blob.content.replace(/\s/g, '')), char => char.charCodeAt(0));
-      if (decoded.byteLength !== file.size || decoded.byteLength > 300_000) throw new Error('GitHub blob exceeded its size limit');
-      contents.set(file.path, new TextDecoder('utf-8', { fatal: true }).decode(decoded));
-    }));
-  }
+  const redirect = await fetch(`https://api.github.com/repos/${repositoryPath}/tarball/${head}`, {
+    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'api-mender-site', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+  const location = redirect.headers.get('location');
+  if (redirect.status !== 302 || !location) throw new Error(`GitHub archive returned ${redirect.status}`);
+  const signed = new URL(location);
+  if (signed.protocol !== 'https:' || signed.hostname !== 'codeload.github.com') throw new Error('GitHub archive redirect was not to codeload.github.com');
+  const response = await fetch(signed, { redirect: 'error', signal: AbortSignal.timeout(60_000) });
+  if (!response.ok || !response.body) throw new Error(`GitHub archive returned ${response.status}`);
+  const contents = await readTarGz(response.body, eligiblePath, archiveLimits);
   return { head, inventory: inventoryFromContents(contents), scannedAt: new Date().toISOString() };
 }
 
-// Every external API call the parser can attribute to a fixed https origin.
-// No provider is special-cased: the provider catalog decides later which of
-// these APIs have a published contract to check.
-function inventoryFromContents(contents: Map<string, string>) {
+// Every external API call the parser can attribute to a fixed https origin or
+// an official SDK client. No provider is special-cased here: the provider
+// catalog decides later which of these APIs have a published contract.
+export function inventoryFromContents(contents: Map<string, string>) {
   const calls: CallSite[] = [];
   const files: string[] = [];
   const tests: string[] = [];
-  for (const [file, source] of contents) {
-    if (!/\.[cm]?[jt]sx?$/.test(file) || file.endsWith('.d.ts')) continue;
-    if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) { tests.push(file); continue; }
-    if (!/\bfetch\s*\(|\baxios\./.test(source)) continue;
-    const found = extractCalls(file, source);
+  const sources = [...contents].filter(([file]) => sourcePattern.test(file) && !file.endsWith('.d.ts') && !ignoredDirectory.test(file));
+  const shared = sharedSdkClients(sources.filter(([file]) => !testPattern.test(file)).map(([path, source]) => ({ path, source })));
+  for (const [file, source] of sources) {
+    if (testPattern.test(file)) { tests.push(file); continue; }
+    const found = extractCalls(file, source, shared);
     if (!found.length) continue;
     files.push(file);
     calls.push(...found);
   }
-  const tooManyCalls = calls.length > 200;
-  if (tooManyCalls) calls.length = 200;
-  const limitations = ['Static scan flags possible calls for review; it does not prove runtime API impact', 'Fixture, example, build, and test files are excluded',
-    'Only fetch and axios calls whose URL has a fixed https origin (written out, or a const in the same file) are detected; SDK clients and URLs from other files or the environment are not'];
-  if (calls.length) limitations.push('Only complete literal JSON request bodies have known field names, and no call has been run by the scanner');
-  if (tooManyCalls) limitations.push('Only the first 200 call sites were retained');
-  if (!calls.length) limitations.push('No external API calls with a fixed https origin were found; dynamic calls may exist');
+  const tooManyCalls = calls.length > 500;
+  if (tooManyCalls) calls.length = 500;
+  const limitations = ['Static scan flags possible calls for review; it does not prove runtime API impact', 'Fixture, example, build, virtualenv and test files are excluded',
+    'Detected: fetch, axios, requests and httpx calls with a fixed https origin (written out, or a const in the same file), and official SDK clients for GitHub (Octokit), Stripe, OpenAI and Twilio in JavaScript, TypeScript and Python; URLs from other files or the environment are not'];
+  if (calls.length) limitations.push('Only complete literal request bodies have known field names, and no call has been run by the scanner');
+  if (tooManyCalls) limitations.push('Only the first 500 call sites were retained');
+  if (!calls.length) limitations.push('No external API calls with a fixed https origin or a recognised SDK client were found; dynamic calls may exist');
   // provider/sdkVersion/apiVersion keep the stored shape; they no longer name an SDK.
   return { provider: 'http', sdkVersion: null as string | null, apiVersion: null as string | null, files, calls, tests, limitations };
 }

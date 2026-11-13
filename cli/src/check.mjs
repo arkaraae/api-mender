@@ -13,8 +13,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  buildMetadataReport, discoverApiUsage, findProviderImpact, getProvider, listOperations, listProviders,
-  matchOperationKey, proposeRepair, repairContractFor,
+  buildMetadataReport, contractEndpoint, discoverApiUsage, findProviderImpact, getProvider, listOperations, listProviders,
+  matchOperationKey, proposeRepair, repairContractFor, withLatestSnapshot,
 } from '../../web/lib/engine/index.ts';
 import { loadConfig, resolveRunnerOptions } from './config.mjs';
 import { loadContract } from './contracts.mjs';
@@ -57,6 +57,8 @@ export async function scan({ repo }) {
 function versionsFor(provider, service, flags) {
   const known = provider.contractSources.map(source => source.version);
   const to = flags.to ?? known.at(-1);
+  // Snapshot providers: everything published since the baseline.
+  if (provider.versioning === 'snapshot') return { from: flags.from ?? known[0], to };
   // The oldest version the code actually selects is the one to compare from.
   const pinned = [...(service?.pinnedVersions ?? [])].sort();
   const from = flags.from ?? pinned[0] ?? provider.defaultVersion ?? known[0];
@@ -84,7 +86,11 @@ export async function check(flags) {
   const results = [];
   const providers = [];
   const operationKeys = new Map();
-  for (const provider of wanted) {
+  for (const listed of wanted) {
+    // Snapshot providers: look up the newest published contract (or use the
+    // baseline only when offline).
+    const provider = listed.versioning === 'snapshot' && !flags.offline && !flags.newContract
+      ? await withLatestSnapshot(listed, fetch, process.env.GITHUB_TOKEN) : listed;
     const service = inventory.services.find(item => item.providerId === provider.id);
     const { from, to } = versionsFor(provider, service, flags);
     if (from === to) { providers.push({ id: provider.id, from, to, skipped: 'already on the newest known version' }); continue; }
@@ -134,7 +140,8 @@ export async function check(flags) {
     commitSha: report.commitSha, fields: config.report.fields, services: inventory.services,
     operationTemplate: (providerId, endpoint) => {
       const keys = operationKeys.get(providerId);
-      return keys ? matchOperationKey(keys, endpoint) : null;
+      const provider = getProvider(providerId);
+      return keys ? matchOperationKey(keys, provider ? contractEndpoint(provider, endpoint) : endpoint) : null;
     },
     results,
   });

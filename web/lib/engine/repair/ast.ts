@@ -1,6 +1,7 @@
 // Read-only syntax helpers shared by the repair task builder and the policy
 // gates. Parsing never runs repository code.
 import { parse } from '@babel/parser';
+import { describeSdkCall, sdkContext } from '../sdk/js-sdk-calls.ts';
 
 export type Node = {
   type?: string; start?: number; end?: number;
@@ -102,6 +103,8 @@ function staticUrl(node: Node | undefined): { origin: string; path: string } | n
 export type BodyProperty = { name: string; node: Node; value: Node; valueText: string };
 
 export type TargetCall = {
+  /** 'fetch': fetch(url, { body: JSON.stringify({...}) }). 'sdk': an official SDK method called with a request object. */
+  kind: 'fetch' | 'sdk';
   node: Node;
   origin: string;
   /** `METHOD /path`, template expressions written as `{}`. */
@@ -113,6 +116,8 @@ export type TargetCall = {
   bodyObject: Node;
   startLine: number;
   endLine: number;
+  /** Request-object keys that are path parameters or SDK options, not body fields (SDK calls). */
+  ignoredKeys: string[];
 };
 
 // Only `fetch(url, { …literal options…, body: JSON.stringify({ … }) })` is
@@ -136,7 +141,7 @@ function describeFetch(node: Node): TargetCall | null {
   const startLine = node.loc?.start?.line;
   const endLine = node.loc?.end?.line;
   if (bodyObject?.type !== 'ObjectExpression' || typeof startLine !== 'number' || typeof endLine !== 'number') return null;
-  return { node, origin: url.origin, endpoint: `${method} ${url.path}`, options, bodyProperty: bodies[0], bodyObject, startLine, endLine };
+  return { kind: 'fetch', node, origin: url.origin, endpoint: `${method} ${url.path}`, options, bodyProperty: bodies[0], bodyObject, startLine, endLine, ignoredKeys: [] };
 }
 
 /** Every describable fetch call whose expression starts on `line`. */
@@ -150,11 +155,38 @@ export function fetchCallsStartingOn(syntax: Node, line: number): TargetCall[] |
   return complete ? calls : null;
 }
 
+/**
+ * Every describable call whose expression starts on `line`: fetch calls, and
+ * SDK method calls passed a literal request object. `sdkRoot` names a client
+ * the finding already attributed (one imported from another file).
+ */
+export function targetCallsStartingOn(syntax: Node, line: number, file: string, sdkRoot?: { root: string; providerId: string }): TargetCall[] | null {
+  const fetches = fetchCallsStartingOn(syntax, line);
+  if (!fetches) return null;
+  const nodes: Node[] = [];
+  if (!walk(syntax, node => { nodes.push(node); })) return null;
+  const context = sdkContext(file, nodes, undefined, sdkRoot);
+  if (!context.clients.size) return fetches;
+  const sdk: TargetCall[] = [];
+  for (const node of nodes) {
+    if (node.type !== 'CallExpression' || node.loc?.start?.line !== line) continue;
+    const described = describeSdkCall(node, context);
+    const params = unwrap(described?.params);
+    const startLine = node.loc?.start?.line;
+    const endLine = node.loc?.end?.line;
+    if (!described || params?.type !== 'ObjectExpression' || typeof startLine !== 'number' || typeof endLine !== 'number') continue;
+    sdk.push({ kind: 'sdk', node, origin: described.provider.origins[0], endpoint: described.endpoint, options: params, bodyProperty: params,
+      bodyObject: params, startLine, endLine, ignoredKeys: described.ignoredKeys });
+  }
+  return [...fetches, ...sdk];
+}
+
 /** Top-level JSON keys of the request body. Null when a spread, method or computed key makes them unknowable. */
 export function bodyProperties(source: string, call: TargetCall): BodyProperty[] | null {
   const result: BodyProperty[] = [];
   for (const node of call.bodyObject.properties as Node[]) {
     const name = keyName(node);
+    if (name !== null && call.ignoredKeys.includes(name)) continue;
     if (name === null || name.length > 128 || !node.value) return null;
     result.push({ name, node, value: node.value, valueText: textOf(source, node.value) });
   }

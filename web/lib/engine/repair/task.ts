@@ -2,7 +2,7 @@
 // a few numbered lines, the range it may edit, and a bounded copy of the
 // contract change. Everything the model is shown is decided here.
 import type { ChangeKind, Finding } from '../types.ts';
-import { bodyProperties, fetchCallsStartingOn, parseSource } from './ast.ts';
+import { bodyProperties, parseSource, targetCallsStartingOn } from './ast.ts';
 import type { TargetCall } from './ast.ts';
 import { isSafeDiffPath, splitLines } from './diff.ts';
 
@@ -83,11 +83,18 @@ const sameSet = (a: string[], b: string[]) => a.length === b.length && [...a].so
  * Find the call the finding describes in the current source. Null when the
  * source has moved on: line numbers from a stale scan must never be edited.
  */
+/** For an SDK call, the client root and provider the finding attributed it to. */
+export function sdkRootOf(finding: Finding): { root: string; providerId: string } | undefined {
+  const { sdk, symbol } = finding.evidence.call;
+  if (!sdk || !symbol.endsWith(`.${sdk}`)) return undefined;
+  return { root: symbol.slice(0, -(sdk.length + 1)), providerId: finding.provider.id };
+}
+
 export function locateTargetCall(finding: Finding, source: string): TargetCall | null {
   const syntax = parseSource(source);
   const evidence = finding.evidence.call;
   if (!syntax || !evidence.fieldsComplete) return null;
-  const matches = (fetchCallsStartingOn(syntax, finding.location.line) || [])
+  const matches = (targetCallsStartingOn(syntax, finding.location.line, finding.location.file, sdkRootOf(finding)) || [])
     .filter(call => call.endpoint === evidence.endpoint && call.origin === evidence.origin);
   if (matches.length !== 1) return null;
   const properties = bodyProperties(source, matches[0]);

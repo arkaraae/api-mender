@@ -1,3 +1,4 @@
+import { repositoryLimitMessage } from '@/lib/billing';
 import { env } from 'cloudflare:workers';
 import { authenticatedEditor, githubConfiguration, githubHeaders, githubJson, onboardingDatabase, sha256, statePattern } from '@/lib/github-onboarding';
 import { matchingInstallation, validAccessibleRepositories } from '@/lib/github-onboarding-policy';
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
     }, { onConflict: 'installation_id' });
     if (installError) throw installError;
     let queued = 0;
+    const overLimit: string[] = [];
     for (const repo of repositories.filter(item => !item.archived)) {
       const { data: current, error: currentError } = await database.from('monitored_repositories')
         .select('id,github_installation_id').eq('workspace_id', attempt.workspace_id)
@@ -91,6 +93,8 @@ export async function POST(request: Request) {
         : database.from('monitored_repositories').insert({ workspace_id: attempt.workspace_id,
           full_name: repo.full_name, branch: repo.default_branch, ...values });
       const { error: writeError } = await write;
+      // Over the plan's repository limit: keep the rest, report the skipped ones.
+      if (writeError && repositoryLimitMessage(writeError)) { overLimit.push(repo.full_name); continue; }
       if (writeError) throw writeError;
       try {
         const branch = await githubJson<{ commit?: { sha?: string } }>(
@@ -118,7 +122,8 @@ export async function POST(request: Request) {
         .in('id', removedIds);
       if (removeError) throw removeError;
     }
-    return Response.json({ account: selected.account.login, repositories: repositories.length, scansQueued: queued },
+    return Response.json({ account: selected.account.login, repositories: repositories.length - overLimit.length, scansQueued: queued,
+      ...(overLimit.length ? { overLimit, limitMessage: `Your plan's repository limit was reached; ${overLimit.length} repositor${overLimit.length === 1 ? 'y was' : 'ies were'} not connected. Upgrade to Pro to connect more.` } : {}) },
       { headers: { 'Cache-Control': 'no-store' } });
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : 'Unexpected error';

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { recordApiHosts } from '@/lib/api-hosts';
 import { scanPublicRepository } from '@/lib/public-scan';
 import { env } from 'cloudflare:workers';
 import { backendAdmin } from '@/lib/backend-admin';
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
     const admin = backendAdmin(env);
     const { error } = await admin.from('monitored_repositories').update({ head_sha: result.head, target_sha: result.head, sdk_version: result.inventory.sdkVersion, api_version: result.inventory.apiVersion, call_sites: result.inventory.calls, limitations: result.inventory.limitations, scanned_at: result.scannedAt }).eq('id', repository.id);
     if (error) throw new Error('Could not save scan result');
+    await recordApiHosts(admin, result.inventory.calls);
     return NextResponse.json({ head: result.head, inventory: result.inventory, scannedAt: result.scannedAt });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Scan failed' }, { status: 502 });

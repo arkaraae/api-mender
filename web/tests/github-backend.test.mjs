@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync, verify } from 'node:crypto';
 import { test } from 'node:test';
+import { archiveResponse, tarGz } from './helpers/tar.mjs';
 import { githubAppJwt, installationToken, parsePushEvent, readBoundedBody, verifyWebhookSignature } from '../lib/github-app.ts';
 import { scanInstallationRepository } from '../lib/public-scan.ts';
 
@@ -55,43 +56,50 @@ test('GitHub App JWT accepts downloaded PKCS#1 RSA keys', async () => {
   assert.equal(verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature, 'base64url')), true);
 });
 
-test('private scan reads only pinned GitHub blobs using its installation token', async () => {
+test('private scan downloads one pinned archive and never sends its token to codeload', async () => {
   const originalFetch = globalThis.fetch;
   const head = 'a'.repeat(40);
-  const tree = 'b'.repeat(40);
-  const blob = 'c'.repeat(40);
   const source = "export const meta = () => fetch('https://api.github.com/meta');\n";
   const requests = [];
   globalThis.fetch = async (url, options) => {
     requests.push({ url: String(url), auth: options?.headers?.Authorization, redirect: options?.redirect });
-    if (String(url).endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: tree } });
-    if (String(url).endsWith(`/git/trees/${tree}?recursive=1`)) return Response.json({ tree: [{ path: 'src/objects.ts', type: 'blob', mode: '100644', size: Buffer.byteLength(source), sha: blob }] });
-    if (String(url).endsWith(`/git/blobs/${blob}`)) return Response.json({ encoding: 'base64', size: Buffer.byteLength(source), content: Buffer.from(source).toString('base64') });
+    if (String(url) === `https://api.github.com/repos/customer/private-repo/tarball/${head}`)
+      return new Response(null, { status: 302, headers: { location: 'https://codeload.github.com/customer/private-repo/legacy.tar.gz/signed?token=t' } });
+    if (String(url).startsWith('https://codeload.github.com/')) return archiveResponse(tarGz({ 'src/objects.ts': source, 'README.md': '# x' }));
     throw new Error(`Unexpected GitHub fetch: ${url}`);
   };
   try {
     const result = await scanInstallationRepository('customer/private-repo', head, 'installation-token');
     assert.equal(result.head, head);
     assert.deepEqual([result.inventory.calls[0].symbol, result.inventory.calls[0].endpoint], ['fetch', 'GET /meta']);
-    assert.ok(requests.every(request => request.url.startsWith('https://api.github.com/') && request.auth === 'Bearer installation-token'));
-    assert.ok(requests.every(request => request.redirect === 'manual'));
+    assert.equal(requests[0].auth, 'Bearer installation-token');
+    assert.equal(requests[0].redirect, 'manual');
+    assert.equal(requests[1].auth, undefined, 'the token stays on api.github.com');
+    assert.equal(requests.length, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('private scan refuses an archive redirect to any host but codeload', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: 'https://evil.example/archive.tar.gz' } });
+  try {
+    await assert.rejects(scanInstallationRepository('customer/private-repo', 'a'.repeat(40), 'installation-token'), /codeload/);
   } finally { globalThis.fetch = originalFetch; }
 });
 
 test('public contract source scan reads a pinned commit without an App token', async () => {
   const originalFetch = globalThis.fetch;
   const head = 'd'.repeat(40);
-  const tree = 'e'.repeat(40);
   const requests = [];
   globalThis.fetch = async (url, options) => {
     requests.push({ url: String(url), auth: options?.headers?.Authorization });
-    if (String(url).endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: tree } });
-    if (String(url).endsWith(`/git/trees/${tree}?recursive=1`)) return Response.json({ tree: [] });
+    if (String(url).endsWith(`/tarball/${head}`)) return new Response(null, { status: 302, headers: { location: 'https://codeload.github.com/customer/public-api/legacy.tar.gz/x' } });
+    if (String(url).startsWith('https://codeload.github.com/')) return archiveResponse(tarGz({}));
     throw new Error(`Unexpected GitHub fetch: ${url}`);
   };
   try {
     const result = await scanInstallationRepository('customer/public-api', head, '');
     assert.equal(result.head, head);
-    assert.ok(requests.every(request => request.url.startsWith('https://api.github.com/') && !request.auth));
+    assert.ok(requests.every(request => !request.auth));
   } finally { globalThis.fetch = originalFetch; }
 });

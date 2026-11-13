@@ -3,7 +3,7 @@ import { diffOperation, diffRemovedOperation } from './contract-diff.ts';
 import { analyzeImpact } from './impact.ts';
 import { discoverApiUsage, inventoryFromCalls, mapServiceOperations } from './inventory.ts';
 import { dynamicSegmentsAlign, listOperations, matchOperationKey, sliceOperations } from './openapi-slice.ts';
-import { contractSourceFor, listProviders } from './providers/registry.ts';
+import { contractEndpoint, contractSourceFor, listProviders } from './providers/registry.ts';
 import { byText } from './text.ts';
 
 export type FindInput = {
@@ -43,7 +43,7 @@ export async function findProviderImpact(input: FindInput): Promise<FindResult> 
 
   const oldKeys = listOperations(input.oldDocument);
   const newKeys = listOperations(input.newDocument);
-  const used = [...new Set(calls.map(call => matchOperationKey(oldKeys, call.endpoint)).filter((key): key is string => key !== null))].sort(byText);
+  const used = [...new Set(calls.map(call => matchOperationKey(oldKeys, contractEndpoint(provider, call.endpoint))).filter((key): key is string => key !== null))].sort(byText);
   // The same operation in the new contract, by exact key or by path shape.
   const counterpart = new Map(used.map(key => [key, newKeys.includes(key) ? key : renamed(newKeys, key)]));
 

@@ -9,6 +9,7 @@ import { processRepairProofJobs } from '../lib/repair-proof-worker';
 import { reportFailure } from '../lib/failure-alert';
 import { backendAdmin } from '../lib/backend-admin';
 import { recheckProviderFindings } from '../lib/provider-recheck';
+import { dispatchFindingAlerts } from '../lib/finding-alerts';
 
 export default {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
@@ -36,6 +37,8 @@ export default {
       background('repository-scan-cron', processRepositoryScanJobs(env));
       background('repair-proof-cron', processRepairProofJobs(env));
     }
+    // New findings → Slack and GitHub issues, for workspaces that turned alerts on.
+    if (env.SUPABASE_SECRET_KEY) background('finding-alerts-cron', dispatchFindingAlerts(backendAdmin(env), env));
     if (controller.cron === '17 * * * *' && env.SUPABASE_SECRET_KEY) {
       // Bounded retention for CLI reports, audit events and usage counters.
       background('retention-cron', (async () => {

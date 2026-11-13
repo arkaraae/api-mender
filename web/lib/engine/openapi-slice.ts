@@ -194,6 +194,9 @@ function copyParameters(item: Json, operation: Json, state: Copy) {
   return kept;
 }
 
+const bodyMediaTypes = [/^application\/json\s*(;|$)/i, /^application\/x-www-form-urlencoded\s*(;|$)/i, /^multipart\/form-data\s*(;|$)/i];
+const mediaKeyOf = (type: string) => type.split(';')[0].trim().toLowerCase();
+
 function copyRequestBody(operation: Json, state: Copy): Json | null {
   const followed = follow(own(operation, 'requestBody'), state);
   if (!followed) return null;
@@ -201,10 +204,13 @@ function copyRequestBody(operation: Json, state: Copy): Json | null {
   const body = followed.value;
   const content = isRecord(body) ? own(body, 'content') : undefined;
   if (!isRecord(body) || !isRecord(content)) return null;
-  const type = Object.keys(content).slice(0, 20).find(name => /^application\/json\s*(;|$)/i.test(name));
+  // JSON first (GitHub, OpenAI); form bodies (Stripe, Twilio) carry the same
+  // top-level request properties. The media type is kept as published.
+  const names = Object.keys(content).slice(0, 20);
+  const type = bodyMediaTypes.map(pattern => names.find(name => pattern.test(name))).find(name => name !== undefined);
   const media = type === undefined ? undefined : content[type];
   if (!isRecord(media) || own(media, 'schema') === undefined) return null;
-  return { required: body.required === true, content: { 'application/json': { schema: copySchema(own(media, 'schema'), state, 0) } } };
+  return { required: body.required === true, content: { [mediaKeyOf(type!)]: { schema: copySchema(own(media, 'schema'), state, 0) } } };
 }
 
 // Response bodies are left out: the pipeline reasons about what a caller
@@ -292,12 +298,15 @@ export function isTruncated(slice: OperationSlice): boolean {
   return own(slice.document as Json, truncatedFlag) === true;
 }
 
-// The sliced JSON request schema, or null when the operation takes no JSON body.
+// The sliced request schema (JSON or form body), or null when the operation takes no body.
 export function requestSchemaOf(slice: OperationSlice): Record<string, unknown> | null {
   const key = parseOperationKey(slice.operation);
   let node: unknown = slice.document;
-  for (const part of key ? ['paths', key.path, key.method.toLowerCase(), 'requestBody', 'content', 'application/json', 'schema'] : []) {
+  for (const part of key ? ['paths', key.path, key.method.toLowerCase(), 'requestBody', 'content'] : []) {
     node = isRecord(node) ? own(node, part) : undefined;
   }
-  return key && isRecord(node) ? node : null;
+  if (!key || !isRecord(node)) return null;
+  const type = ['application/json', 'application/x-www-form-urlencoded', 'multipart/form-data'].find(name => isRecord(own(node as Json, name)));
+  const schema = type === undefined ? undefined : own(own(node, type) as Json, 'schema');
+  return isRecord(schema) ? schema : null;
 }

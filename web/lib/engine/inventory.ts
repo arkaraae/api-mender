@@ -1,7 +1,9 @@
 import { parseHttpCallDetails } from '../static-http-calls.ts';
+import { moduleKey, parseSdkCalls, sdkClientExports, type SharedClients } from './sdk/js-sdk-calls.ts';
+import { isPythonSource, mentionsPythonApi, parsePythonCalls } from './sdk/python-calls.ts';
 import type { ApiCall, IntegratedService, ProviderAdapter, UsageInventory } from './types.ts';
 import { matchOperationKey } from './openapi-slice.ts';
-import { listProviders, providerForOrigin } from './providers/registry.ts';
+import { contractEndpoint, getProvider, listProviders, providerForOrigin } from './providers/registry.ts';
 import { byText } from './text.ts';
 
 // Repository content is untrusted: nothing here runs it, follows a URL found
@@ -10,8 +12,8 @@ import { byText } from './text.ts';
 // Same exclusions as the hosted scanner (ignoredDirectory and the test-file
 // rule in ../public-scan.ts), so both report the same call sites.
 const ignoredDirectory = /(^|\/)(node_modules|dist|build|vendor|fixtures|examples|__tests__|\.next)\//;
-const sourceFile = /\.[cm]?[jt]sx?$/;
-const testFile = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const sourceFile = /\.([cm]?[jt]sx?|py)$/;
+const testFile = /(\.(test|spec)\.[cm]?[jt]sx?$)|((^|\/)(test_[^/]*|[^/]*_test|conftest)\.py$)|((^|\/)tests?\/[^/]*\.py$)/;
 const maxFileLength = 300_000;
 const maxExamined = 50_000;
 
@@ -33,9 +35,17 @@ export function isScannableSource(path: string, source: string): boolean {
 
 // A superset of parseStaticHttpCalls: also template-literal URLs with a
 // literal https origin (each dynamic path segment is written `{}`), literal
-// request headers and the last line of the call. Shares that parser's bounds.
-export function parseApiCalls(file: string, source: string): ApiCall[] {
-  return parseHttpCallDetails(file, source).map(({ call, endLine, headers, headersComplete }) => ({
+// request headers, the last line of the call, calls made through official
+// provider SDKs, and Python files. Shares that parser's bounds.
+export function parseApiCalls(file: string, source: string, shared?: SharedClients): ApiCall[] {
+  // One unreadable file never fails the whole scan.
+  try { return parseFile(file, source, shared); } catch { return []; }
+}
+
+function parseFile(file: string, source: string, shared?: SharedClients): ApiCall[] {
+  if (isPythonSource(file)) return mentionsPythonApi(source) ? parsePythonCalls(file, source) : [];
+  const sdkCalls = parseSdkCalls(file, source, shared);
+  const httpCalls: ApiCall[] = !/\bfetch\s*\(|\baxios\b/.test(source) ? [] : parseHttpCallDetails(file, source).map(({ call, endLine, headers, headersComplete }) => ({
     file: call.file, line: call.line, ...(endLine === undefined ? {} : { endLine }),
     symbol: call.symbol, endpoint: call.endpoint, origin: call.origin,
     fields: call.fields, fieldsComplete: call.fieldsComplete,
@@ -43,6 +53,21 @@ export function parseApiCalls(file: string, source: string): ApiCall[] {
     ...(headers === undefined ? {} : { headers }),
     headersComplete,
   }));
+  return [...httpCalls, ...sdkCalls].sort((a, b) => a.line - b.line || byText(a.endpoint, b.endpoint));
+}
+
+/** Clients that JS/TS files export, so other files' imports of them are recognised. */
+export function sharedSdkClients(files: Iterable<{ path: string; source: string }>): SharedClients {
+  const shared: SharedClients = new Map();
+  let examined = 0;
+  for (const file of files) {
+    if (++examined > 2_000) break;
+    if (!file || !/\.[cm]?[jt]sx?$/.test(file.path) || file.source.length > maxFileLength) continue;
+    let exported: Map<string, string>;
+    try { exported = sdkClientExports(file.source); } catch { continue; }
+    if (exported.size) shared.set(moduleKey(file.path), exported);
+  }
+  return shared;
 }
 
 function byLocation(a: ApiCall, b: ApiCall) {
@@ -80,7 +105,7 @@ function groupServices(calls: ApiCall[], providers: ProviderAdapter[]): Integrat
 }
 
 const baseLimitations = [
-  'Only fetch and axios calls whose URL starts with a literal https origin are detected; clients built another way are not listed',
+  'Detected: fetch, axios, requests and httpx calls whose URL starts with a literal https origin, and official SDK clients for GitHub (Octokit), Stripe, OpenAI and Twilio; other clients are not listed',
   'Static scan only: no repository code was executed and no call was sent',
   'Test, fixture, example, vendored and build files are excluded',
 ];
@@ -107,16 +132,18 @@ export function discoverApiUsage(files: Iterable<{ path: string; source: string 
   const limitations: string[] = [];
   let examined = 0;
   let scanned = 0;
-  for (const file of files) {
+  // Read at most one past the bound so an unbounded iterable still stops.
+  const list: { path: string; source: string }[] = [];
+  for (const file of files) { list.push(file); if (list.length > maxExamined) break; }
+  const shared = sharedSdkClients(list.filter(file => file && isScannableSource(file.path, file.source)));
+  for (const file of list) {
     if (++examined > maxExamined || scanned >= maxFiles) {
       limitations.push(`Scan stopped after ${scanned} files; later files were not read`);
       break;
     }
     if (!file || !isScannableSource(file.path, file.source)) continue;
     scanned++;
-    // Cheap text test first, as the hosted scanner does, before a full parse.
-    if (!/\bfetch\s*\(|\baxios\./.test(file.source)) continue;
-    calls.push(...parseApiCalls(file.path, file.source));
+    calls.push(...parseApiCalls(file.path, file.source, shared));
     // Files are already bounded by maxFiles and each parse by its own cap,
     // so keep reading; inventoryFromCalls trims to maxCalls and says so.
     if (calls.length > maxCalls * 4) break;
@@ -129,6 +156,9 @@ export function discoverApiUsage(files: Iterable<{ path: string; source: string 
 export function mapServiceOperations(inventory: UsageInventory, providerId: string, operationKeys: readonly string[]): UsageInventory {
   return { ...inventory, services: inventory.services.map(service => (service.providerId !== providerId ? service : {
     ...service,
-    operations: [...new Set(service.operations.map(endpoint => matchOperationKey(operationKeys, endpoint) ?? endpoint))].sort(byText),
+    operations: [...new Set(service.operations.map(endpoint => {
+      const provider = getProvider(providerId);
+      return matchOperationKey(operationKeys, provider ? contractEndpoint(provider, endpoint) : endpoint) ?? endpoint;
+    }))].sort(byText),
   })) };
 }

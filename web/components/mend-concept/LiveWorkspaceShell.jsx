@@ -54,7 +54,7 @@ function FindingList({ findings, onOpen, limit }) {
 export default function LiveWorkspaceShell({
   user, workspace, workspaceName, onWorkspaceNameChange, onCreateWorkspace,
   repositories, findings, services, activity, pullRequests,
-  connections, studio, renderFinding,
+  connections, studio, renderFinding, settings, plan, initialFindingId,
   repositoryName, onRepositoryNameChange, branch, onBranchChange, onAddRepository, onScan,
   busy, message, onSignOut,
 }) {
@@ -65,7 +65,7 @@ export default function LiveWorkspaceShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedScan, setSelectedScan] = useState(null);
-  const [selectedFindingId, setSelectedFindingId] = useState(null);
+  const [selectedFindingId, setSelectedFindingId] = useState(initialFindingId || null);
   const [showDismissed, setShowDismissed] = useState(false);
   const searchInput = useRef(null);
   const openFindings = findings.filter(finding => finding.status !== 'Dismissed');
@@ -111,17 +111,26 @@ export default function LiveWorkspaceShell({
           <div className="composer live-search-composer"><input value={search} onChange={event => setSearch(event.target.value)} onFocus={() => setSearchOpen(true)} onKeyDown={event => { if (event.key === 'Enter') openSearch(); }} placeholder="Search your repositories, APIs and findings…" aria-label="Search workspace" /><div className="composer-foot"><span>Explore your connected workspace</span><button className="send-button" onClick={openSearch} aria-label="Search"><ArrowRight size={18} /></button></div></div>
           <div className="suggestions"><button onClick={() => go('activity')}><Activity size={16}/>Connect or scan a repository<ArrowRight size={13}/></button><button onClick={() => go('apis')}><SquaresFour size={16}/>See detected APIs<ArrowRight size={13}/></button><button onClick={() => go('pulls')}><GitPullRequest size={16}/>Review findings<ArrowRight size={13}/></button></div>
           {!workspace && <section className="dashboard-card live-create"><span className="card-eyebrow">GET STARTED</span><h2>Create your workspace</h2><p>Name the workspace that will hold your repositories and API checks.</p><div className="live-fields"><label>Workspace name<input value={workspaceName} maxLength={120} onChange={event => onWorkspaceNameChange(event.target.value)} /></label></div><button disabled={busy || !workspaceName.trim()} onClick={onCreateWorkspace}>Create workspace</button></section>}
+          {workspace && repositories.length === 0 && <section className="dashboard-card mend-onboarding"><span className="card-eyebrow">GET STARTED</span><h2>Three steps to your first finding.</h2>
+            <ol>
+              <li><strong>Connect GitHub.</strong> Choose the repositories Mend may read. Nothing to install in your code.</li>
+              <li><strong>First scan runs on its own.</strong> Mend lists every API your code calls: fetch, axios, requests, and the GitHub, Stripe, OpenAI and Twilio SDKs.</li>
+              <li><strong>Turn on alerts.</strong> Get a Slack message or a GitHub issue when a provider change breaks a call.</li>
+            </ol>
+            <button onClick={() => go('activity')}>Connect GitHub <ArrowRight size={14}/></button></section>}
           {workspace && <div className="dashboard-grid">
             <section className="dashboard-card activity-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> REPOSITORY SCANS</span><h2>Codebase scans, in view.</h2></div><span className="count-pill">{activity ? `${activity.days.length} days` : 'Loading'}</span></div><ActivityGrid days={activity?.days}/><div className="card-footer"><span><strong>{activity?.totals.scans ?? 0}</strong> scans run <i/> <strong>{activity?.totals.checks ?? 0}</strong> checks <i/> <strong>{activity?.totals.flagged ?? 0}</strong> changes flagged</span><button onClick={() => go('activity')}>View scans <ArrowRight size={14}/></button></div></section>
             <section className="dashboard-card recent-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> RECENT FINDINGS</span><h2>Changes to review.</h2></div></div><FindingList findings={openFindings} onOpen={openFinding} limit={3}/><button className="text-link" onClick={() => go('pulls')}>All findings <ArrowRight size={14}/></button></section>
             <section className="dashboard-card metrics-card"><span className="card-eyebrow"><Activity size={15}/> THIS MONTH</span><div className="metric-pair"><div><small>API changes checked</small><strong>{month?.changesChecked ?? 0}</strong><span>{month ? `${monthDelta >= 0 ? '+' : ''}${monthDelta} from last month` : 'Loading'}</span></div><div><small>Fixes validated</small><strong>{month?.repairsValidated ?? 0}</strong><span>{month ? `of ${plural(month.repairsProposed, 'proposed fix')}` : 'Loading'}</span></div></div></section>
             <section className="dashboard-card pulls-card"><div className="card-heading"><div><span className="card-eyebrow"><GitPullRequest size={15}/> PULL REQUESTS</span><h2>Fixes ready for review.</h2></div><span className="count-pill">{openPulls.length} open</span></div><div className="pull-list">{openPulls.slice(0, 3).map(pull => <button key={pull.id} onClick={() => pull.prUrl ? window.open(pull.prUrl, '_blank', 'noopener') : go('pulls')}><GitPullRequest size={17}/><span><strong>{pull.title}</strong><small>{pull.repository} <i/> {pullStatus[pull.status] || pull.status}</small></span><ArrowRight size={14}/></button>)}{openPulls.length === 0 && <p className="live-empty">No fixes proposed yet. Open a finding to propose one.</p>}</div><button className="text-link" onClick={() => go('pulls')}>All pull requests <ArrowRight size={14}/></button></section>
           </div>}
+          {workspace && plan && <div className="mend-plan-row">{plan}</div>}
         </>}
         {section !== 'home' && <div className="section-view live-section-view"><span className="section-eyebrow">MEND WORKSPACE / {section === 'pulls' ? 'PULL REQUESTS' : section.toUpperCase()}</span><h1>{section === 'activity' ? 'Repository scans.' : section === 'apis' ? 'APIs in motion.' : 'Fixes in review.'}</h1><p>{section === 'activity' ? 'Connect repositories, run scans and inspect their latest reports.' : section === 'apis' ? 'Every external API your connected code calls, and whether Mend watches its published contract.' : 'Review findings, propose bounded fixes and track their draft pull requests.'}</p>
           {section === 'activity' && <>
             <section className="section-panel"><h2>Scans and checks</h2><ActivityGrid days={activity?.days}/><div className="section-stats"><strong>{activity?.totals.scans ?? 0}</strong> scans <strong>{activity?.totals.checks ?? 0}</strong> checks <strong>{activity?.totals.flagged ?? 0}</strong> flagged</div></section>
             {workspace && <section className="section-panel live-tool-card mend-embed"><h2>Connect repositories</h2>{connections}</section>}
+            {workspace && settings}
             <section className="section-panel live-tool-card"><h2>Monitored repositories</h2>{repositories.length ? <div className="live-repo-list">{repositories.map(repo => <article key={repo.id}><div><strong>{repo.full_name}</strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? `Scanned ${new Date(repo.scanned_at).toLocaleString()}` : 'Waiting for first scan'}{repo.github_installation_id ? ' · GitHub App' : ' · public'}</small><p>{plural(repo.call_sites?.length || 0, 'API call')} found{repo.paused ? ' · paused' : ''}</p></div><div className="mend-row-actions">{repo.scanned_at && <button onClick={() => setSelectedScan(repo)}>Report</button>}<button disabled={busy || repo.paused} onClick={() => onScan(repo.id)}>Scan now</button></div></article>)}</div> : <p className="live-empty">No repositories yet. Connect one with the GitHub App above, or add a public repository below.</p>}</section>
             <section className="section-panel live-tool-card"><h2>Add a public GitHub repository</h2><p>Public scans read source files only. Draft pull requests need the GitHub App.</p><div className="live-fields"><label>Owner/repository<input value={repositoryName} onChange={event => onRepositoryNameChange(event.target.value)}/></label><label>Branch<input value={branch} onChange={event => onBranchChange(event.target.value)}/></label></div><button disabled={busy || !repositoryName.trim() || !branch.trim() || !workspace} onClick={onAddRepository}>Add repository</button></section>
           </>}

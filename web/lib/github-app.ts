@@ -78,7 +78,7 @@ export async function githubAppJwt(config: GithubAppConfig) {
 }
 
 export async function installationToken(config: GithubAppConfig, installationId: number, repository: number | string,
-  purpose: 'scan' | 'repair-write' | 'proof-read' = 'scan') {
+  purpose: 'scan' | 'repair-write' | 'proof-read' | 'issue-write' = 'scan') {
   if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('Invalid GitHub installation');
   const scope = typeof repository === 'number'
     ? Number.isSafeInteger(repository) && repository > 0 ? { repository_ids: [repository] } : null
@@ -86,6 +86,7 @@ export async function installationToken(config: GithubAppConfig, installationId:
   if (!scope) throw new Error('Invalid GitHub repository');
   const jwt = await githubAppJwt(config);
   const permissions = purpose === 'repair-write' ? { contents: 'write', pull_requests: 'write' }
+    : purpose === 'issue-write' ? { issues: 'write' }
     : purpose === 'proof-read' ? { contents: 'read', pull_requests: 'read', checks: 'read' } : { contents: 'read' };
   const response = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
     method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),

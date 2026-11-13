@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
-const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'vendor', '.next', 'coverage']);
+const SOURCE = /\.(?:[cm]?[jt]sx?|py)$/;
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'vendor', '.next', 'coverage', '.venv', 'venv', '__pycache__', 'site-packages']);
 export const MAX_FILES = 5_000;
 export const MAX_FILE_BYTES = 300_000;
 export const MAX_TOTAL_BYTES = 50_000_000;

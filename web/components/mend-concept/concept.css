@@ -192,3 +192,32 @@ button.heat-cell{backdrop-filter:none;-webkit-backdrop-filter:none}
 .live-product .mend-embed p,.live-product .mend-embed li{color:#b5c1d1;font-size:12px;line-height:1.55}
 .live-product .mend-embed select,.live-product .mend-embed input,.live-product .mend-embed textarea{width:100%;margin-top:6px;padding:9px 11px;border:1px solid #ffffff2b;border-radius:9px;background:#ffffff0e;color:#f4f7fb;font-size:12px}
 @media(max-width:700px){.live-product .live-repo-list article{flex-direction:column;align-items:flex-start}.live-product .mend-finding-panel{padding:58px 18px}}
+/* First run, plan and alert settings. */
+.live-product .mend-onboarding{margin:0 0 18px}
+.live-product .mend-onboarding ol{margin:12px 0 16px;padding-left:20px;color:#c3cedc;font-size:13px;line-height:1.6}
+.live-product .mend-onboarding li{margin:6px 0}
+.live-product .mend-onboarding li strong{color:#f1f5fa}
+.live-product .mend-onboarding button,.live-product .mend-plan button,.live-product .mend-settings button{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border:0;border-radius:9px;background:#dce8ff;color:#1d2b44;font-size:12px;font-weight:600;cursor:pointer}
+.live-product .mend-settings button.ghost,.live-product .mend-plan button.ghost{background:#ffffff1c;color:#e4ebf6}
+.live-product .mend-settings button:disabled,.live-product .mend-plan button:disabled,.live-product .mend-onboarding button:disabled{opacity:.55;cursor:default}
+.live-product .mend-plan-row{margin-top:18px}
+.live-product .mend-plan{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px 18px;min-height:0;height:auto;padding:20px 24px}
+.live-product .mend-plan .card-eyebrow{grid-column:1/-1}
+.live-product .mend-plan h2{margin:0}
+.live-product .mend-plan p{margin:0;color:#b5c1d1;font-size:12px}
+.live-product .mend-plan [role=status]{grid-column:1/-1}
+.live-product .mend-setting-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-top:1px solid #ffffff14}
+.live-product .mend-setting-row>div:first-child{display:grid;gap:3px}
+.live-product .mend-setting-row strong{color:#f1f5fa;font-size:13px}
+.live-product .mend-setting-row span{color:#a9b6c8;font-size:12px}
+.live-product .mend-settings select,.live-product .mend-settings input:not([type=checkbox]){padding:9px 11px;border:1px solid #ffffff2b;border-radius:9px;background:#ffffff0e;color:#f4f7fb;font-size:12px}
+.live-product .mend-settings .live-fields input{width:100%;margin-top:6px}
+.live-product .mend-toggle{display:inline-flex;align-items:center;gap:8px;color:#d5deea;font-size:12px}
+.live-product .mend-notifications{display:grid;gap:6px;margin-top:12px}
+.live-product .mend-notifications p{margin:0;display:flex;gap:8px;align-items:center;font-size:12px}
+.live-product .mend-notifications a{color:#b9d0ff}
+.live-product .mend-chip.good{background:#39614d66;color:#b4e8cc}
+.live-product .mend-chip.alert{background:#7a4b2366;color:#f6cf9c}
+.live-product .mend-embed details.live-advanced{margin-top:16px;padding-top:12px;border-top:1px solid #ffffff14}
+.live-product .mend-embed details.live-advanced summary{cursor:pointer;color:#c9d6ea;font-size:12px;font-weight:600}
+@media(max-width:700px){.live-product .mend-setting-row{flex-direction:column;align-items:flex-start}.live-product .mend-plan{grid-template-columns:1fr}}

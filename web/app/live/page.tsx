@@ -11,7 +11,9 @@ import GitHubConnections from '@/components/github-connections';
 import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 import FindingDetail, { type LiveFinding } from '@/components/mend-concept/FindingDetail';
-import { deriveProviderServices } from '@/lib/provider-services';
+import { AlertsSettings, PlanCard, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
+import { deriveProviderServices, type WatchStatus } from '@/lib/provider-services';
+import { repositoryLimitMessage } from '@/lib/billing';
 import type { ActivitySummary } from '@/lib/activity-summary';
 import { deriveWatchedServices, type ContractConsumer, type ContractSnapshot, type ContractSource, type ContractVersion } from '@/lib/live-services';
 
@@ -41,6 +43,10 @@ export default function LiveWorkspace() {
   const [contractSnapshots, setContractSnapshots] = useState<ContractSnapshot[]>([]);
   const [cliReports, setCliReports] = useState<CliReport[]>([]);
   const [activity, setActivity] = useState<ActivitySummary | null>(null);
+  const [billing, setBilling] = useState<BillingView | null>(null);
+  const [watchStatus, setWatchStatus] = useState<WatchStatus[]>([]);
+  // Deep links from Slack and GitHub issues: /live?finding=<id>; Checkout returns with ?billing=.
+  const [initialFindingId] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('finding'));
   const [workspaceName, setWorkspaceName] = useState('API Mender');
   const [repositoryName, setRepositoryName] = useState('');
   const [branch, setBranch] = useState('main');
@@ -57,6 +63,10 @@ export default function LiveWorkspace() {
         { headers: { Authorization: `Bearer ${data.session.access_token}` } });
       if (response.ok) setActivity(await response.json() as ActivitySummary);
     } catch { /* The grid shows empty days; the rest of the workspace still works. */ }
+    try {
+      const response = await fetch(`/api/billing/status?workspaceId=${workspaceId}`, { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+      setBilling(response.ok ? await response.json() as BillingView : null);
+    } catch { setBilling(null); }
   }, [supabase]);
 
   const refresh = useCallback(async () => {
@@ -86,6 +96,9 @@ export default function LiveWorkspace() {
     setContractVersions(versionResult.error ? [] : versionResult.data || []);
     setContractConsumers(consumerResult.error ? [] : consumerResult.data || []);
     setContractSnapshots(snapshotResult.error ? [] : (snapshotResult.data || []) as ContractSnapshot[]);
+    // Discovery state of the APIs this workspace calls (members only; never other workspaces').
+    const watchResult = await supabase.rpc('workspace_api_watch_status', { p_workspace: chosen.id });
+    setWatchStatus(watchResult.error ? [] : (watchResult.data || []) as WatchStatus[]);
     const reportResult = await supabase.from('cli_reports').select('repository_label,received_at,report')
       .eq('workspace_id', chosen.id).order('received_at', { ascending: false }).limit(50);
     setCliReports(reportResult.error ? [] : (reportResult.data || []) as CliReport[]);
@@ -114,6 +127,18 @@ export default function LiveWorkspace() {
     if (ready && supabase && !user) window.location.replace('/login');
   }, [ready, supabase, user]);
 
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get('billing');
+    if (result === 'success') setMessage('Thanks — your Pro plan is active once Stripe confirms the payment (usually a few seconds).');
+    if (result === 'canceled') setMessage('Checkout canceled. You are still on the Free plan.');
+  }, []);
+
+  const accessToken = useCallback(async () => {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  }, [supabase]);
+
   async function session() {
     const { data } = await supabase!.auth.getSession();
     if (!data.session) { setMessage('Please sign in again.'); return null; }
@@ -133,7 +158,7 @@ export default function LiveWorkspace() {
     if (!supabase || !workspace) return;
     setBusy(true); setMessage('');
     const { error } = await supabase.from('monitored_repositories').insert({ workspace_id: workspace.id, full_name: repositoryName.trim(), branch: branch.trim(), visibility: 'public' });
-    setMessage(error?.message || 'Public repository added. Run a scan to inspect its current commit.');
+    setMessage(repositoryLimitMessage(error) || error?.message || 'Public repository added. Run a scan to inspect its current commit.');
     if (!error) { setRepositoryName(''); await refresh(); }
     setBusy(false);
   }
@@ -183,12 +208,14 @@ export default function LiveWorkspace() {
 
   // Every external API the connected code calls, plus OpenAPI contracts kept in connected repositories.
   const services: ServiceCard[] = [
-    ...deriveProviderServices(repositories, findings, cliReports).map(service => ({
+    ...deriveProviderServices(repositories, findings, cliReports, watchStatus).map(service => ({
       id: `provider:${service.id}`, name: service.name, origin: service.origin, status: service.status, tone: service.tone,
       note: service.source,
-      detail: service.watched
+      detail: service.coverage === 'built-in'
         ? `Watched against the provider's published contract${service.pinnedVersions.length ? `; pinned to ${service.pinnedVersions.join(', ')}` : ''}.`
-        : 'Detected in your code. Mend does not have this API’s published contract yet, so its changes are not checked.',
+        : service.coverage === 'discovered' ? 'Found automatically: Mend located this API’s published OpenAPI description and checks it for changes twice a day.'
+        : service.coverage === 'searching' ? 'Detected in your code. Mend is looking for this API’s published OpenAPI description; it is watched as soon as one is found.'
+        : 'Detected in your code. This API publishes no OpenAPI description Mend could find, so its changes cannot be checked yet. Mend looks again every week.',
       operations: service.operations, findingIds: service.openFindings.map(finding => finding.id) })),
     ...deriveWatchedServices({ repositories, sources: contractSources, versions: contractVersions,
       consumers: contractConsumers, snapshots: contractSnapshots, findings: findings.map(finding => ({ ...finding, source_id: (finding as { source_id?: string | null }).source_id ?? null })) }).map(service => ({
@@ -218,6 +245,9 @@ export default function LiveWorkspace() {
       <GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} onConnectionsChange={() => void refresh()} />
       {contractSources.length > 0 && <DatabaseEvidenceSetup database={supabase} workspaceId={workspace.id} repositories={repositories} sources={contractSources} consumers={contractConsumers} />}
     </> : null}
+    settings={workspace ? <AlertsSettings workspaceId={workspace.id} token={accessToken} /> : null}
+    plan={workspace ? <PlanCard workspaceId={workspace.id} token={accessToken} billing={billing} onChange={() => void refresh()} /> : null}
+    initialFindingId={initialFindingId}
     studio={workspace ? <ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /> : null}
     renderFinding={(finding: LiveFinding) => workspace && <FindingDetail database={supabase} workspaceId={workspace.id} finding={finding}
       busy={dismissingId === finding.id} onDismiss={dismissed => void setDismissed(finding, dismissed)} />}

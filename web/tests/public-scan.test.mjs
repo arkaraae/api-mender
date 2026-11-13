@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { scanPublicRepository } from '../lib/public-scan.ts';
+import { archiveResponse, tarGz } from './helpers/tar.mjs';
 
 const head = 'a'.repeat(40);
 const treeSha = 'b'.repeat(40);
@@ -16,13 +17,9 @@ test('a public repository scan lists every external API call and reads no manife
     requested.push(url);
     if (url.endsWith('/repos/example/customer')) return Response.json({ private: false, archived: false });
     if (url.endsWith('/branches/main')) return Response.json({ commit: { sha: head } });
-    if (url.endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: treeSha } });
-    if (url.endsWith(`/git/trees/${treeSha}?recursive=1`)) return Response.json({ tree: [
-      { path: 'services/storage/package.json', type: 'blob', mode: '100644', size: manifest.length },
-      { path: 'services/storage/src/objects.ts', type: 'blob', mode: '100644', size: code.length },
-    ] });
-    if (url.endsWith('/services/storage/package.json')) return new Response(manifest);
-    if (url.endsWith('/services/storage/src/objects.ts')) return new Response(code);
+    if (url === `https://codeload.github.com/example/customer/tar.gz/${head}`) return archiveResponse(tarGz({
+      'services/storage/package.json': manifest, 'services/storage/src/objects.ts': code,
+      'services/storage/src/objects.test.ts': code, 'node_modules/x/index.js': code }));
     throw new Error(`Unexpected fetch: ${url}`);
   };
   try {
@@ -36,7 +33,9 @@ test('a public repository scan lists every external API call and reads no manife
     ]);
     assert.deepEqual(result.inventory.calls[1].fields, ['accountId']);
     assert.ok(result.inventory.calls.every(call => call.uncertain));
-    assert.ok(!requested.some(url => url.endsWith('package.json')), 'manifests are no longer read');
+    assert.ok(!requested.some(url => url.endsWith('package.json')), 'manifests are not requested');
+    assert.deepEqual(result.inventory.files, ['services/storage/src/objects.ts'], 'tests and node_modules are not scanned');
+    assert.equal(requested.length, 3, 'one archive request instead of one per file');
   } finally {
     globalThis.fetch = original;
   }
@@ -52,15 +51,14 @@ test('scanner sends the optional read-only credential only to GitHub API', async
     const url = String(input);
     if (url.endsWith('/repos/example/customer')) return Response.json({ private: false, archived: false });
     if (url.endsWith('/branches/main')) return Response.json({ commit: { sha: head } });
-    if (url.endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: treeSha } });
-    if (url.endsWith(`/git/trees/${treeSha}?recursive=1`)) return Response.json({ tree: [{ path: 'package.json', type: 'blob', mode: '100644', size: manifest.length }] });
-    if (url.includes('raw.githubusercontent.com')) return new Response(manifest);
+    if (url.startsWith('https://codeload.github.com/')) return archiveResponse(tarGz({ 'package.json': manifest }));
     throw new Error(`Unexpected fetch: ${url}`);
   };
   try {
     await scanPublicRepository('example/customer', 'main');
     assert.ok(calls.filter(call => call.url.startsWith('https://api.github.com/')).every(call => call.authorization === 'Bearer test-token'));
-    assert.ok(calls.filter(call => call.url.startsWith('https://raw.githubusercontent.com/')).every(call => !call.authorization));
+    assert.ok(calls.some(call => call.url.startsWith('https://codeload.github.com/')));
+    assert.ok(calls.filter(call => call.url.startsWith('https://codeload.github.com/')).every(call => !call.authorization));
   } finally {
     globalThis.fetch = originalFetch;
     if (previousToken === undefined) delete process.env.GITHUB_READ_TOKEN;
