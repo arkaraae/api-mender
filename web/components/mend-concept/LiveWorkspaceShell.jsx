@@ -28,16 +28,34 @@ const pullStatus = {
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-// One square per day: scans and provider checks that day, darker when busier.
-function ActivityGrid({ days }) {
+// One square per day, today first: scans and provider checks that day,
+// brighter when busier. Each day opens what ran that day.
+function ActivityGrid({ days, selected, onSelect }) {
   if (!days?.length) return <div className="live-scan-grid" aria-hidden="true">{Array.from({ length: 252 }, (_, index) => <span key={index} className="live-scan-cell" />)}</div>;
-  return <div className="live-scan-grid" role="img" aria-label={`Scans and checks over the last ${days.length} days`}>
-    {days.map(day => {
+  const newestFirst = [...days].reverse();
+  return <div className="live-scan-grid" role="group" aria-label={`Scans and checks over the last ${days.length} days, most recent first`}>
+    {newestFirst.map((day, index) => {
       const total = day.scans + day.checks;
       const level = total === 0 ? 0 : total < 3 ? 1 : total < 8 ? 2 : 3;
-      return <span key={day.date} className={`live-scan-cell level-${level}${day.flagged ? ' flagged' : ''}`}
-        title={`${day.date}: ${plural(day.scans, 'scan')}, ${plural(day.checks, 'check')}, ${day.flagged} flagged`} />;
+      const label = `${index === 0 ? 'Today' : day.date}: ${plural(day.scans, 'scan')}, ${plural(day.checks, 'check')}, ${day.flagged} flagged`;
+      return <button type="button" key={day.date} className={`live-scan-cell level-${level}${day.flagged ? ' flagged' : ''}${index === 0 ? ' today' : ''}${selected === day.date ? ' selected' : ''}`}
+        title={label} aria-label={label} aria-pressed={selected === day.date} onClick={() => onSelect?.(selected === day.date ? null : day.date)} />;
     })}
+  </div>;
+}
+
+// What ran on one day: counts, repositories last scanned that day, findings raised that day.
+function DayDetail({ day, repositories, findings, onReport, onOpenFinding, onClose }) {
+  if (!day) return null;
+  const sameDay = value => value && new Date(value).toISOString().slice(0, 10) === day.date;
+  const scanned = repositories.filter(repo => sameDay(repo.scanned_at));
+  const raised = findings.filter(finding => sameDay(finding.created_at));
+  const label = new Date(`${day.date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  return <div className="mend-day-detail">
+    <div className="mend-day-head"><strong>{label}</strong><span>{plural(day.scans, 'scan')} · {plural(day.checks, 'check')} · {day.flagged} flagged</span><button type="button" onClick={onClose} aria-label="Close day"><X size={14}/></button></div>
+    {scanned.map(repo => <button type="button" key={repo.id} onClick={() => onReport(repo)}><Code size={14}/><span><strong>{repo.full_name}</strong><small>{repo.head_sha ? repo.head_sha.slice(0, 8) : ''} · {plural(repo.call_sites?.length || 0, 'API call')} · {new Date(repo.scanned_at).toLocaleTimeString()}</small></span><ArrowRight size={14}/></button>)}
+    {raised.map(finding => <button type="button" key={finding.id} onClick={() => onOpenFinding(finding)}><Activity size={14}/><span><strong>{finding.title}</strong><small>{finding.severity} · {finding.status}</small></span><ArrowRight size={14}/></button>)}
+    {!scanned.length && !raised.length && <p>{day.scans + day.checks ? 'Repositories were scanned or rechecked this day; their latest scan reports are newer. Open Activity for every repository.' : 'Nothing ran this day.'}</p>}
   </div>;
 }
 
@@ -66,6 +84,10 @@ export default function LiveWorkspaceShell({
   const [search, setSearch] = useState('');
   const [selectedScan, setSelectedScan] = useState(null);
   const [selectedFindingId, setSelectedFindingId] = useState(initialFindingId || null);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const selectedDayData = activity?.days?.find(day => day.date === selectedDay) ?? null;
+  const dayDetail = <DayDetail day={selectedDayData} repositories={repositories} findings={findings}
+    onReport={repo => setSelectedScan(repo)} onOpenFinding={finding => openFinding(finding)} onClose={() => setSelectedDay(null)} />;
   const [showDismissed, setShowDismissed] = useState(false);
   const searchInput = useRef(null);
   const openFindings = findings.filter(finding => finding.status !== 'Dismissed');
@@ -119,7 +141,7 @@ export default function LiveWorkspaceShell({
             </ol>
             <button onClick={() => go('activity')}>Connect GitHub <ArrowRight size={14}/></button></section>}
           {workspace && <div className="dashboard-grid">
-            <section className="dashboard-card activity-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> REPOSITORY SCANS</span><h2>Codebase scans, in view.</h2></div><span className="count-pill">{activity ? `${activity.days.length} days` : 'Loading'}</span></div><ActivityGrid days={activity?.days}/><div className="card-footer"><span><strong>{activity?.totals.scans ?? 0}</strong> scans run <i/> <strong>{activity?.totals.checks ?? 0}</strong> checks <i/> <strong>{activity?.totals.flagged ?? 0}</strong> changes flagged</span><button onClick={() => go('activity')}>View scans <ArrowRight size={14}/></button></div></section>
+            <section className="dashboard-card activity-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> REPOSITORY SCANS</span><h2>Codebase scans, in view.</h2></div><span className="count-pill">{activity ? `${activity.days.length} days` : 'Loading'}</span></div><ActivityGrid days={activity?.days} selected={selectedDay} onSelect={setSelectedDay}/>{dayDetail}<div className="card-footer"><span><strong>{activity?.totals.scans ?? 0}</strong> scans run <i/> <strong>{activity?.totals.checks ?? 0}</strong> checks <i/> <strong>{activity?.totals.flagged ?? 0}</strong> changes flagged</span><button onClick={() => go('activity')}>View scans <ArrowRight size={14}/></button></div></section>
             <section className="dashboard-card recent-card"><div className="card-heading"><div><span className="card-eyebrow"><Activity size={15}/> RECENT FINDINGS</span><h2>Changes to review.</h2></div></div><FindingList findings={openFindings} onOpen={openFinding} limit={3}/><button className="text-link" onClick={() => go('pulls')}>All findings <ArrowRight size={14}/></button></section>
             <section className="dashboard-card metrics-card"><span className="card-eyebrow"><Activity size={15}/> THIS MONTH</span><div className="metric-pair"><div><small>API changes checked</small><strong>{month?.changesChecked ?? 0}</strong><span>{month ? `${monthDelta >= 0 ? '+' : ''}${monthDelta} from last month` : 'Loading'}</span></div><div><small>Fixes validated</small><strong>{month?.repairsValidated ?? 0}</strong><span>{month ? `of ${plural(month.repairsProposed, 'proposed fix')}` : 'Loading'}</span></div></div></section>
             <section className="dashboard-card pulls-card"><div className="card-heading"><div><span className="card-eyebrow"><GitPullRequest size={15}/> PULL REQUESTS</span><h2>Fixes ready for review.</h2></div><span className="count-pill">{openPulls.length} open</span></div><div className="pull-list">{openPulls.slice(0, 3).map(pull => <button key={pull.id} onClick={() => pull.prUrl ? window.open(pull.prUrl, '_blank', 'noopener') : go('pulls')}><GitPullRequest size={17}/><span><strong>{pull.title}</strong><small>{pull.repository} <i/> {pullStatus[pull.status] || pull.status}</small></span><ArrowRight size={14}/></button>)}{openPulls.length === 0 && <p className="live-empty">No fixes proposed yet. Open a finding to propose one.</p>}</div><button className="text-link" onClick={() => go('pulls')}>All pull requests <ArrowRight size={14}/></button></section>
@@ -128,7 +150,7 @@ export default function LiveWorkspaceShell({
         </>}
         {section !== 'home' && <div className="section-view live-section-view"><span className="section-eyebrow">MEND WORKSPACE / {section === 'pulls' ? 'PULL REQUESTS' : section.toUpperCase()}</span><h1>{section === 'activity' ? 'Repository scans.' : section === 'apis' ? 'APIs in motion.' : 'Fixes in review.'}</h1><p>{section === 'activity' ? 'Connect repositories, run scans and inspect their latest reports.' : section === 'apis' ? 'Every external API your connected code calls, and whether Mend watches its published contract.' : 'Review findings, propose bounded fixes and track their draft pull requests.'}</p>
           {section === 'activity' && <>
-            <section className="section-panel"><h2>Scans and checks</h2><ActivityGrid days={activity?.days}/><div className="section-stats"><strong>{activity?.totals.scans ?? 0}</strong> scans <strong>{activity?.totals.checks ?? 0}</strong> checks <strong>{activity?.totals.flagged ?? 0}</strong> flagged</div></section>
+            <section className="section-panel"><h2>Scans and checks</h2><ActivityGrid days={activity?.days} selected={selectedDay} onSelect={setSelectedDay}/>{dayDetail}<div className="section-stats"><strong>{activity?.totals.scans ?? 0}</strong> scans <strong>{activity?.totals.checks ?? 0}</strong> checks <strong>{activity?.totals.flagged ?? 0}</strong> flagged</div></section>
             {workspace && <section className="section-panel live-tool-card mend-embed"><h2>Connect repositories</h2>{connections}</section>}
             {workspace && settings}
             <section className="section-panel live-tool-card"><h2>Monitored repositories</h2>{repositories.length ? <div className="live-repo-list">{repositories.map(repo => <article key={repo.id}><div><strong>{repo.full_name}</strong><small>{repo.branch} · {repo.head_sha ? repo.head_sha.slice(0, 8) : 'Not scanned'} · {repo.scanned_at ? `Scanned ${new Date(repo.scanned_at).toLocaleString()}` : 'Waiting for first scan'}{repo.github_installation_id ? ' · GitHub App' : ' · public'}</small><p>{plural(repo.call_sites?.length || 0, 'API call')} found{repo.paused ? ' · paused' : ''}</p></div><div className="mend-row-actions">{repo.scanned_at && <button onClick={() => setSelectedScan(repo)}>Report</button>}<button disabled={busy || repo.paused} onClick={() => onScan(repo.id)}>Scan now</button></div></article>)}</div> : <p className="live-empty">No repositories yet. Connect one with the GitHub App above, or add a public repository below.</p>}</section>
