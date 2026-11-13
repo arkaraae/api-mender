@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
-import ManagedApiStudio from '@/components/managed-api-studio';
 import GitHubConnections from '@/components/github-connections';
 import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
@@ -248,7 +247,6 @@ export default function LiveWorkspace() {
     settings={workspace ? <AlertsSettings workspaceId={workspace.id} token={accessToken} /> : null}
     plan={workspace ? <PlanCard workspaceId={workspace.id} token={accessToken} billing={billing} onChange={() => void refresh()} /> : null}
     initialFindingId={initialFindingId}
-    studio={workspace ? <ManagedApiStudio database={supabase} workspaceId={workspace.id} userId={user.id} /> : null}
     renderFinding={(finding: LiveFinding) => workspace && <FindingDetail database={supabase} workspaceId={workspace.id} finding={finding}
       busy={dismissingId === finding.id} onDismiss={dismissed => void setDismissed(finding, dismissed)} />}
     repositoryName={repositoryName}
