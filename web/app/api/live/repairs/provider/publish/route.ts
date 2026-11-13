@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { readPinnedFile, StaleBranchError } from '@/lib/github-pinned-file';
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
     || typeof body.jobId !== 'string' || !uuid.test(body.jobId)) return reply(400, { error: 'Invalid repair job' });
   const identity = await authenticatedEditor(request, body.workspaceId);
   if (!identity) return reply(403, { error: 'Workspace editor sign-in required' });
+  const limited = await rateLimit(onboardingDatabase(), limits.publish, identity.user.id);
+  if (limited) return limited;
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return reply(503, { error: 'GitHub App is not configured' });
   const database = onboardingDatabase();
   const { data: job, error: jobError } = await database.from('repair_jobs')

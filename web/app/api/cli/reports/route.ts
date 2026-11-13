@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { backendAdmin } from '@/lib/backend-admin';
 import { readBoundedBody } from '@/lib/github-app';
 import { sha256 } from '@/lib/github-onboarding';
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
     .select('id,workspace_id,allowed_fields,revoked_at').eq('token_sha256', await sha256(token)).maybeSingle();
   if (error) return reply(502, { error: 'Could not check the token' });
   if (!cliToken || cliToken.revoked_at) return reply(401, { error: 'CLI token required' });
+  const limited = await rateLimit(database, limits.cliReport, `token:${cliToken.id}`);
+  if (limited) return limited;
   let report;
   try { report = validateMetadataReport(raw); }
   catch (cause) {

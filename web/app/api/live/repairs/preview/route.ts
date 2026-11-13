@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { proposeRequestFieldRepair, repairCandidateProposals } from '@/lib/request-repair';
@@ -19,6 +20,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid repair request' }, { status: 400, headers: noStore });
   const identity = await authenticatedEditor(request, body.workspaceId);
   if (!identity) return Response.json({ error: 'Workspace editor sign-in required' }, { status: 403, headers: noStore });
+  const limited = await rateLimit(onboardingDatabase(), limits.modelRepair, identity.user.id);
+  if (limited) return limited;
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY)
     return Response.json({ error: 'GitHub scanning is not configured' }, { status: 503, headers: noStore });
   const database = onboardingDatabase();

@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, onboardingDatabase, uuid } from '@/lib/github-onboarding';
 import { readBoundedBody } from '@/lib/github-app';
 import { isSlackWebhook, slackHint } from '@/lib/finding-alerts';
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
   const identity = await authenticatedEditor(request, workspaceId);
   if (!identity) return reply(403, 'Workspace editor sign-in required');
   const database = onboardingDatabase();
+  const limited = await rateLimit(database, limits.alertsWrite, identity.user.id);
+  if (limited) return limited;
 
   if (body.test === true) {
     const { data } = await database.from('workspace_alert_settings').select('slack_webhook_ciphertext').eq('workspace_id', workspaceId).maybeSingle();
