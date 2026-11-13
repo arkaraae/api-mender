@@ -1,4 +1,4 @@
-import { parse } from '@babel/parser';
+import { parseModule } from './engine/parse.ts';
 import { parseStaticHttpCalls } from './static-http-calls.ts';
 
 type Node = { type?: string; loc?: { start?: { line?: number } }; [key: string]: any };
@@ -89,7 +89,7 @@ function databaseWrites(statement: Node, payload: string): DatabaseWriteTrace[] 
 // aliases, helper calls, dynamic keys, or files.
 export function traceStaticDatabaseWrites(file: string, source: string): ApiDatabaseFlow[] {
   let syntax: Node;
-  try { syntax = parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'] }) as Node; }
+  try { syntax = parseModule(source) as Node; }
   catch { return []; }
   const calls = parseStaticHttpCalls(file, source).filter(call => call.symbol === 'fetch');
   if (!calls.length) return [];

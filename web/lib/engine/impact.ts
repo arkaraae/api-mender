@@ -68,6 +68,8 @@ type Assessment = {
 function assess(change: ContractChange, call: ApiCall, provider: ProviderAdapter): Assessment | null {
   const field = `\`${plainName(change.fields[0] ?? '')}\``;
   const names = call.fieldsComplete && change.fields.length === 1 && call.fields.includes(change.fields[0]);
+  // The request is built in a variable: an object literal assigned to it sets the field.
+  const traced = !call.fieldsComplete && change.fields.length === 1 && call.fields.includes(change.fields[0]);
   // Providers whose SDKs rename properties (Twilio's to → To) are not rewritten:
   // the gates compare source keys with contract names.
   const rewritable = call.fieldsComplete && repairableFile.test(call.file) && call.endLine !== undefined && !provider.fieldCase;
@@ -78,6 +80,11 @@ function assess(change: ContractChange, call: ApiCall, provider: ProviderAdapter
         impact: `This call sends ${field}, which the provider no longer accepts on this operation from ${plainName(change.toVersion)}.`,
         check: `The request body is a literal object whose keys were all read, and ${field} is one of them.`,
         limits: ['How the provider treats the removed property was not observed; it may be ignored or rejected.'],
+      } : traced ? {
+        failureMode: 'value-silently-ignored', ceiling: 'medium', repairable: false,
+        impact: `This call likely sends ${field}, which the provider no longer accepts on this operation from ${plainName(change.toVersion)}.`,
+        check: `The request object is built in a variable, and an object literal assigned to it in the same function sets ${field}.`,
+        limits: ['Other code paths may build the request differently.', 'How the provider treats the removed property was not observed; it may be ignored or rejected.'],
       } : null;
     case 'request-property-required':
       if (change.fields.length !== 1 || (call.fieldsComplete && call.fields.includes(change.fields[0]))) return null;
