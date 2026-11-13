@@ -12,7 +12,7 @@ export const MAX_FILE_BYTES = 300_000;
 export const MAX_TOTAL_BYTES = 50_000_000;
 
 function gitList(root) {
-  const result = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+  const result = spawnSync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
     cwd: root, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 30_000,
     // No hooks, pager or user config can run code during a listing.
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', HOME: root },
@@ -37,7 +37,7 @@ async function walk(root) {
 
 /** Commit of the work tree, or null when it is not a git checkout. */
 export function headCommit(root) {
-  const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10_000,
+  const result = spawnSync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', 'rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10_000,
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', HOME: root } });
   const sha = result.status === 0 ? result.stdout.trim() : '';
   return /^[a-f0-9]{40}$/.test(sha) ? sha : null;

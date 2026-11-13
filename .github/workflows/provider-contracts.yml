@@ -26,10 +26,10 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
@@ -48,8 +48,9 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CATALOG_SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.CATALOG_SUPABASE_SECRET_KEY }}
+          NODE_OPTIONS: --max-old-space-size=1024
         run: node scripts/discover-api-contracts.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: provider-delta-${{ github.run_id }}
           path: web/provider-delta.json

@@ -274,3 +274,14 @@ test('credentials written into request headers are never kept', () => {
   const [py] = parseApiCalls('a.py', 'import requests\nrequests.get("https://api.example.com/x", headers={"Authorization": "Bearer sk_live_123", "Api-Version": "2"})\n');
   assert.deepEqual(py.headers, { 'api-version': '2' });
 });
+
+test('python scanning stays linear on deeply nested and long argument lists', async () => {
+  const { parsePythonCalls } = await import('../lib/engine/sdk/python-calls.ts');
+  const nested = 'import requests\nrequests.post("https://api.github.com/repos/a/b/issues", json=' + 'f('.repeat(60000) + ')'.repeat(60000) + ')\n';
+  const wide = 'import requests\n' + Array.from({ length: 4000 }, () => 'requests.get(' + 'x,'.repeat(40) + ')').join('\n');
+  for (const source of [nested, wide]) {
+    const started = Date.now();
+    parsePythonCalls('big.py', source);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started}ms`);
+  }
+});

@@ -16,13 +16,18 @@
 //
 //   node scripts/discover-api-contracts.mjs [--dry-run] [--limit 40]
 import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
 import { parseArgs } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { autoProvider, autoProviderId, chooseContract, guruCandidates, isPublicApiOrigin, normalizeOpenApi, wellKnownUrls } from '../lib/engine/discovery.ts';
 import { baselineSlices, diffSnapshotAgainstSlices } from '../lib/engine/provider-sync.ts';
 import { providerForOrigin } from '../lib/engine/providers/registry.ts';
 
-const MAX_BYTES = 32 * 1024 * 1024;
+// One candidate document is held in memory at a time. APIs.guru's index and
+// the largest real descriptions fit well under these caps.
+const MAX_BYTES = 12 * 1024 * 1024;
+const GURU_MAX_BYTES = 16 * 1024 * 1024;
 const DAY = 86_400_000;
 const { values } = parseArgs({ options: { 'dry-run': { type: 'boolean' }, limit: { type: 'string', default: '40' } } });
 const limit = Math.min(Math.max(Number(values.limit) || 40, 1), 200);
@@ -33,11 +38,29 @@ const db = createClient(url, key, { auth: { persistSession: false, autoRefreshTo
 const now = () => new Date().toISOString();
 const later = days => new Date(Date.now() + days * DAY).toISOString();
 
-async function download(address, { followRedirects }) {
+// Hosts come from tenants' code. Names that resolve to private, loopback,
+// link-local or metadata addresses are refused before any request. (The
+// runner has no access to anything private either; this is the second line.)
+const blocked = new BlockList();
+for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
+  ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 3]]) blocked.addSubnet(net, bits, 'ipv4');
+for (const [net, bits] of [['::', 127], ['::ffff:0:0', 96], ['64:ff9b::', 96], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) blocked.addSubnet(net, bits, 'ipv6');
+async function assertPublicHost(address) {
+  const { hostname } = new URL(address);
+  const host = hostname.replace(/^\[|\]$/g, '');
+  const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true, verbatim: true });
+  for (const { address: ip, family } of addresses) {
+    if (blocked.check(ip, family === 6 ? 'ipv6' : 'ipv4')) throw new Error(`${hostname} resolves to a private address`);
+  }
+}
+
+async function download(address, { followRedirects, maxBytes = MAX_BYTES }) {
+  if (!address.startsWith('https://')) throw new Error('only https is fetched');
+  await assertPublicHost(address);
   const response = await fetch(address, { redirect: followRedirects ? 'follow' : 'error', signal: AbortSignal.timeout(60_000),
     headers: { accept: 'application/json', 'user-agent': 'api-mender-catalog (+https://apimender.com)' } });
   if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-  if (Number(response.headers.get('content-length') || 0) > MAX_BYTES) throw new Error('larger than 32 MB');
+  if (Number(response.headers.get('content-length') || 0) > maxBytes) throw new Error(`larger than ${maxBytes >> 20} MB`);
   const reader = response.body.getReader();
   const chunks = [];
   let size = 0;
@@ -45,7 +68,7 @@ async function download(address, { followRedirects }) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BYTES) { await reader.cancel(); throw new Error('larger than 32 MB'); }
+    if (size > maxBytes) { await reader.cancel(); throw new Error(`larger than ${maxBytes >> 20} MB`); }
     chunks.push(value);
   }
   const bytes = Buffer.concat(chunks);
@@ -55,7 +78,7 @@ async function download(address, { followRedirects }) {
 let guruList;
 async function guru() {
   if (guruList === undefined) {
-    try { guruList = (await download('https://api.apis.guru/v2/list.json', { followRedirects: false })).document; }
+    try { guruList = (await download('https://api.apis.guru/v2/list.json', { followRedirects: false, maxBytes: GURU_MAX_BYTES })).document; }
     catch (error) { console.log(`APIs.guru unavailable: ${error.message}`); guruList = null; }
   }
   return guruList;
@@ -95,26 +118,34 @@ if (pendingError) throw pendingError;
 for (const host of pending ?? []) {
   const { origin } = host;
   try {
+    // Claim the host first, so a crash or timeout mid-way never retries it
+    // in a tight loop.
+    if (!values['dry-run']) await db.from('api_hosts').update({ next_check_at: later(1) }).eq('origin', origin);
     if (providerForOrigin(origin)) { await update(origin, { status: 'not-found', detail: 'Watched as a built-in provider', next_check_at: later(365) }); continue; }
     if (!isPublicApiOrigin(origin)) { await update(origin, { status: 'not-found', detail: 'Not a public host', next_check_at: later(90) }); continue; }
     const endpoints = Array.isArray(host.sample_endpoints) ? host.sample_endpoints.filter(item => typeof item === 'string') : [];
-    const candidates = [...guruCandidates(await guru(), origin), ...wellKnownUrls(origin)];
-    const fetched = [];
+    const candidates = [...guruCandidates(await guru(), origin), ...wellKnownUrls(origin)].slice(0, 10);
+    // Keep only the best match so far; every other document is dropped as
+    // soon as it has been scored.
+    let chosen = null;
+    let chosenSha = null;
+    let documents = 0;
     for (const candidate of candidates) {
       try {
         const { document, sha256 } = await download(candidate.url, { followRedirects: candidate.source === 'apis.guru' });
-        fetched.push({ candidate, document, sha256 });
+        documents++;
+        const pick = chooseContract(origin, endpoints, [{ candidate, document }]);
+        if (pick && (!chosen || pick.matched > chosen.matched)) { chosen = pick; chosenSha = sha256; }
       } catch { /* not published there */ }
     }
-    const chosen = chooseContract(origin, endpoints, fetched);
     if (!chosen) {
-      console.log(`${origin}: no published description found (${fetched.length} candidate documents)`);
+      console.log(`${origin}: no published description found (${documents} candidate documents)`);
       // Back off: weekly, then monthly.
       await update(origin, { status: 'not-found', attempts: (host.attempts ?? 0) + 1, detail: 'No public OpenAPI description found',
         next_check_at: later((host.attempts ?? 0) >= 4 ? 30 : 7) });
       continue;
     }
-    const sha256 = fetched.find(item => item.candidate.url === chosen.url).sha256;
+    const sha256 = chosenSha;
     const provider = autoProvider({ origin, provider_id: autoProviderId(origin), name: chosen.name, base_path: chosen.basePath, spec_url: chosen.url });
     const version = now().slice(0, 10);
     const { keys, slices } = await baselineSlices(provider, version, chosen.document, chosen.url);
@@ -136,6 +167,7 @@ for (const row of watched ?? []) {
   const provider = autoProvider(row);
   if (!provider || !row.spec_url) continue;
   try {
+    if (!values['dry-run']) await db.from('api_hosts').update({ next_check_at: later(1) }).eq('origin', row.origin);
     const { document, sha256 } = await download(row.spec_url, { followRedirects: row.spec_url.startsWith('https://api.apis.guru/') });
     const normalized = normalizeOpenApi(document);
     if (!normalized) throw new Error('no longer an OpenAPI description');

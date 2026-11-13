@@ -123,11 +123,15 @@ function argsOf(tokens: Token[], open: number, close: number): Arg[] {
     else if (first.t === 'name' && tokens[start + 1]?.t === 'op' && tokens[start + 1].v === '=' ) args.push({ name: first.v, from: start + 2, to: end });
     else args.push({ from: start, to: end });
   };
+  // Nested brackets are skipped via their matched partner, so each token is
+  // visited by exactly one enclosing call and the whole file stays linear.
   for (let k = open + 1; k < close; k++) {
     const v = tokens[k].t === 'op' ? tokens[k].v : '';
+    if ((v === '(' || v === '[' || v === '{') && partner[k] > k && partner[k] < close) { k = partner[k]; continue; }
     if (v === '(' || v === '[' || v === '{') depth++;
     else if (v === ')' || v === ']' || v === '}') depth--;
     else if (v === ',' && depth === 0) { push(k); start = k + 1; }
+    if (args.length >= 50) break;
   }
   push(close);
   return args.slice(0, 50);
@@ -347,6 +351,7 @@ export function parsePythonCalls(file: string, source: string): ApiCall[] {
     if (tokens[k].t !== 'op' || tokens[k].v !== '(' || tokens[k - 1].t !== 'name') continue;
     const chain = chainBefore(tokens, k - 1);
     if (!chain) continue;
+    if (!clients.has(chain.root) && !modules.has(chain.root)) continue;
     const close = closing(tokens, k);
     if (close < 0) continue;
     const args = argsOf(tokens, k, close);
