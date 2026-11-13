@@ -267,3 +267,10 @@ test('a request built in a variable yields likely fields and a medium-confidence
   assert.notEqual(finding.confidence, 'high');
   assert.match(finding.evidence.staticChecks.join(' '), /built in a variable/);
 });
+
+test('credentials written into request headers are never kept', () => {
+  const [call] = parseApiCalls('src/a.ts', "export const go = () => fetch('https://api.github.com/user', { headers: { Authorization: 'Bearer ghp_abcdefghijklmnop', 'X-GitHub-Api-Version': '2022-11-28', 'X-Api-Key': 'k_123', Cookie: 'session=1', Accept: 'application/vnd.github+json' } });\n");
+  assert.deepEqual(call.headers, { 'x-github-api-version': '2022-11-28', accept: 'application/vnd.github+json' });
+  const [py] = parseApiCalls('a.py', 'import requests\nrequests.get("https://api.example.com/x", headers={"Authorization": "Bearer sk_live_123", "Api-Version": "2"})\n');
+  assert.deepEqual(py.headers, { 'api-version': '2' });
+});

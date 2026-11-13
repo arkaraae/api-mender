@@ -39,7 +39,22 @@ export function isScannableSource(path: string, source: string): boolean {
 // provider SDKs, and Python files. Shares that parser's bounds.
 export function parseApiCalls(file: string, source: string, shared?: SharedClients): ApiCall[] {
   // One unreadable file never fails the whole scan.
-  try { return parseFile(file, source, shared); } catch { return []; }
+  let calls: ApiCall[];
+  try { calls = parseFile(file, source, shared); } catch { return []; }
+  return calls.map(call => (call.headers ? { ...call, headers: keptHeaders(call.headers) } : call));
+}
+
+// Headers Mend needs: API version pins and content types. Anything else a
+// call sets literally (Authorization, API keys, cookies) is dropped here,
+// before a scan result can be stored or reported anywhere.
+const keptHeaderName = /^(accept|content-type|[a-z0-9-]*-version|openai-beta)$/;
+const secretLooking = /(bearer\s|basic\s|sk_|rk_|pk_live|ghp_|gho_|github_pat_|xox[abpr]-|eyJ[A-Za-z0-9_-]{10,})/i;
+export function keptHeaders(headers: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (keptHeaderName.test(name) && value.length <= 200 && !secretLooking.test(value)) kept[name] = value;
+  }
+  return kept;
 }
 
 function parseFile(file: string, source: string, shared?: SharedClients): ApiCall[] {
