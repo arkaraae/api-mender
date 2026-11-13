@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { authenticatedEditor } from '@/lib/github-onboarding';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { recordApiHosts } from '@/lib/api-hosts';
 import { scanPublicRepository } from '@/lib/public-scan';
@@ -14,10 +16,14 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
   const { data: identity, error: authError } = await supabase.auth.getUser(token);
   if (authError || !identity.user) return NextResponse.json({ error: 'Session expired' }, { status: 401 });
+  const limited = await rateLimit(backendAdmin(env), limits.publicScan, identity.user.id);
+  if (limited) return limited;
   const body = await request.json().catch(() => null) as { repositoryId?: unknown } | null;
   if (typeof body?.repositoryId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.repositoryId)) return NextResponse.json({ error: 'Invalid repository' }, { status: 400 });
-  const { data: repository, error: lookupError } = await supabase.from('monitored_repositories').select('id,full_name,branch,visibility,paused,github_installation_id').eq('id', body.repositoryId).single();
+  const { data: repository, error: lookupError } = await supabase.from('monitored_repositories').select('id,workspace_id,full_name,branch,visibility,paused,github_installation_id').eq('id', body.repositoryId).single();
   if (lookupError || !repository) return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
+  // Viewers can read a repository but not trigger scans that write results.
+  if (!await authenticatedEditor(request, repository.workspace_id)) return NextResponse.json({ error: 'Workspace editor sign-in required' }, { status: 403 });
   if (repository.paused || repository.visibility !== 'public' || repository.github_installation_id) return NextResponse.json({ error: 'This repository is scanned through its GitHub installation' }, { status: 409 });
   try {
     const result = await scanPublicRepository(repository.full_name, repository.branch);

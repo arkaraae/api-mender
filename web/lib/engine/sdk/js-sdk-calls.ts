@@ -12,7 +12,7 @@
 // scanned file exports). The method chain is looked up in tables generated
 // from the SDK sources; unknown chains are not guessed. Repository content is
 // parsed, never run.
-import { parse } from '@babel/parser';
+import { parseModule } from '../parse.ts';
 import type { ApiCall, ProviderAdapter } from '../types.ts';
 import { getProvider } from '../providers/registry.ts';
 import { sdkMethods, type SdkMethod } from './methods.generated.ts';
@@ -205,6 +205,34 @@ const lookup = (table: Record<string, SdkMethod[]>, key: string) => (Object.hasO
 
 const pascal = (name: string) => name.replace(/_+$/, '').replace(/(^|_)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
 
+// Clients that reach a call some other way (a function parameter typed with
+// the SDK, `context.octokit` in Probot apps, a wrapper class) are recognised
+// only by unmistakable shapes: Octokit's `.rest.` namespace or a step named
+// `octokit`, or a client named after its provider (`stripe`, `openai`), and
+// always with a method chain the SDK really has.
+// Returns the client and how many leading chain steps belong to reaching it
+// (`octokit` in context.octokit.pulls.get).
+function inferredClient(found: { root: string; steps: string[] }, notClients: Set<string>): { client: Client; skip: number } | null {
+  if (notClients.has(found.root)) return null;
+  const github = sdks.find(item => item.provider === 'github-rest')!;
+  const steps = found.steps;
+  const rootName = found.root.replace(/^this\./, '');
+  const client = (sdk: Sdk) => ({ sdk, headers: {}, headersComplete: false });
+  const restAt = steps.indexOf('rest');
+  if (restAt >= 0 && lookup(github.methods, steps.slice(restAt + 1).join('.'))) return { client: client(github), skip: restAt };
+  const octokitAt = rootName.toLowerCase() === 'octokit' ? -1 : steps.findIndex(step => step.toLowerCase() === 'octokit');
+  if (rootName.toLowerCase() === 'octokit' || octokitAt >= 0) {
+    const rest = steps.slice(octokitAt + 1);
+    const chain = (rest[0] === 'rest' ? rest.slice(1) : rest).join('.');
+    if (lookup(github.methods, chain) || chain === 'request' || chain === 'paginate') return { client: client(github), skip: octokitAt + 1 };
+  }
+  for (const [pattern, providerId] of [[/^stripe(client)?$/i, 'stripe'], [/^openai(client)?$/i, 'openai']] as const) {
+    const sdk = sdks.find(item => item.provider === providerId)!;
+    if (pattern.test(rootName) && lookup(sdk.methods, steps.join('.').replace(sdk.prefixes ?? /^$/, ''))) return { client: client(sdk), skip: 0 };
+  }
+  return null;
+}
+
 export type SdkCallDescription = {
   provider: ProviderAdapter;
   node: Node;
@@ -218,7 +246,11 @@ export type SdkCallDescription = {
   headersComplete: boolean;
 };
 
-type Context = { bindings: Map<string, Binding>; clients: Map<string, Client> };
+// notClients: names bound in this file to something that is not an SDK client
+// (an object or array literal, a function, a class), never inferred as one.
+type Context = { bindings: Map<string, Binding>; clients: Map<string, Client>; notClients: Set<string> };
+const plainValue = new Set(['ObjectExpression', 'ArrayExpression', 'ArrowFunctionExpression', 'FunctionExpression', 'ClassExpression',
+  'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'TemplateLiteral']);
 
 /**
  * Bindings and clients for one parsed file. `nodes` is every node of the
@@ -227,6 +259,11 @@ type Context = { bindings: Map<string, Binding>; clients: Map<string, Client> };
 export function sdkContext(file: string, nodes: Node[], shared?: SharedClients, assumed?: { root: string; providerId: string }): Context {
   const bindings = packageBindings(nodes);
   const clients = new Map<string, Client>();
+  const notClients = new Set<string>();
+  for (const node of nodes) {
+    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' && plainValue.has(unwrap(node.init)?.type ?? '')) notClients.add(node.id.name);
+    if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id?.type === 'Identifier') notClients.add(node.id.name);
+  }
   // A client a finding already attributed (built in another file).
   const assumedSdk = assumed && sdks.find(item => item.provider === assumed.providerId);
   if (assumed && assumedSdk && /^(this\.)?[A-Za-z_$][\w$]*$/.test(assumed.root)) clients.set(assumed.root, { sdk: assumedSdk, headers: {}, headersComplete: false });
@@ -249,7 +286,8 @@ export function sdkContext(file: string, nodes: Node[], shared?: SharedClients, 
   if (shared?.size) {
     for (const node of nodes) {
       if (node.type !== 'ImportDeclaration') continue;
-      const exports = shared.get(resolveModule(file, literal(node.source) ?? '') ?? '');
+      const specifier = literal(node.source) ?? '';
+      const exports = shared.get(resolveModule(file, specifier) ?? '') ?? aliasedModule(shared, specifier);
       if (!exports) continue;
       for (const spec of node.specifiers || []) {
         const name = spec.type === 'ImportDefaultSpecifier' ? 'default' : spec.imported?.name;
@@ -260,7 +298,8 @@ export function sdkContext(file: string, nodes: Node[], shared?: SharedClients, 
       }
     }
   }
-  return { bindings, clients };
+  for (const name of clients.keys()) notClients.delete(name);
+  return { bindings, clients, notClients };
 }
 
 /** Clients this file exports (`export const stripe = new Stripe(...)`, `export default new OpenAI()`). */
@@ -305,6 +344,20 @@ export function resolveModule(file: string, specifier: string): string | null {
   return parts.join('/').replace(/\.[cm]?[jt]sx?$/, '').replace(/\/index$/, '');
 }
 
+/**
+ * Project aliases such as '@/utils/stripe/config' or '~/lib/openai' (Next.js,
+ * Vite, Nuxt): matched against exported clients at the project root or under
+ * src/, app/ or lib/, when exactly one module fits.
+ */
+export function aliasedModule(shared: SharedClients, specifier: string): Map<string, string> | undefined {
+  const match = /^(?:@|~|#)\/(.+)$/.exec(specifier);
+  if (!match) return undefined;
+  const rest = match[1].replace(/\.[cm]?[jt]sx?$/, '').replace(/\/index$/, '');
+  if (rest.split('/').some(part => part === '..' || part === '.')) return undefined;
+  const hits = [rest, `src/${rest}`, `app/${rest}`, `lib/${rest}`].map(key => shared.get(key)).filter(Boolean);
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
 export function moduleKey(file: string): string {
   return file.replace(/\.[cm]?[jt]sx?$/, '').replace(/\/index$/, '');
 }
@@ -314,8 +367,13 @@ export function describeSdkCall(node: Node, context: Context): SdkCallDescriptio
   if (node.type !== 'CallExpression' && node.type !== 'OptionalCallExpression') return null;
   const found = chainOf(node.callee);
   if (!found || !found.steps.length) return null;
-  const client = context.clients.get(found.root);
-  if (!client) return null;
+  let client = context.clients.get(found.root);
+  if (!client) {
+    const inferred = inferredClient(found, context.notClients);
+    if (!inferred) return null;
+    client = inferred.client;
+    found.steps = found.steps.slice(inferred.skip);
+  }
   const { sdk } = client;
   const provider = getProvider(sdk.provider);
   if (!provider) return null;
@@ -375,8 +433,42 @@ export function describeSdkCall(node: Node, context: Context): SdkCallDescriptio
   return { provider, node, chain, endpoint: fullEndpoint, params, ignoredKeys: [...pathKeys, ...(sdk.optionKeys ?? [])], headers, headersComplete };
 }
 
+const functionTypes = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ClassMethod', 'ObjectMethod', 'ClassPrivateMethod']);
+
+/**
+ * Keys a request variable may carry: object literals assigned to it, and
+ * `name.key = …` assignments, inside the function that makes the call.
+ */
+export function tracedRequestKeys(nodes: Node[], call: Node, name: string): string[] {
+  const at = (node: Node) => [node.start as number, node.end as number];
+  const [callStart, callEnd] = at(call);
+  let scope: Node | null = null;
+  for (const node of nodes) {
+    if (!functionTypes.has(node.type ?? '')) continue;
+    const [start, end] = at(node);
+    if (start <= callStart && end >= callEnd && (!scope || end - start < (scope.end as number) - (scope.start as number))) scope = node;
+  }
+  const [low, high] = scope ? at(scope) : [0, Infinity];
+  const keys = new Set<string>();
+  const addObject = (value: Node | undefined) => {
+    const object = unwrap(value);
+    if (object?.type !== 'ObjectExpression') return;
+    for (const property of object.properties as Node[]) { const key = keyOf(property); if (key) keys.add(key); }
+  };
+  for (const node of nodes) {
+    if (keys.size >= 100 || (node.start as number) < low || (node.end as number) > high) continue;
+    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' && node.id.name === name) addObject(node.init);
+    if (node.type === 'AssignmentExpression' && node.operator === '=') {
+      if (node.left?.type === 'Identifier' && node.left.name === name) addObject(node.right);
+      if (node.left?.type === 'MemberExpression' && !node.left.computed && unwrap(node.left.object)?.type === 'Identifier'
+        && unwrap(node.left.object)?.name === name && node.left.property?.type === 'Identifier') keys.add(node.left.property.name);
+    }
+  }
+  return [...keys];
+}
+
 /** The ApiCall for a described SDK call. */
-export function sdkApiCall(file: string, root: string, described: SdkCallDescription): ApiCall | null {
+export function sdkApiCall(file: string, root: string, described: SdkCallDescription, nodes?: Node[]): ApiCall | null {
   const line = described.node.loc?.start?.line;
   const endLine = described.node.loc?.end?.line;
   if (typeof line !== 'number') return null;
@@ -390,7 +482,12 @@ export function sdkApiCall(file: string, root: string, described: SdkCallDescrip
       if (described.ignoredKeys.includes(name)) continue;
       fields.push(described.provider.fieldCase === 'pascal' ? pascal(name) : name);
     }
-  } else if (params) fieldsComplete = false;
+  } else if (params) {
+    fieldsComplete = false;
+    // A request built in a variable: its likely keys, never claimed complete.
+    if (params.type === 'Identifier' && nodes) fields = tracedRequestKeys(nodes, described.node, params.name)
+      .filter(name => !described.ignoredKeys.includes(name)).map(name => (described.provider.fieldCase === 'pascal' ? pascal(name) : name));
+  }
   fields = [...new Set(fields)].slice(0, 100);
   const origin = described.provider.origins[0];
   return {
@@ -407,14 +504,15 @@ export function sdkApiCall(file: string, root: string, described: SdkCallDescrip
 /** Every recognised SDK call in a parsed file. */
 export function sdkCallsIn(file: string, nodes: Node[], shared?: SharedClients): ApiCall[] {
   const context = sdkContext(file, nodes, shared);
-  if (!context.clients.size) return [];
+  const inferable = nodes.length < 60_000;
+  if (!context.clients.size && !inferable) return [];
   const calls: ApiCall[] = [];
   for (const node of nodes) {
     if (calls.length >= 200) break;
     const described = describeSdkCall(node, context);
     if (!described) continue;
     const root = chainOf(node.callee)?.root ?? 'client';
-    const call = sdkApiCall(file, root, described);
+    const call = sdkApiCall(file, root, described, nodes);
     if (call) calls.push(call);
   }
   return calls;
@@ -423,7 +521,7 @@ export function sdkCallsIn(file: string, nodes: Node[], shared?: SharedClients):
 /** Every node of a JS/TS file (bounded), or null when it does not parse. */
 export function parseNodes(source: string): Node[] | null {
   let syntax: Node;
-  try { syntax = parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'], errorRecovery: false }) as Node; }
+  try { syntax = parseModule(source, { errorRecovery: false }) as Node; }
   catch { return null; }
   const nodes: Node[] = [];
   const stack: Node[] = [syntax];
@@ -440,11 +538,13 @@ export function parseNodes(source: string): Node[] | null {
   return nodes;
 }
 
-const relativeImport = /(from\s*|require\s*\(\s*|import\s*\(\s*)['"]\.\.?\//;
+// Text a shape-recognised client call needs (see inferredClient).
+const inferableShape = /\.rest\.[a-z]|\boctokit\b|\bstripe(Client)?\.[a-z]|\bopenai(Client)?\.[a-z]/i;
+const relativeImport = /(from\s*|require\s*\(\s*|import\s*\(\s*)['"](\.\.?|@|~|#)\//;
 
 /** SDK calls in one JS/TS file's source. */
 export function parseSdkCalls(file: string, source: string, shared?: SharedClients): ApiCall[] {
-  if (!mentionsSdk(source) && !(shared?.size && relativeImport.test(source))) return [];
+  if (!mentionsSdk(source) && !(shared?.size && relativeImport.test(source)) && !inferableShape.test(source)) return [];
   const nodes = parseNodes(source);
   return nodes ? sdkCallsIn(file, nodes, shared) : [];
 }

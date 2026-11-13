@@ -135,8 +135,16 @@ test('a provider repair is re-derived from the pinned file and re-checked before
   const owned = await loadProviderRepairContext(fakeDatabase({ ...catalog(),
     findings: [{ ...findingRow, workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
     monitored_repositories: [{ id: 'repo-1', workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', full_name: 'acme/checkout', branch: 'main',
-      github_repo_id: 1, github_installation_id: 2, head_sha: HEAD, target_sha: HEAD, paused: false }] }),
+      github_repo_id: 1, github_installation_id: 2, head_sha: HEAD, target_sha: HEAD, paused: false }],
+    github_installations: [{ installation_id: 2, workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', suspended_at: null }] }),
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', findingRow.id);
+  // A repository moved into another workspace cannot use an installation that workspace does not own.
+  await assert.rejects(loadProviderRepairContext(fakeDatabase({ ...catalog(),
+    findings: [{ ...findingRow, workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+    monitored_repositories: [{ id: 'repo-1', workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', full_name: 'acme/checkout', branch: 'main',
+      github_repo_id: 1, github_installation_id: 2, head_sha: HEAD, target_sha: HEAD, paused: false }],
+    github_installations: [{ installation_id: 2, workspace_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', suspended_at: null }] }),
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', findingRow.id), error => error instanceof RepairConflict && /installation/.test(error.message));
   assert.deepEqual(owned.contract.removed, ['assignee']);
   assert.ok(owned.contract.acceptedProperties.includes('assignees'));
   assert.ok(!owned.contract.acceptedProperties.includes('assignee'));

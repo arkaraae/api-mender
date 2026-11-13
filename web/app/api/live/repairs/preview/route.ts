@@ -1,4 +1,6 @@
 import { env } from 'cloudflare:workers';
+import { installationBelongsTo } from '@/lib/installation-guard';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { proposeRequestFieldRepair, repairCandidateProposals } from '@/lib/request-repair';
@@ -19,6 +21,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid repair request' }, { status: 400, headers: noStore });
   const identity = await authenticatedEditor(request, body.workspaceId);
   if (!identity) return Response.json({ error: 'Workspace editor sign-in required' }, { status: 403, headers: noStore });
+  const limited = await rateLimit(onboardingDatabase(), limits.modelRepair, identity.user.id);
+  if (limited) return limited;
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY)
     return Response.json({ error: 'GitHub scanning is not configured' }, { status: 503, headers: noStore });
   const database = onboardingDatabase();
@@ -42,6 +46,8 @@ export async function POST(request: Request) {
     || !repository.github_repo_id || !repository.head_sha || repository.head_sha !== repository.target_sha
     || finding.base_sha !== repository.head_sha)
     return Response.json({ error: 'The consumer scan is stale; scan the current commit first' }, { status: 409, headers: noStore });
+  if (!await installationBelongsTo(database, repository.github_installation_id, body.workspaceId))
+    return Response.json({ error: 'GitHub installation is unavailable' }, { status: 409, headers: noStore });
   const { data: source, error: sourceError } = await database.from('api_contract_sources')
     .select('id,workspace_id,repository_id,paused').eq('id', evidence.sourceId)
     .eq('workspace_id', body.workspaceId).maybeSingle();

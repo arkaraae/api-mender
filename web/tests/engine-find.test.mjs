@@ -262,15 +262,15 @@ test('headers are complete only when every name and value is literal', () => {
   assert.deepEqual(read(''), [{}, true]);
   assert.deepEqual(read(", { method: 'GET' }"), [{}, true]);
   assert.deepEqual(read(", { headers: { Accept: 'a/b', 'X-GitHub-Api-Version': `2026-03-10` } }"), [{ accept: 'a/b', 'x-github-api-version': '2026-03-10' }, true]);
-  assert.deepEqual(read(', { headers: { accept: kind, b: "1" } }'), [{ b: '1' }, false]);
+  assert.deepEqual(read(', { headers: { accept: kind, "api-version": "1" } }'), [{ 'api-version': '1' }, false]);
   assert.deepEqual(read(", { headers: { 'x-github-api-version': '2022-11-28', ...extra } }"), [undefined, false], 'a spread may override any header');
   assert.deepEqual(read(", { headers: { [name]: '1' } }"), [undefined, false]);
   assert.deepEqual(read(', { headers }'), [undefined, false]);
   assert.deepEqual(read(', { headers: new Headers({ a: "1" }) }'), [undefined, false]);
-  assert.deepEqual(read(", { headers: { 'X-V': '1', 'x-v': '2', ok: 'yes' } }"), [{ ok: 'yes' }, false], 'names differing only in case are sent combined');
+  assert.deepEqual(read(", { headers: { 'X-V': '1', 'x-v': '2', 'content-type': 'yes' } }"), [{ 'content-type': 'yes' }, false], 'names differing only in case are sent combined');
   assert.deepEqual(read(", { headers: { 'bad name': '1' } }"), [{}, false]);
   const [proto] = parseApiCalls('a.js', "fetch('https://api.github.com/user', { headers: { '__proto__': 'x', constructor: 'y' } })");
-  assert.deepEqual(Object.keys(proto.headers).sort(), ['__proto__', 'constructor']);
+  assert.deepEqual(Object.keys(proto.headers), [], 'only version and content headers are kept');
   assert.equal(Object.getPrototypeOf(proto.headers), Object.prototype);
 
   const [axiosCall] = parseApiCalls('a.js', "axios.post('https://api.github.com/user/repos', data, { headers: { 'X-GitHub-Api-Version': '2022-11-28' } })");

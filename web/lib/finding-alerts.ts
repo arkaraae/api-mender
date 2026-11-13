@@ -8,13 +8,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { installationToken } from './github-app.ts';
 import { openSecret } from './secret-box.ts';
+import { installationBelongsTo } from './installation-guard.ts';
 
 export type AlertsConfig = { MENDER_SETTINGS_KEY?: string; GITHUB_APP_ID?: string; GITHUB_APP_PRIVATE_KEY?: string; SITE_ORIGIN?: string };
 type Settings = { workspace_id: string; slack_webhook_ciphertext: string | null; github_issues: boolean; min_severity: string; alerts_since: string };
 type FindingRow = { id: string; workspace_id: string; repository_id: string | null; title: string; description: string | null;
   severity: string; status: string; created_at: string; dismissed_at: string | null; evidence: { codeUrl?: unknown } | null };
 type Channel = 'slack' | 'github-issue';
-type Deps = { fetcher?: typeof fetch; token?: (installationId: number, repository: string) => Promise<string>; now?: number };
+type Deps = { fetcher?: typeof fetch; token?: (installationId: number, repository: number) => Promise<string>; now?: number };
 
 const rank: Record<string, number> = { low: 0, informational: 0, medium: 1, high: 2, critical: 3 };
 const maxSendsPerRun = 30;
@@ -65,7 +66,7 @@ export async function dispatchFindingAlerts(database: SupabaseClient, config: Al
   const settings = new Map((settingsRows ?? []).map((row: Settings) => [row.workspace_id, row]));
   const repositoryIds = [...new Set(findings.map(finding => finding.repository_id).filter((id): id is string => !!id))];
   const { data: repositories } = repositoryIds.length
-    ? await database.from('monitored_repositories').select('id,full_name,github_installation_id').in('id', repositoryIds)
+    ? await database.from('monitored_repositories').select('id,workspace_id,full_name,github_installation_id,github_repo_id').in('id', repositoryIds)
     : { data: [] };
   const repositoryOf = new Map((repositories ?? []).map(row => [row.id, row]));
 
@@ -103,16 +104,19 @@ export async function dispatchFindingAlerts(database: SupabaseClient, config: Al
       }
     }
     if (setting.github_issues && budget > 0 && await claim(finding, 'github-issue')) {
-      if (!repository?.github_installation_id || !config.GITHUB_APP_ID || !config.GITHUB_APP_PRIVATE_KEY) {
+      // The issue goes to the repository by its GitHub id (names can change), through
+      // an installation that belongs to this workspace.
+      if (!repository?.github_installation_id || !repository.github_repo_id || !config.GITHUB_APP_ID || !config.GITHUB_APP_PRIVATE_KEY
+        || !(deps.token || await installationBelongsTo(database, repository.github_installation_id, finding.workspace_id))) {
         await record(finding, 'github-issue', 'skipped', 'The repository is not connected through the GitHub App', null);
         continue;
       }
       budget--;
       try {
-        const [, name] = repository.full_name.split('/');
-        const token = deps.token ? await deps.token(repository.github_installation_id, name)
-          : await installationToken({ appId: config.GITHUB_APP_ID, privateKey: config.GITHUB_APP_PRIVATE_KEY }, repository.github_installation_id, name, 'issue-write');
-        const response = await fetcher(`https://api.github.com/repos/${repository.full_name.split('/').map(encodeURIComponent).join('/')}/issues`, {
+        const repoId = Number(repository.github_repo_id);
+        const token = deps.token ? await deps.token(repository.github_installation_id, repoId)
+          : await installationToken({ appId: config.GITHUB_APP_ID, privateKey: config.GITHUB_APP_PRIVATE_KEY }, repository.github_installation_id, repoId, 'issue-write');
+        const response = await fetcher(`https://api.github.com/repositories/${repoId}/issues`, {
           method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
           headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'api-mender-site',
             authorization: `Bearer ${token}`, 'content-type': 'application/json' },

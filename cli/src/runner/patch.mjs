@@ -160,7 +160,7 @@ export async function assertRegularFileInTree(root, file) {
 
 function git(args, { cwd, env, input }) {
   return new Promise((resolve) => {
-    const child = spawn('git', args, { cwd, env, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd, env, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
     let stderr = '';
     const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
     child.stderr.on('data', (c) => {

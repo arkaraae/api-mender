@@ -14,10 +14,13 @@ jobs:
   mend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+          # The write token is not left in .git/config for npm install and the
+          # scripts; only the final step uses it, explicitly.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
@@ -29,7 +32,7 @@ jobs:
         run: node scripts/testbed-quotes-ci.mjs
       - name: Save Mender evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: quotes-mender-${{ github.sha }}
           path: |
@@ -54,7 +57,7 @@ jobs:
           git config user.email 'api-mender[bot]@users.noreply.github.com'
           git add testbed/quotes-consumer/src/client.mjs testbed/quotes-api/mender-status.json
           git commit -m 'Fix Quotes consumer for accountId contract'
-          git push origin "$branch"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "$branch"
           if ! gh pr create --base main --head "$branch" --title 'Fix Quotes consumer for accountId contract' --body-file artifacts/quotes-pr.md; then
             echo "The validated fix branch was pushed. GitHub Actions could not create a pull request; open one from $branch or enable Actions pull request creation in this repository's settings." >> "$GITHUB_STEP_SUMMARY"
           fi

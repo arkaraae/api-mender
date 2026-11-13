@@ -10,7 +10,8 @@
 // on this machine. The only thing that can leave is the metadata report from
 // web/lib/engine/boundary.ts, and only when both the repository config and
 // the operator's flag allow it.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   buildMetadataReport, contractEndpoint, discoverApiUsage, findProviderImpact, getProvider, listOperations, listProviders,
@@ -23,14 +24,38 @@ import { runValidation } from './runner/index.mjs';
 
 export const CLI_VERSION = '0.1.0';
 
-async function prepareOut(dir) {
-  await mkdir(path.join(dir, 'patches'), { recursive: true, mode: 0o700 });
-  await mkdir(path.join(dir, 'logs'), { recursive: true, mode: 0o700 });
-  // Keep results out of git (and out of the runner's copy of the tree).
-  await writeFile(path.join(dir, '.gitignore'), '*\n');
+// The default output folder sits inside the repository, so the repository
+// could plant a symlink there (.mender -> ~/.ssh, .mender/report.json ->
+// ~/.bashrc). Every directory is checked with lstat after it is made, and
+// files are written to a fresh exclusive temp name and renamed into place:
+// O_EXCL never follows a link, and rename replaces the link itself.
+async function realDirectory(dir) {
+  const info = await lstat(dir);
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new Error(`refusing to write into ${dir}: it is a symlink or not a directory`);
 }
 
-const write = (file, value) => writeFile(file, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+export async function prepareOut(dir) {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await realDirectory(dir);
+  for (const sub of ['patches', 'logs']) {
+    await mkdir(path.join(dir, sub), { recursive: true, mode: 0o700 });
+    await realDirectory(path.join(dir, sub));
+  }
+  // Keep results out of git (and out of the runner's copy of the tree).
+  await write(path.join(dir, '.gitignore'), '*\n');
+}
+
+export async function write(file, value) {
+  await realDirectory(path.dirname(file));
+  const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await writeFile(temp, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    await rename(temp, file);
+  } catch (error) {
+    await rm(temp, { force: true });
+    throw error;
+  }
+}
 
 /**
  * Model settings: flags, then environment, then the repository config. The

@@ -196,3 +196,8 @@
   .entry-nav .entry-nav-cta,.entry-primary,.entry-secondary,.login-primary,.login-provider,.entry-primary svg,.entry-secondary svg,.entry-nav .entry-nav-cta svg,.login-primary svg:last-child,.login-provider svg:last-child{transition:none}
   .entry-nav .entry-nav-cta:hover,.entry-primary:hover,.entry-secondary:hover,.login-primary:hover,.login-provider:hover,.entry-primary:hover svg,.entry-secondary:hover svg,.entry-nav .entry-nav-cta:hover svg,.login-primary:hover svg:last-child,.login-provider:hover svg:last-child{transform:none}
 }
+/* Homepage additions: pricing link in the nav, the agents card, legal page dates. */
+.entry-nav a.entry-nav-link{display:inline-flex;align-items:center;padding:8px 0;color:#c5cedb;font-size:13px;text-decoration:none}.entry-nav a.entry-nav-link:hover{color:#fff}
+.entry-agents{padding-top:0}
+.entry-agents .entry-gateway-row code{font-size:12px;white-space:normal;word-break:break-word;text-align:left}
+.entry-info-updated{display:inline-block;margin-top:14px;color:#9aa6b6;font-size:12px}

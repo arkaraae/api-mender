@@ -1,7 +1,7 @@
 import { repositoryLimitMessage } from '@/lib/billing';
 import { env } from 'cloudflare:workers';
 import { authenticatedEditor, githubConfiguration, githubHeaders, githubJson, onboardingDatabase, sha256, statePattern } from '@/lib/github-onboarding';
-import { matchingInstallation, validAccessibleRepositories } from '@/lib/github-onboarding-policy';
+import { matchingInstallation, canConnectRepositories, validAccessibleRepositories } from '@/lib/github-onboarding-policy';
 import { removedConnectedRepositoryIds } from '@/lib/github-installation-reconciliation';
 
 import type { VerifiedInstallation as Installation, AccessibleRepository as Repository } from '@/lib/github-onboarding-policy';
@@ -66,6 +66,11 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Select 25 or fewer repositories in the GitHub installation, then reconnect' }, { status: 400 });
     if (!validAccessibleRepositories(repositories, repoResponse.total_count || 0))
       throw new Error('GitHub returned invalid repository metadata');
+    // Connecting binds the installation to this workspace and lets Mend open
+    // branches and draft PRs, so the person connecting must be able to write to
+    // every selected repository and administer at least one (security review 2026-11-13).
+    if (!canConnectRepositories(repositories))
+      return Response.json({ error: 'Connect with a GitHub account that has admin access to these repositories' }, { status: 403 });
     stage = 'repository sync';
     const { data: existing, error: existingError } = await database.from('github_installations')
       .select('workspace_id').eq('installation_id', selected.id).maybeSingle();

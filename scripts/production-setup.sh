@@ -59,7 +59,7 @@ else
   echo "They are on your clipboard and the PRODUCTION SQL editor is opening."
   echo "Paste (⌘V), click Run, and check it says Success."
   printf 'Press Return when it has run… '; read -r _
-  for table in workspaces findings monitored_repositories repair_jobs provider_contract_versions cli_reports workspace_alert_settings workspace_billing api_hosts; do
+  for table in workspaces findings monitored_repositories repair_jobs provider_contract_versions cli_reports workspace_alert_settings workspace_billing api_hosts api_rate_limits; do
     code="$(probe "$table?select=*&limit=1")"
     [[ "$code" == 200 ]] || die "$table is missing (HTTP $code); the SQL did not fully apply. Re-run this script to see what is left."
   done

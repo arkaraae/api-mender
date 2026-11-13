@@ -1,4 +1,4 @@
-import { parse } from '@babel/parser';
+import { parseModule } from './engine/parse.ts';
 
 export type HttpCallSite = {
   file: string; line: number; symbol: string; endpoint: string; origin: string;
@@ -272,7 +272,7 @@ export function parseHttpCallDetails(file: string, source: string): HttpCallDeta
 
 function collectCalls(file: string, source: string, templates: boolean): HttpCallDetail[] {
   let syntax: Node;
-  try { syntax = parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'] }) as Node; }
+  try { syntax = parseModule(source) as Node; }
   catch { return []; }
   // Two passes over the same bounded node list: bindings first (a constant
   // may be declared after the function that uses it), then calls.

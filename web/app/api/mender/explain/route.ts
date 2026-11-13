@@ -3,11 +3,14 @@
 //   POST { "pairs": [{ "old": {...}, "new": {...} }] } → rules and notes from real records
 // Large descriptions are better checked in the browser at /check, which runs the same engine.
 import { explain } from '@/lib/mender-site';
+import { readBoundedBody } from '@/lib/github-app';
 
 const LIMIT = 1_000_000;
 
 export async function POST(request: Request) {
-  const text = await request.text();
+  let text: string;
+  try { text = new TextDecoder().decode(await readBoundedBody(request, LIMIT)); }
+  catch { return Response.json({ error: 'Send at most 1 MB here. Larger descriptions can be checked at /check.' }, { status: 413 }); }
   if (text.length > LIMIT) return Response.json({ error: 'Send at most 1 MB here. Larger descriptions can be checked at /check.' }, { status: 413 });
   let input: unknown;
   try { input = JSON.parse(text); } catch { return Response.json({ error: 'The body must be JSON.' }, { status: 400 }); }

@@ -1,4 +1,6 @@
 import { env } from 'cloudflare:workers';
+import { installationBelongsTo } from '@/lib/installation-guard';
+import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
 import { proposeRequestFieldRepair } from '@/lib/request-repair';
@@ -25,7 +27,10 @@ export async function POST(request: Request) {
   if (!body || Object.keys(body).sort().join(',') !== 'jobId,workspaceId'
     || typeof body.workspaceId !== 'string' || !uuid.test(body.workspaceId)
     || typeof body.jobId !== 'string' || !uuid.test(body.jobId)) return reply(400, 'Invalid repair job');
-  if (!await authenticatedEditor(request, body.workspaceId)) return reply(403, 'Workspace editor sign-in required');
+  const identity = await authenticatedEditor(request, body.workspaceId);
+  if (!identity) return reply(403, 'Workspace editor sign-in required');
+  const limited = await rateLimit(onboardingDatabase(), limits.publish, identity.user.id);
+  if (limited) return limited;
   if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY) return reply(503, 'GitHub App is not configured');
   const database = onboardingDatabase();
   const { data: job, error: jobError } = await database.from('repair_jobs')
@@ -69,6 +74,7 @@ export async function POST(request: Request) {
   if (repoError || !repository || repository.paused || !repository.github_repo_id
     || !repository.github_installation_id || repository.head_sha !== job.base_sha
     || repository.target_sha !== job.base_sha) return reply(409, 'Consumer repository must be rescanned');
+  if (!await installationBelongsTo(database, repository.github_installation_id, body.workspaceId)) return reply(409, 'GitHub installation is unavailable');
   const { data: source, error: sourceError } = await database.from('api_contract_sources')
     .select('id,repository_id,paused').eq('id', evidence.sourceId)
     .eq('workspace_id', body.workspaceId).maybeSingle();

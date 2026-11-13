@@ -143,7 +143,7 @@ test('GitHub issues are opened with an issues-only token, and skipped for reposi
   const database = fakeDatabase({
     workspace_alert_settings: [{ workspace_id: WS, slack_webhook_ciphertext: null, github_issues: true, min_severity: 'low', alerts_since: '2026-11-01T00:00:00Z' }],
     findings: [finding('f1', 'medium'), finding('f2', 'medium', '2026-11-10T12:00:00Z', { repository_id: 'r2' })], finding_notifications: [],
-    monitored_repositories: [{ id: 'r1', full_name: 'acme/checkout', github_installation_id: 42 }, { id: 'r2', full_name: 'acme/public', github_installation_id: null }],
+    monitored_repositories: [{ id: 'r1', full_name: 'acme/checkout', github_installation_id: 42, github_repo_id: 777 }, { id: 'r2', full_name: 'acme/public', github_installation_id: null }],
   });
   const requests = [];
   const tokens = [];
@@ -151,8 +151,8 @@ test('GitHub issues are opened with an issues-only token, and skipped for reposi
   const result = await dispatchFindingAlerts(database, { GITHUB_APP_ID: '1', GITHUB_APP_PRIVATE_KEY: 'k' },
     { fetcher, now: Date.parse('2026-11-10T15:00:00Z'), token: async (installation, repo) => { tokens.push([installation, repo]); return 'issue-token'; } });
   assert.deepEqual(result, { sent: 1, failed: 0 });
-  assert.deepEqual(tokens, [[42, 'checkout']]);
-  assert.equal(requests[0].url, 'https://api.github.com/repos/acme/checkout/issues');
+  assert.deepEqual(tokens, [[42, 777]]);
+  assert.equal(requests[0].url, 'https://api.github.com/repositories/777/issues');
   assert.equal(requests[0].init.headers.authorization, 'Bearer issue-token');
   assert.match(requests[0].body.title, /^\[Mend\] Request property/);
   assert.match(requests[0].body.body, /nothing is merged automatically/);

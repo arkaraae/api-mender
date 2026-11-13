@@ -1,4 +1,4 @@
-import { parse } from '@babel/parser';
+import { parseModule } from './engine/parse.ts';
 import { parseStaticHttpCalls } from './static-http-calls.ts';
 
 type Node = { type?: string; start?: number; end?: number; loc?: { start?: { line?: number } }; [key: string]: any };
@@ -102,7 +102,7 @@ export function proposeRequestFieldRepair(input: {
     || JSON.stringify(beforeMatches[0].fields) !== JSON.stringify(evidence.fields))
     throw new Error('Source no longer matches the pinned finding');
   let syntax: Node;
-  try { syntax = parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'] }) as Node; }
+  try { syntax = parseModule(source) as Node; }
   catch { throw new Error('Source could not be parsed'); }
   const stack: Node[] = [syntax];
   const bodies: Node[] = [];

@@ -40,6 +40,15 @@ export const HOSTED_AI_PROVIDER_DOMAINS: readonly string[] = [
   'gateway.ai.cloudflare.com', 'helicone.ai', 'portkey.ai', 'ai-gateway.vercel.sh',
   // Further hosted model APIs.
   'openai.azure.us', 'dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'moonshot.ai', 'moonshot.cn', 'bigmodel.cn',
+  'integrate.api.nvidia.com', 'api.nvcf.nvidia.com', 'build.nvidia.com',
+  'api.cloudflare.com', // Workers AI runs Cloudflare's hosted models
+  'ollama.com', // Ollama's cloud models (a self-run Ollama is localhost or a private host)
+  'studio.nebius.ai', 'studio.nebius.com', 'tokenfactory.nebius.com',
+  'minimax.io', 'minimaxi.com', 'minimax.chat',
+  'inference.baseten.co', // Baseten's shared model APIs
+  // Not listed on purpose: modal.run, runpod.ai and per-model baseten.co
+  // hosts serve the operator's own deployment of an open-weight model, which
+  // is the supported setup.
 ];
 
 /** Providers whose hostnames embed a region, so a suffix cannot name them. */

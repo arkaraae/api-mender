@@ -1,6 +1,6 @@
 // Read-only syntax helpers shared by the repair task builder and the policy
 // gates. Parsing never runs repository code.
-import { parse } from '@babel/parser';
+import { parseModule } from '../parse.ts';
 import { describeSdkCall, sdkContext } from '../sdk/js-sdk-calls.ts';
 
 export type Node = {
@@ -19,7 +19,7 @@ const PARAM = '__MENDER_PARAM__';
 
 /** Same parser options as the inventory, so both see the same syntax. Null when the source does not parse. */
 export function parseSource(source: string): Node | null {
-  try { return parse(source, { sourceType: 'unambiguous', plugins: ['typescript', 'jsx'] }) as Node; }
+  try { return parseModule(source) as Node; }
   catch { return null; }
 }
 

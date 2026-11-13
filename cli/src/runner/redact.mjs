@@ -36,7 +36,7 @@ const KEEP_PREFIX_PATTERNS = [
   // Credentials inside URLs: scheme://user:password@host
   /\b([a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+(?=@)/gi,
   // name = value, where the name looks like a credential.
-  /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*["']?)[^\s"',;]{6,}/gi,
+  /\b([A-Za-z0-9_.-]{0,64}(?:api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key)[A-Za-z0-9_.-]{0,64}["']?[ \t]{0,8}[:=][ \t]{0,8}["']?)[^\s"',;]{6,512}/gi,
 ];
 
 /**

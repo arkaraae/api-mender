@@ -74,7 +74,9 @@ test('only public https addresses of real API descriptions can be watched', asyn
   for (const url of ['http://api.example.com/openapi.json', 'https://localhost/openapi.json', 'https://10.0.0.1/openapi.json', 'https://name:pass@api.example.com/openapi.json', 'https://api.example.com:8443/openapi.json', 'not a url']) {
     await assert.rejects(createWatch(kv, { url }, { fetcher: host.fetch }));
   }
-  await assert.rejects(createWatch(kv, { url: URL_, webhook: 'http://hooks.example.com/x' }, { fetcher: host.fetch }), /webhook must start with https/);
+  await assert.rejects(createWatch(kv, { url: URL_, webhook: 'http://hooks.example.com/x' }, { fetcher: host.fetch }), /Slack incoming-webhook URL/);
+  // Only Slack and Discord webhooks: the Worker never relays posts to other hosts.
+  await assert.rejects(createWatch(kv, { url: URL_, webhook: 'https://internal-service.example/notify' }, { fetcher: host.fetch }), /Slack incoming-webhook URL/);
   const page = async () => new Response('<html>hello</html>');
   await assert.rejects(createWatch(kv, { url: 'https://example.com/' }, { fetcher: page }), /does not serve an OpenAPI or Swagger description/);
   assert.equal(kv.values.size, 0);

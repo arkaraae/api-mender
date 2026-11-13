@@ -5,14 +5,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { asApiCalls, processProviderFindings } from './provider-findings.ts';
 import { recordApiHosts } from './api-hosts.ts';
+import { installationBelongsTo } from './installation-guard.ts';
 
 export const RECHECK_BATCH = 200;
 
-type Repository = { id: string; workspace_id: string; full_name: string; head_sha: string | null; target_sha: string | null; call_sites: unknown };
+type Repository = { id: string; workspace_id: string; full_name: string; head_sha: string | null; target_sha: string | null; call_sites: unknown; github_installation_id?: number | null };
 
 export async function recheckProviderFindings(database: SupabaseClient, now = new Date()) {
   const { data, error } = await database.from('monitored_repositories')
-    .select('id,workspace_id,full_name,head_sha,target_sha,call_sites')
+    .select('id,workspace_id,full_name,head_sha,target_sha,call_sites,github_installation_id')
     .eq('paused', false).not('head_sha', 'is', null).order('id').limit(RECHECK_BATCH);
   if (error) throw error;
   const perWorkspace = new Map<string, { repositories: number; findings: number }>();
@@ -20,6 +21,8 @@ export async function recheckProviderFindings(database: SupabaseClient, now = ne
   for (const repository of (data ?? []) as Repository[]) {
     // Only the commit the last scan finished; a scan in flight will run the same step.
     if (!repository.head_sha || repository.head_sha !== repository.target_sha) continue;
+    // A connected repository is checked only while its installation belongs to the same workspace.
+    if (repository.github_installation_id && !await installationBelongsTo(database, repository.github_installation_id, repository.workspace_id)) continue;
     const calls = asApiCalls(repository.call_sites);
     if (!calls.length) continue;
     // Repositories scanned before discovery existed get their APIs queued too.

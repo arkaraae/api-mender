@@ -47,9 +47,9 @@ export async function run(customerId, input) {
   assert.equal(calls[3].sdk, 'issues.create');
 });
 
-test('SDK detection needs the provider package and ignores look-alikes', () => {
+test('look-alikes are ignored: local objects, and clients aimed at other hosts', () => {
   const source = `
-const stripe = makeStripe();
+const stripe = { customers: { create() {} } };
 stripe.customers.create({ email: 'x' });
 import OpenAI from 'openai';
 const local = new OpenAI({ baseURL: 'http://localhost:11434/v1' });
@@ -210,4 +210,78 @@ test('hostile sources neither crash the scan nor take long', () => {
   const started = performance.now();
   parseApiCalls('a.py', `import requests\n${'a('.repeat(100_000)}`);
   assert.ok(performance.now() - started < 2_000, 'bracket matching is linear');
+});
+
+test('TypeScript angle-bracket casts no longer hide a file', () => {
+  const source = "import { Octokit } from '@octokit/rest';\nconst octokit = new Octokit();\nconst id = <number>raw;\nexport const go = () => octokit.rest.issues.create({ owner: 'o', repo: 'r', title: 't' });\n";
+  assert.equal(parseApiCalls('src/a.ts', source).length, 1);
+});
+
+test('clients passed in, wrapped, or reached through Probot are recognised by their shape', () => {
+  const source = [
+    "export async function label(client: ClientType, pr: number) {",
+    "  await client.rest.issues.addLabels({ owner: 'o', repo: 'r', issue_number: pr, labels: ['x'] });",
+    "}",
+    "export default app => app.on('pull_request', context => context.octokit.pulls.get({ owner: 'o', repo: 'r', pull_number: 1 }));",
+    "class Helper { async run() { return this.octokit.rest.pulls.list({ owner: 'o', repo: 'r' }); } }",
+    "export const charge = stripe => stripe.paymentIntents.create({ amount: 1, currency: 'usd' });",
+    // Look-alikes: no SDK method chain, so nothing is claimed.
+    "export const other = () => client.rest.notAThing.create({});",
+    "export const store = () => stripe.customers.someLocalHelper({});",
+  ].join('\n');
+  assert.deepEqual(parseApiCalls('src/bot.ts', source).map(call => [call.line, call.endpoint, call.origin]), [
+    [2, 'POST /repos/{}/{}/issues/{}/labels', 'https://api.github.com'],
+    [4, 'GET /repos/{}/{}/pulls/{}', 'https://api.github.com'],
+    [5, 'GET /repos/{}/{}/pulls', 'https://api.github.com'],
+    [6, 'POST /v1/payment_intents', 'https://api.stripe.com'],
+  ]);
+});
+
+test('clients imported through a project alias (@/…) are recognised', () => {
+  const inventory = discoverApiUsage([
+    { path: 'utils/stripe/config.ts', source: "import Stripe from 'stripe';\nexport const stripe = new Stripe(key);\n" },
+    { path: 'app/api/webhooks/route.ts', source: "import { stripe as s } from '@/utils/stripe/config';\nexport const go = () => s.customers.create({ email: 'x' });\n" },
+  ]);
+  assert.deepEqual(inventory.calls.map(call => [call.file, call.endpoint]), [['app/api/webhooks/route.ts', 'POST /v1/customers']]);
+});
+
+test('a request built in a variable yields likely fields and a medium-confidence, unfixable finding', async () => {
+  const source = [
+    "import Stripe from 'stripe';",
+    "const stripe = new Stripe(key);",
+    "const params = { unrelated: true };",
+    "export async function pay(type, amount) {",
+    "  let params = { payment_method_types: [type], amount, currency: 'usd' };",
+    "  if (type === 'acss') params.payment_method_options = {};",
+    "  return stripe.paymentIntents.create(params);",
+    "}",
+  ].join('\n');
+  const [call] = parseApiCalls('src/pay.js', source);
+  assert.equal(call.fieldsComplete, false);
+  assert.deepEqual(call.fields.sort(), ['amount', 'currency', 'payment_method_options', 'payment_method_types'], 'only the enclosing function’s literals');
+  const change = { providerId: 'stripe', operation: 'POST /v1/payment_intents', fromVersion: '2026-05-23', toVersion: '2026-11-10',
+    kind: 'request-property-removed', fields: ['payment_method_types'], summary: 's', before: {}, after: {}, oldSha256: 'a', newSha256: 'b', oldSourceUrl: '', newSourceUrl: '' };
+  const [finding] = await analyzeImpact({ provider: getProvider('stripe'), changes: [change], calls: [call] });
+  assert.ok(finding);
+  assert.equal(finding.repairable, false);
+  assert.notEqual(finding.confidence, 'high');
+  assert.match(finding.evidence.staticChecks.join(' '), /built in a variable/);
+});
+
+test('credentials written into request headers are never kept', () => {
+  const [call] = parseApiCalls('src/a.ts', "export const go = () => fetch('https://api.github.com/user', { headers: { Authorization: 'Bearer ghp_abcdefghijklmnop', 'X-GitHub-Api-Version': '2022-11-28', 'X-Api-Key': 'k_123', Cookie: 'session=1', Accept: 'application/vnd.github+json' } });\n");
+  assert.deepEqual(call.headers, { 'x-github-api-version': '2022-11-28', accept: 'application/vnd.github+json' });
+  const [py] = parseApiCalls('a.py', 'import requests\nrequests.get("https://api.example.com/x", headers={"Authorization": "Bearer sk_live_123", "Api-Version": "2"})\n');
+  assert.deepEqual(py.headers, { 'api-version': '2' });
+});
+
+test('python scanning stays linear on deeply nested and long argument lists', async () => {
+  const { parsePythonCalls } = await import('../lib/engine/sdk/python-calls.ts');
+  const nested = 'import requests\nrequests.post("https://api.github.com/repos/a/b/issues", json=' + 'f('.repeat(60000) + ')'.repeat(60000) + ')\n';
+  const wide = 'import requests\n' + Array.from({ length: 4000 }, () => 'requests.get(' + 'x,'.repeat(40) + ')').join('\n');
+  for (const source of [nested, wide]) {
+    const started = Date.now();
+    parsePythonCalls('big.py', source);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started}ms`);
+  }
 });
