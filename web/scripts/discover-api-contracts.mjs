@@ -80,6 +80,14 @@ async function update(origin, fields) {
   if (error) throw error;
 }
 
+// A database without the discovery migration: nothing to do yet.
+const { error: tableError } = await db.from('api_hosts').select('origin').limit(1);
+if (tableError?.code === 'PGRST205' || tableError?.code === '42P01') {
+  console.log('This database has no api_hosts table yet (apply 20261111010000_api_auto_discovery.sql); discovery skipped.');
+  process.exit(0);
+}
+if (tableError) throw tableError;
+
 // 1. Resolve hosts without a watched description.
 const { data: pending, error: pendingError } = await db.from('api_hosts').select('origin,sample_endpoints,attempts')
   .in('status', ['pending', 'not-found', 'failed']).lte('next_check_at', now()).order('next_check_at').limit(limit);
