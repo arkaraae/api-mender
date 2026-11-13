@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { installationBelongsTo } from '@/lib/installation-guard';
 import { limits, rateLimit } from '@/lib/rate-limit';
 import { authenticatedEditor, githubHeaders, onboardingDatabase, sha256, uuid } from '@/lib/github-onboarding';
 import { installationToken, readBoundedBody } from '@/lib/github-app';
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
   if (repoError || !repository || repository.paused || !repository.github_repo_id
     || !repository.github_installation_id || repository.head_sha !== job.base_sha
     || repository.target_sha !== job.base_sha) return reply(409, 'Consumer repository must be rescanned');
+  if (!await installationBelongsTo(database, repository.github_installation_id, body.workspaceId)) return reply(409, 'GitHub installation is unavailable');
   const { data: source, error: sourceError } = await database.from('api_contract_sources')
     .select('id,repository_id,paused').eq('id', evidence.sourceId)
     .eq('workspace_id', body.workspaceId).maybeSingle();

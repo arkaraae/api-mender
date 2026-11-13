@@ -73,7 +73,7 @@ export function publicView(watch) {
 export async function createWatch(kv, input, options = {}) {
   const { now = Date.now(), fetcher = fetch, beforeStoring } = options;
   const url = publicHttps(input?.url, 'API description');
-  const webhook = input?.webhook ? publicHttps(input.webhook, 'webhook') : null;
+  const webhook = input?.webhook ? chatWebhook(input.webhook) : null;
   const got = await download(url.href, null, fetcher);
   if (beforeStoring) await beforeStoring();
   const id = newId();
@@ -109,6 +109,15 @@ export async function deleteWatch(kv, id) {
   return true;
 }
 
+// Slack incoming webhooks and Discord channel webhooks only.
+const chatWebhookPattern = /^https:\/\/(hooks\.slack\.com\/services\/[A-Za-z0-9]+\/[A-Za-z0-9]+\/[A-Za-z0-9]+|(discord|discordapp)\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+)$/;
+export function isChatWebhook(url) { return typeof url === 'string' && url.length <= 300 && chatWebhookPattern.test(url); }
+function chatWebhook(raw) {
+  const value = String(raw ?? '').trim();
+  if (!isChatWebhook(value)) throw new Error('Use a Slack incoming-webhook URL (https://hooks.slack.com/services/…) or a Discord webhook URL.');
+  return new URL(value);
+}
+
 export async function readSnapshot(kv, id, n) {
   return validId(id) && /^\d{1,4}$/.test(String(n)) ? kv.get(`snap:${id}:${n}`, 'text') : null;
 }
@@ -119,7 +128,9 @@ async function notify(watch, origin, fetcher) {
   const versions = before.version && after.version && before.version !== after.version ? ` (${before.version} → ${after.version})` : '';
   const text = `API Mender: ${name} changed${versions}. See what it means for your code: ${origin}/watch/${watch.id}`;
   // Slack reads "text", Discord reads "content"; each ignores the other.
-  await fetcher(watch.webhook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, content: text }), signal: AbortSignal.timeout(10_000) });
+  // Only Slack and Discord webhooks, and never a redirect: the Worker must not relay posts elsewhere.
+  if (!isChatWebhook(watch.webhook)) return;
+  await fetcher(watch.webhook, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, content: text }), signal: AbortSignal.timeout(10_000) });
 }
 
 // checkWatch(kv, id) → { watch, changed } or null when there is no such watch.

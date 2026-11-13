@@ -2,6 +2,7 @@
 // Both the prepare and publish routes go through here, so a patch is always
 // re-derived from the pinned file and re-checked by every policy gate before
 // anything is written to GitHub.
+import { installationBelongsTo } from './installation-guard.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Finding, LineEdit, RepairProposal } from './engine/types.ts';
 import { parseApiCalls } from './engine/inventory.ts';
@@ -36,6 +37,8 @@ export async function loadProviderRepairContext(database: SupabaseClient, worksp
   if (repoError || !repository || repository.paused || !repository.github_installation_id || !repository.github_repo_id
     || !repository.head_sha || repository.head_sha !== repository.target_sha || row.base_sha !== repository.head_sha)
     throw new RepairConflict('The repository scan is stale; scan the current commit first');
+  if (!await installationBelongsTo(database, repository.github_installation_id, workspaceId))
+    throw new RepairConflict('The GitHub installation for this repository is not connected to this workspace');
   const { data: slice, error: sliceError } = await database.from('provider_contract_slices')
     .select('provider_id,version,operation,sha256,document,source_url')
     .eq('provider_id', finding.provider.id).eq('version', finding.change.toVersion).eq('operation', finding.change.operation).maybeSingle();
