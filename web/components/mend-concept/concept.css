@@ -221,3 +221,24 @@ button.heat-cell{backdrop-filter:none;-webkit-backdrop-filter:none}
 .live-product .mend-embed details.live-advanced{margin-top:16px;padding-top:12px;border-top:1px solid #ffffff14}
 .live-product .mend-embed details.live-advanced summary{cursor:pointer;color:#c9d6ea;font-size:12px;font-weight:600}
 @media(max-width:700px){.live-product .mend-setting-row{flex-direction:column;align-items:flex-start}.live-product .mend-plan{grid-template-columns:1fr}}
+/* The older app stylesheet (globals.css) sizes .sidebar at 238px; in the Mend
+   shell the grid column decides, so collapsing works. */
+.mend-concept .sidebar{width:auto;min-width:0;overflow:hidden;color:inherit}
+@media(min-width:701px){.mend-concept .app-body.sidebar-collapsed .sidebar{overflow:visible}}
+@media(max-width:700px){.mend-concept .sidebar{width:260px}}
+/* Scan days are buttons, today first. */
+.live-product button.live-scan-cell{padding:0;cursor:pointer;transition:transform .12s,background .12s}
+.live-product button.live-scan-cell:hover{transform:scale(1.18);background:#3a4660}
+.live-product button.live-scan-cell.level-1:hover{background:#4d68a8}.live-product button.live-scan-cell.level-2:hover{background:#5b86d6}.live-product button.live-scan-cell.level-3:hover{background:#7aa6ff}
+.live-product button.live-scan-cell.today{outline:1.5px solid #dce8ff;outline-offset:1px}
+.live-product button.live-scan-cell.selected{outline:2px solid #ffffff;outline-offset:1px;transform:scale(1.18)}
+.live-product .mend-day-detail{display:grid;gap:2px;margin:-4px 0 14px;padding:12px 14px;border:1px solid #ffffff22;border-radius:12px;background:#0d121ad9}
+.live-product .mend-day-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;color:#a9b6c8;font-size:11px}
+.live-product .mend-day-head strong{color:#f1f5fa;font-size:12px}
+.live-product .mend-day-head button{margin-left:auto;padding:2px;border:0;background:none;color:#a9b6c8}
+.live-product .mend-day-detail>button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 2px;border:0;border-top:1px solid #ffffff12;background:none;color:#b3bed0;text-align:left}
+.live-product .mend-day-detail>button:hover{color:#fff}
+.live-product .mend-day-detail>button>span{flex:1;min-width:0}
+.live-product .mend-day-detail strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e9edf4;font-size:11px;font-weight:500}
+.live-product .mend-day-detail small{display:block;margin-top:3px;color:#909cab;font-size:10px}
+.live-product .mend-day-detail p{margin:4px 2px 0;color:#909cab;font-size:11px}
