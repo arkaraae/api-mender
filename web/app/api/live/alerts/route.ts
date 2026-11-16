@@ -15,7 +15,7 @@ async function view(workspaceId: string) {
     .select('slack_webhook_hint,github_issues,min_severity,alerts_since').eq('workspace_id', workspaceId).maybeSingle();
   if (error) throw error;
   const { data: recent } = await database.from('finding_notifications')
-    .select('finding_id,channel,status,detail,url,updated_at').eq('workspace_id', workspaceId).order('updated_at', { ascending: false }).limit(10);
+    .select('finding_id,channel,status,detail,url,updated_at').eq('workspace_id', workspaceId).order('updated_at', { ascending: false }).limit(30);
   return { slackHint: settings?.slack_webhook_hint ?? null, githubIssues: settings?.github_issues ?? false,
     minSeverity: settings?.min_severity ?? 'medium', recent: recent ?? [], slackAvailable: Boolean(env.MENDER_SETTINGS_KEY) };
 }

@@ -7,10 +7,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
 import GitHubConnections from '@/components/github-connections';
-import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 import FindingDetail, { type LiveFinding } from '@/components/mend-concept/FindingDetail';
-import { AlertsSettings, PlanCard, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
+import { AlertsSettings, PlanCard, useAlerts, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
 import { deriveProviderServices, type WatchStatus } from '@/lib/provider-services';
 import { repositoryLimitMessage } from '@/lib/billing';
 import type { ActivitySummary } from '@/lib/activity-summary';
@@ -137,6 +136,7 @@ export default function LiveWorkspace() {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }, [supabase]);
+  const alerts = useAlerts(workspace?.id ?? null, accessToken);
 
   async function session() {
     const { data } = await supabase!.auth.getSession();
@@ -242,9 +242,9 @@ export default function LiveWorkspace() {
     pullRequests={pullRequests}
     connections={workspace ? <>
       <GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} onConnectionsChange={() => void refresh()} />
-      {contractSources.length > 0 && <DatabaseEvidenceSetup database={supabase} workspaceId={workspace.id} repositories={repositories} sources={contractSources} consumers={contractConsumers} />}
     </> : null}
-    settings={workspace ? <AlertsSettings workspaceId={workspace.id} token={accessToken} /> : null}
+    settings={workspace ? <AlertsSettings alerts={alerts} /> : null}
+    alerts={workspace ? alerts : null}
     plan={workspace ? <PlanCard workspaceId={workspace.id} token={accessToken} billing={billing} onChange={() => void refresh()} /> : null}
     initialFindingId={initialFindingId}
     renderFinding={(finding: LiveFinding) => workspace && <FindingDetail database={supabase} workspaceId={workspace.id} finding={finding}
