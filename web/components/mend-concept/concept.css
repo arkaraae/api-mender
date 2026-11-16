@@ -242,3 +242,42 @@ button.heat-cell{backdrop-filter:none;-webkit-backdrop-filter:none}
 .live-product .mend-day-detail strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e9edf4;font-size:11px;font-weight:500}
 .live-product .mend-day-detail small{display:block;margin-top:3px;color:#909cab;font-size:10px}
 .live-product .mend-day-detail p{margin:4px 2px 0;color:#909cab;font-size:11px}
+/* Alert integrations: buttons in the composer and on the Activity alerts panel. */
+.live-product .live-search-composer .composer-foot{gap:12px}
+.live-product .mend-integrations{display:flex;align-items:center;gap:6px;min-width:0}
+.live-product .mend-integrations>span{margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-product .mend-integration{position:relative;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #ffffff1f;border-radius:9px;background:#ffffff0a;color:#e9edf5;transition:background .15s,border-color .15s,filter .15s,opacity .15s}
+.live-product .mend-integration.is-off{filter:grayscale(1);opacity:.42}
+.live-product .mend-integration.is-off:hover:not(:disabled){filter:grayscale(.35);opacity:.8;border-color:#ffffff40}
+.live-product .mend-integration.is-on{border-color:#ffffff38;background:#ffffff14}
+.live-product .mend-integration.is-on:hover{background:#ffffff22}
+.live-product .mend-integration:disabled{cursor:default;opacity:.25}
+.live-product .mend-integration>i{position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border:2px solid #171b22;border-radius:50%;background:#65d7aa}
+.live-product .mend-integrations--panel{gap:8px}
+.live-product .mend-integrations--panel .mend-link-button{margin-left:4px}
+.live-product .mend-alert-feed{display:grid;margin-top:10px}
+.live-product .mend-alert-row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #ffffff16}
+.live-product .mend-alert-row:first-child{border-top:0}
+.live-product .mend-alert-icon{display:grid;place-items:center;width:32px;height:32px;border:1px solid #ffffff1f;border-radius:9px;background:#ffffff0a;color:#e9edf5}
+.live-product .mend-alert-row.is-failed .mend-alert-icon{border-color:#e0605d66;background:#e0605d1f}
+.live-product .mend-alert-row strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500}
+.live-product .mend-alert-row strong .mend-link-button{padding:0;color:#f1f4fa;font:inherit;text-align:left}
+.live-product .mend-alert-row small{display:block;margin-top:4px;color:#94a1b4;font-size:11px}
+.live-product .mend-alert-row.is-failed small{color:#f0a3a0}
+.live-product .mend-alert-row a{display:flex;align-items:center;gap:5px;color:#c4d0e3;font-size:11px;white-space:nowrap}
+.live-product .mend-alert-empty{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.live-product .mend-bell{position:relative}
+.live-product .mend-bell>i{position:absolute;top:3px;left:14px;width:7px;height:7px;border-radius:50%;background:#829bff;box-shadow:0 0 6px #829bffaa}
+.live-product .nav-count.mend-unseen{padding:1px 6px;border-radius:99px;background:#829bff;color:#0d1220;font-weight:700}
+.live-product .mend-integrations-modal{width:min(620px,calc(100vw - 32px));max-height:calc(100vh - 80px);margin-top:9vh;overflow:auto;border:1px solid #4a5060;border-radius:16px;background:#1d222d;box-shadow:0 30px 90px #000b}
+.live-product .mend-integrations-modal-head{position:relative;display:grid;gap:4px;padding:18px 48px 4px 22px}
+.live-product .mend-integrations-modal-head strong{font-size:15px;color:#f4f6fa}
+.live-product .mend-integrations-modal-head span{color:#9eaabd;font-size:12px}
+.live-product .mend-integrations-modal-head button{position:absolute;top:16px;right:16px;border:0;background:none;color:#aab5c8}
+.live-product .mend-integrations-modal .section-panel{margin:0;padding:4px 22px 22px;border:0;border-radius:0;background:none;backdrop-filter:none}
+.live-product .mend-integrations-modal .section-panel>h2{display:none}
+.live-product .mend-help{margin:6px 0 10px;font-size:11px}
+.live-product .mend-help a{color:#b9c9ff}
+.live-product .toast{z-index:70}
+@media(max-width:430px){.live-product .mend-integrations>span{display:none}}
+.live-product .mend-integrations-modal .live-fields{grid-template-columns:minmax(0,1fr) auto;align-items:end}.live-product .mend-integrations-modal .live-fields>button{height:40px;align-self:end}
