@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { browserSupabase } from '@/lib/supabase-browser';
 import GitHubConnections from '@/components/github-connections';
-import DatabaseEvidenceSetup from '@/components/database-evidence-setup';
 import LiveWorkspaceShell from '@/components/mend-concept/LiveWorkspaceShell';
 import FindingDetail, { type LiveFinding } from '@/components/mend-concept/FindingDetail';
 import { AlertsSettings, PlanCard, useAlerts, type BillingView } from '@/components/mend-concept/WorkspaceSettings';
@@ -243,7 +242,6 @@ export default function LiveWorkspace() {
     pullRequests={pullRequests}
     connections={workspace ? <>
       <GitHubConnections database={supabase} workspaceId={workspace.id} repositories={repositories} onConnectionsChange={() => void refresh()} />
-      {contractSources.length > 0 && <DatabaseEvidenceSetup database={supabase} workspaceId={workspace.id} repositories={repositories} sources={contractSources} consumers={contractConsumers} />}
     </> : null}
     settings={workspace ? <AlertsSettings alerts={alerts} /> : null}
     alerts={workspace ? alerts : null}
